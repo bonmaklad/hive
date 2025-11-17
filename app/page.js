@@ -323,7 +323,7 @@ export default function HomePage() {
                             <li>Hot Desking Capabilities</li>
                             <li>Boardroom + Training Room + Meeting Rooms</li>
                             <li>Event & Function Rooms</li>
-                            <li>Membership cap of 10 founders</li>
+                            <li>Membership cap of 25 founders</li>
                         </ul>
                     </div>
                     <div className="media-right">
