@@ -317,11 +317,12 @@ export default function HomePage() {
                     <div>
                         <h3>Spaces built for velocity</h3>
                         <ul className="feature-list">
-                            <li>7 Private Offices</li>
-                            <li>6 Assigned Desks</li>
+                            <li>9 Premium Offices</li>
+                            <li>12 Private Offices</li>
+                            <li>11 Dedicated Desks</li>
+                            <li>Hot Desking Capabilities</li>
                             <li>Boardroom + Training Room + Meeting Rooms</li>
                             <li>Event & Function Rooms</li>
-                            <li>Hot Desking Capabilities</li>
                             <li>Membership cap of 10 founders</li>
                         </ul>
                     </div>
