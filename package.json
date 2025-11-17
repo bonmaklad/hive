@@ -11,9 +11,9 @@
   "dependencies": {
     "codex": "^0.2.3",
     "next": "^14.2.33",
-    "resend": "^4.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "resend": "^4.8.0"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
