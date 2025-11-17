@@ -6,7 +6,7 @@
     --plant: #4a7a48;
     --wood: #8a5a3c;
     --sand: #f5efe0;
-    --accent: #6fffb6;
+    --accent: #8a5a3c;
     --text: #e2e7ec;
     --muted: #9ea7b3;
     --shadow: rgba(0, 0, 0, 0.35);
@@ -47,9 +47,9 @@ main {
     position: fixed;
     inset: 0;
     background-image: radial-gradient(circle at 10% 20%, rgba(111, 255, 182, 0.1), transparent 25%),
-        linear-gradient(60deg, rgba(255, 255, 255, 0.02) 25%, transparent 25%),
-        linear-gradient(-60deg, rgba(255, 255, 255, 0.02) 25%, transparent 25%);
-    background-size: 400px 400px, 40px 40px, 40px 40px;
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='52' viewBox='0 0 60 52'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.06' stroke-width='1'%3E%3Cpath d='M15 1 L45 1 L59 26 L45 51 L15 51 L1 26 Z'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: 400px 400px, 60px 52px;
+    background-position: 0 0, 0 0;
     pointer-events: none;
     z-index: 0;
 }
@@ -60,6 +60,9 @@ main {
     background: linear-gradient(120deg, rgba(11, 12, 16, 0.9), rgba(28, 38, 52, 0.85)),
         url('https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1600&q=80') center/cover;
     overflow: hidden;
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr;
 }
 
 .nav {
@@ -68,7 +71,7 @@ main {
     justify-content: space-between;
     gap: 1.5rem;
     position: relative;
-    z-index: 2;
+    z-index: 100;
 }
 
 .logo-wrap {
@@ -81,6 +84,16 @@ main {
 
 .logo-wrap span {
     white-space: nowrap;
+}
+
+/* Logo spin interaction */
+.site-logo {
+    transition: transform 0.8s linear;
+    transform-origin: center;
+}
+
+.logo-wrap:hover .site-logo {
+    transform: rotate(360deg);
 }
 
 .nav-links {
@@ -134,6 +147,7 @@ main {
     gap: 2.5rem;
     position: relative;
     z-index: 2;
+    align-self: center;
 }
 
 .hero-copy h1 {
@@ -143,6 +157,11 @@ main {
 
 .hero-copy p {
     color: var(--muted);
+}
+
+/* Constrain hero writing to 60% on desktop */
+.hero-copy {
+    width: 60%;
 }
 
 .eyebrow {
@@ -312,9 +331,19 @@ main {
 
 .pill-list li {
     border: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 0.6rem 1.2rem;
+    padding: 0.65rem 1.25rem;
     border-radius: 999px;
     font-size: 0.95rem;
+    background: var(--accent);
+    color: var(--ink);
+    font-weight: 600;
+    cursor: default;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.pill-list li:hover {
+    transform: translateY(-1px) scale(1.06);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
 }
 
 .image-stack {
@@ -327,11 +356,82 @@ main {
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
 }
 
+/* Ensure equal-height columns and proper media behavior in #who */
+#who.split {
+    align-items: stretch;
+}
+
+#who .who-media {
+    position: relative;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+    min-height: 360px;
+}
+
+@media (max-width: 960px) {
+    #who .who-media {
+        display: none;
+    }
+}
+
+/* Spaces section list + media */
+.section#spaces h3,
+#spaces.section h3,
+#spaces h3 {
+    font-size: clamp(1.75rem, 3vw, 2.25rem);
+    margin: 0 0 0.75rem;
+}
+.feature-list {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+#spaces .feature-list {
+    font-size: 1.25rem; /* ~25% larger */
+}
+
+#spaces .feature-list li {
+    line-height: 1.8;
+}
+
+.media-right img {
+    border-radius: 24px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+    height: auto;
+    width: 100%;
+}
+
+/* Make Spaces text side 25% wider on larger screens */
+@media (min-width: 960px) {
+    #spaces.split {
+        grid-template-columns: 1.25fr 1fr;
+    }
+}
+
 .location-card {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1.5rem;
     align-items: center;
+}
+
+.location-card .map-embed {
+    position: relative;
+    border-radius: 24px;
+    overflow: hidden;
+    min-height: 360px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+}
+
+.location-card .map-embed iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
 }
 
 .problems article,
@@ -349,7 +449,7 @@ main {
     gap: 1.25rem;
 }
 
-.industries .h-scroll,
+
 .programs-scroll {
     display: grid;
     grid-auto-flow: column;
@@ -358,6 +458,63 @@ main {
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     padding-bottom: 1rem;
+}
+
+/* Programs vertical alternating layout */
+.programs-list {
+    display: grid;
+    gap: 2.5rem;
+}
+
+.program-item {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.program-item.right .program-copy { order: 1; }
+.program-item.right .hex-program { order: 2; }
+
+.hex-program {
+    padding-bottom: 0; /* static height, not tied to width */
+    height: 260px; /* keep consistent across breakpoints */
+    aspect-ratio: 1 / 1.15; /* maintain hex visual proportions */
+    width: auto;
+    background-size: cover;
+    background-position: center;
+}
+
+.hex-program figcaption {
+    bottom: 8%;
+}
+
+/* Fly-in animations */
+.program-item .hex-program,
+.program-item .program-copy {
+    opacity: 0;
+    transform: translateX(60px);
+    transition: transform 600ms ease, opacity 600ms ease;
+}
+
+.program-item.left .hex-program { transform: translateX(-60px); }
+.program-item.left .program-copy { transform: translateX(60px); }
+.program-item.right .hex-program { transform: translateX(60px); }
+.program-item.right .program-copy { transform: translateX(-60px); }
+
+.program-item.in-view .hex-program,
+.program-item.in-view .program-copy {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+@media (max-width: 900px) {
+    .program-item { grid-template-columns: 1fr; }
+    .program-item.right .program-copy { order: 2; }
+    .program-item.right .hex-program { order: 1; }
+    .program-item.left .program-copy { order: 2; }
+    .program-item.left .hex-program { order: 1; }
+    .hex-program { height: 260px; width: auto; margin: 0 auto; }
 }
 
 .industries .tile {
@@ -369,6 +526,53 @@ main {
     font-weight: 600;
     background: rgba(25, 35, 45, 0.9);
     text-transform: uppercase;
+}
+
+/* Pinned horizontal scroll section */
+.horizontal-scroll {
+    position: relative;
+    padding: 0; /* full-bleed; height will be expanded dynamically */
+}
+
+.horizontal-scroll .pin {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow: hidden; /* hide native scrollbar */
+    width: 100vw; /* no margins around the scroll area */
+}
+
+.horizontal-scroll .track {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    height: 100%;
+    will-change: transform;
+    padding: 25vh 0; /* 25% top/bottom; no side padding */
+}
+
+.horizontal-scroll .hex {
+    flex: 0 0 auto;
+    height: 50vh;              /* fixed tile height */
+    aspect-ratio: 1 / 1.15;    /* keep hex proportions consistent */
+    width: auto;
+}
+
+/* Proper aspect for industry hexes and caption placement */
+.hex-industry {
+    padding-bottom: 0;  /* override base .hex ratio handling */
+    height: 50vh;
+    aspect-ratio: 1 / 1.15;
+    background-size: cover;
+    background-position: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+}
+
+.hex-industry figcaption {
+    bottom: 8%;
+    color: var(--text);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
 }
 
 .programs-scroll article {
@@ -414,6 +618,7 @@ main {
 }
 
 .metrics {
+    
     list-style: none;
     margin: 0;
     padding: 0;
@@ -427,6 +632,7 @@ main {
 }
 
 .metrics-bars {
+    max-width: 80vw;
     margin-top: 2rem;
     display: grid;
     gap: 1rem;
@@ -459,10 +665,13 @@ main {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1.5rem;
+    align-items: stretch;
 }
 
 .membership-grid article {
     background: rgba(20, 24, 33, 0.9);
+    display: flex;
+    flex-direction: column;
 }
 
 .price {
@@ -483,6 +692,11 @@ main {
     margin: 0 0 1.2rem;
     color: var(--muted);
     line-height: 1.6;
+    flex: 1 1 auto; /* let details grow to push CTA down */
+}
+
+.membership-grid a.btn {
+    margin-top: auto; /* keep CTA aligned at bottom */
 }
 
 .gallery-grid {
@@ -493,13 +707,21 @@ main {
 
 .hex {
     position: relative;
-    padding-bottom: 115%;
+    padding-bottom: 40%;
     clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0% 50%);
     background: var(--steel);
     background-size: cover;
     background-position: center;
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Ensure program hexes keep static height regardless of base .hex padding */
+.hex.hex-program {
+    padding-bottom: 0 !important;
+    height: 260px;
+    aspect-ratio: 1 / 1.15;
+    width: auto;
 }
 
 .hex figcaption {
@@ -580,6 +802,9 @@ main {
 }
 
 @media (max-width: 960px) {
+    .hero-copy {
+        width: 100%;
+    }
     .nav-links {
         position: absolute;
         top: 70px;
@@ -590,7 +815,8 @@ main {
         border-radius: 18px;
         border: 1px solid rgba(255, 255, 255, 0.1);
         display: none;
-    }
+            z-index: 200; /* ensure above hero content */
+        }
 
     .nav-links.open {
         display: flex;
