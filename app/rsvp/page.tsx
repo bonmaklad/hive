@@ -236,38 +236,35 @@ export default function RsvpPage() {
                 </div>
 
                 <div className="guest-form">
-                    <label>Your email</label>
+                    {/* <label>Your email</label> */}
                     <div className="email-readonly" aria-readonly="true">{emailParam}</div>
-                    <div className="qty">
-                        <label>Number of attendees (including you)</label>
-                        <div className="quantity" role="group" aria-label="Attendee count">
-                            <button
-                                type="button"
-                                className="qty-btn"
-                                onClick={() => setGuestCount(c => Math.max(1, c - 1))}
-                                disabled={guestCount <= 1}
-                                aria-label="Decrease attendees"
-                            >
-                                –
-                            </button>
-                            <div className="qty-value" aria-live="polite">{guestCount}</div>
-                            <button
-                                type="button"
-                                className="qty-btn"
-                                onClick={() => setGuestCount(c => Math.min(4, c + 1))}
-                                disabled={guestCount >= 4}
-                                aria-label="Increase attendees"
-                            >
-                                +
-                            </button>
+                    <div className="slider-group">
+                        <div className="slider-header">
+                            <label htmlFor="guest-count">Attendees (including you): </label>
+                            
                         </div>
-                        <p className="help">Max 4 people total.</p>
+                        <input
+                            id="guest-count"
+                            type="range"
+                            min={1}
+                            max={4}
+                            value={guestCount}
+                            onChange={event => setGuestCount(Number(event.target.value))}
+                        />
+                        <span className="slider-value" aria-live="polite">{guestCount}</span>
+                        {/* <div className="slider-marks">
+                            {[1, 2, 3, 4].map(mark => (
+                                <span key={mark}>{mark}</span>
+                            ))}
+                        </div> */}
+                        <p className="help"></p>
                     </div>
                     <div className="actions">
-                        <button type="button" className="secondary" onClick={handleCalendar}>
+                        <button type="button" className="btn secondary" onClick={handleCalendar}>
                             Add to calendar
                         </button>
-                        <button type="button" className="primary" onClick={handleSubmit} disabled={submitting}>
+                       
+                        <button type="button" className="btn primary" onClick={handleSubmit} disabled={submitting}>
                             {submitting ? 'Saving…' : confirmed ? 'Update RSVP' : 'Confirm RSVP'}
                         </button>
                     </div>
@@ -341,6 +338,19 @@ export default function RsvpPage() {
                     flex-direction: column;
                     gap: 0.75rem;
                 }
+                .slider-group {
+                    margin-top: 1rem;
+                }
+                .slider-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 0.35rem;
+                }
+                .slider-value {
+                    font-weight: 700;
+                    color: #ffe2b9;
+                }
                 .email-readonly {
                     padding: 0.75rem 0.9rem;
                     border-radius: 12px;
@@ -356,106 +366,86 @@ export default function RsvpPage() {
                     display: block;
                     margin-bottom: 0.2rem;
                 }
-                input {
-                    width: 100%;
-                    padding: 0.75rem 0.9rem;
-                    border-radius: 12px;
-                    border: 1px solid rgba(255, 255, 255, 0.12);
-                    background: rgba(12, 15, 32, 0.8);
-                    color: #fff;
-                    font-size: 1rem;
-                }
                 input[readonly] {
                     opacity: 0.75;
                 }
-                .quantity {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    margin-top: 0.5rem;
-                    padding: 0.35rem 0.4rem;
+                input[type='range'] {
+                    width: 100%;
+                    -webkit-appearance: none;
+                    appearance: none;
+                    height: 6px;
                     border-radius: 999px;
-                    background: rgba(255, 255, 255, 0.06);
-                    border: 1px solid rgba(255, 255, 255, 0.16);
-                    backdrop-filter: blur(8px);
+                    background: rgba(255, 255, 255, 0.2);
                 }
-                .qty-btn {
-                    width: 44px;
-                    height: 44px;
+                input[type='range']::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 50%;
+                    background: linear-gradient(120deg, #ff8c4d, #ffd27b);
+                    border: 2px solid #0b0f26;
+                    cursor: pointer;
+                    box-shadow: 0 8px 18px rgba(255, 140, 77, 0.35);
+                }
+                input[type='range']::-moz-range-thumb {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 50%;
+                    background: linear-gradient(120deg, #ff8c4d, #ffd27b);
+                    border: 2px solid #0b0f26;
+                    cursor: pointer;
+                    box-shadow: 0 8px 18px rgba(255, 140, 77, 0.35);
+                }
+                .slider-marks {
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 0.75rem;
+                    color: #9ea6cc;
+                    margin-top: 0.25rem;
+                }
+                .help {
+                    margin: 0.35rem 0 0;
+                    color: #c9cde8;
+                    font-size: 0.8rem;
+                    opacity: 0.85;
+                }
+                .actions {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.75rem;
+                    margin-top: 1rem;
+                }
+                .btn {
+                    border: none;
                     border-radius: 999px;
-                    border: 1px solid transparent;
-                    background-image: linear-gradient(#0a0d21, #0a0d21), linear-gradient(135deg, #7c3aed, #06b6d4);
-                    background-origin: border-box;
-                    background-clip: padding-box, border-box;
-                    color: #ffffff;
-                    font-size: 1.2rem;
-                    line-height: 1;
+                    padding: 0.95rem 1.9rem;
+                    font-weight: 600;
+                    letter-spacing: 0.05em;
+                    cursor: pointer;
+                    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
                     display: inline-flex;
                     align-items: center;
                     justify-content: center;
-                    transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-                    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+                    gap: 0.35rem;
                 }
-                .qty-btn:not(:disabled):hover {
-                    transform: translateY(-1px) scale(1.02);
-                    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.32);
-                }
-                .qty-btn:disabled {
-                    opacity: 0.5;
+                .btn:disabled {
+                    opacity: 0.6;
                     cursor: not-allowed;
                 }
-                .qty-btn:focus-visible {
-                    outline: 2px solid rgba(124, 58, 237, 0.9);
-                    outline-offset: 2px;
+                .btn.primary {
+                    background: linear-gradient(120deg, #ff8c4d, #ffd27b);
+                    color: #1a0c1c;
+                    box-shadow: 0 12px 30px rgba(255, 108, 61, 0.3);
                 }
-                .qty-value {
-                    min-width: 68px;
-                    text-align: center;
-                    padding: 0.55rem 1rem;
-                    border-radius: 12px;
-                    border: 1px solid rgba(255, 255, 255, 0.18);
-                    background: linear-gradient(145deg, rgba(20, 24, 55, 0.85), rgba(10, 12, 32, 0.85));
-                    font-weight: 900;
-                    letter-spacing: 0.06em;
-                    font-size: 1.2rem;
-                    box-shadow: inset 0 4px 12px rgba(0,0,0,0.35);
+                .btn.secondary {
+                    background: rgba(255, 255, 255, 0.06);
+                    color: #ffe8d2;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
                 }
-                .help {
-                    margin: 0.25rem 0 0;
-                    color: #c9cde8;
-                    font-size: 0.85rem;
-                    opacity: 0.85;
-                }
-                /* Modern action buttons */
-                .actions button.primary {
-                    background-image: linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%);
-                    color: #0b0c12;
-                    border: 0;
-                    box-shadow: 0 14px 34px rgba(65, 123, 201, 0.38);
-                }
-                .actions button.primary:not(:disabled):hover {
-                    transform: translateY(-3px);
-                    box-shadow: 0 20px 44px rgba(65, 123, 201, 0.46);
-                }
-                .actions button.primary:focus-visible {
-                    outline: 2px solid rgba(124,58,237,0.85);
-                    outline-offset: 3px;
-                }
-                .actions button.secondary {
-                    color: #e9ecff;
-                    background-image: linear-gradient(#0a0d21, #0a0d21), linear-gradient(135deg, rgba(124,58,237,0.9), rgba(6,182,212,0.9));
-                    background-origin: border-box;
-                    background-clip: padding-box, border-box;
-                    border: 1px solid transparent;
-                }
-                .actions button.secondary:not(:disabled):hover {
-                    background-image: linear-gradient(#0e1330, #0e1330), linear-gradient(135deg, rgba(124,58,237,1), rgba(6,182,212,1));
+                .btn:not(:disabled):hover {
                     transform: translateY(-2px);
-                    box-shadow: 0 14px 32px rgba(0,0,0,0.28);
-                }
-                .actions button.secondary:focus-visible {
-                    outline: 2px solid rgba(6,182,212,0.9);
-                    outline-offset: 3px;
+                    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
                 }
                 .actions {
                     display: flex;
