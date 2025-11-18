@@ -479,7 +479,7 @@ main {
 .hex-program {
     padding-bottom: 0; /* static height, not tied to width */
     height: 260px; /* keep consistent across breakpoints */
-    aspect-ratio: 1 / 1.15; /* maintain hex visual proportions */
+    aspect-ratio: 1 / 1; /* maintain hex visual proportions */
     width: auto;
     background-size: cover;
     background-position: center;
@@ -515,6 +515,26 @@ main {
     .program-item.left .program-copy { order: 2; }
     .program-item.left .hex-program { order: 1; }
     .hex-program { height: 260px; width: auto; margin: 0 auto; }
+}
+
+/* Desktop tuning: make program images wider and pull columns closer together */
+@media (min-width: 1024px) {
+    /* Constrain overall row width so image and copy sit closer on large screens */
+    .section.programs .programs-list {
+        max-width: 1000px;
+        margin-inline: auto;
+    }
+
+    /* Bias grid toward the image and reduce inter-column gap */
+    .program-item {
+        grid-template-columns: 1.35fr 1fr;
+        gap: 1rem;
+    }
+
+    /* Enlarge hex image tile for desktop */
+    .hex-program {
+        height: 420px!important;
+    }
 }
 
 .industries .tile {
@@ -554,7 +574,7 @@ main {
 .horizontal-scroll .hex {
     flex: 0 0 auto;
     height: 50vh;              /* fixed tile height */
-    aspect-ratio: 1 / 1.15;    /* keep hex proportions consistent */
+    aspect-ratio: 1 / 1;    /* keep hex proportions consistent */
     width: auto;
 }
 
@@ -562,7 +582,7 @@ main {
 .hex-industry {
     padding-bottom: 0;  /* override base .hex ratio handling */
     height: 50vh;
-    aspect-ratio: 1 / 1.15;
+    aspect-ratio: 1 / 1;
     background-size: cover;
     background-position: center;
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -720,7 +740,7 @@ main {
 .hex.hex-program {
     padding-bottom: 0 !important;
     height: 260px;
-    aspect-ratio: 1 / 1.15;
+    aspect-ratio: 1 / 1;
     width: auto;
 }
 

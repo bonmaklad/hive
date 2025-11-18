@@ -31,12 +31,12 @@ const solutionPillars = [
 
 const futureIndustries = ['Gaming', 'AI & Applied ML', 'Software Automation', 'Robotics', 'Big Data', 'Future Industries Lab'];
 const futureIndustryTiles = [
-    { label: 'Gaming', src: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80' },
-    { label: 'AI & Applied ML', src: 'https://images.unsplash.com/photo-1555255707-5f3b3f5f8f93?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Software Automation', src: 'https://images.unsplash.com/photo-1518779578993-ec3579fee39f?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Robotics', src: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Big Data', src: 'https://images.unsplash.com/photo-1517433456452-f9633a875f6f?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Future Industries Lab', src: 'https://images.unsplash.com/photo-1581093588401-16f6a2982ab1?auto=format&fit=crop&w=800&q=80' }
+    { label: 'Gaming', src: '/gaming.jpg' },
+    { label: 'AI & Applied ML', src: '/ai.jpg' },
+    { label: 'Software Automation', src: '/software.jpg' },
+    { label: 'Robotics', src: '/robotics.jpg' },
+    { label: 'Big Data', src: '/bigdata.jpg' },
+    { label: 'Future Industries Lab', src: '/augment.jpg' }
 ];
 
 const objectives = [
@@ -62,12 +62,12 @@ const programs = [
 ];
 
 const programImages = [
-    'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80',
+    '/hackathon.jpg',
     'https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1200&q=80',
-    'https://images.unsplash.com/photo-1529333166437-7750a6dd5a70?auto=format&fit=crop&w=1200&q=80',
-    'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1200&q=80',
+    '/youth2.jpg',
+    '/accelerator.jpg',
     'https://images.unsplash.com/photo-1515187029135-18ee286d815b?auto=format&fit=crop&w=1200&q=80',
-    'https://images.unsplash.com/photo-1496307042754-b4aa456c4a2d?auto=format&fit=crop&w=1200&q=80'
+    '/community.jpg'
 ];
 
 const strategy = [
