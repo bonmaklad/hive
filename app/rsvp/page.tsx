@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { buildIcsEvent } from '@/lib/ics';
+import { buildIcsEvent } from '../../lib/ics';
 
 type InviteStatus = 'PENDING' | 'YES' | 'NO';
 
