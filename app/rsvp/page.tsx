@@ -1,11 +1,8 @@
 'use client';
 
-// Prevent static prerendering for this route; render on request only
 export const dynamic = 'force-dynamic';
-export const revalidate = false;
-export const fetchCache = 'force-no-store';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { buildIcsEvent } from '../../lib/ics';
 
@@ -29,7 +26,7 @@ const EVENT_DETAILS = {
     timeZone: 'Pacific/Auckland'
 };
 
-export default function RsvpPage() {
+function RsvpInner() {
     const params = useSearchParams();
     const emailParam = params?.get('email') ?? '';
     const email = useMemo(() => emailParam.trim().toLowerCase(), [emailParam]);
@@ -453,5 +450,19 @@ export default function RsvpPage() {
                 }
             `}</style>
         </main>
+    );
+}
+
+export default function RsvpPage() {
+    return (
+        <Suspense fallback={
+            <main className="rsvp-wrap">
+                <div className="rsvp-card">
+                    <p className="card-copy">Loading your invite…</p>
+                </div>
+            </main>
+        }>
+            <RsvpInner />
+        </Suspense>
     );
 }
