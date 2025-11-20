@@ -395,7 +395,7 @@ export default function HomePage() {
                     <div className="location-card">
                         <div>
                             <h3>Visit us</h3>
-                            <p>120 Victoria Avenue, Whanganui | Monday - Friday 9am - 5pm</p>
+                            <p>120 Victoria Avenue, Level 2, Whanganui | Monday - Friday 9am - 5pm</p>
                             <p>Minutes from the riverfront, surrounded by cafes, galleries, and ammenities.</p>
                         </div>
                         <div className="map-embed">
