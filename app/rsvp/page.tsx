@@ -19,8 +19,9 @@ const RSVP_ENDPOINT = '/api/rsvp';
 const MAX_EXTRAS = 3; // kept for compatibility with InviteResponse, but UI now uses a counter
 const EVENT_DETAILS = {
     title: 'HIVE Launch Event',
-    start: new Date('2025-12-12T17:30:00+13:00'),
-    end: new Date('2025-12-12T22:00:00+13:00'),
+    // Updated to 7:00pm – 11:00pm NZDT
+    start: new Date('2025-12-12T19:00:00+13:00'),
+    end: new Date('2025-12-12T23:00:00+13:00'),
     location: 'The HIVE, Whanganui',
     description: 'Where collaboration meets momentum',
     timeZone: 'Pacific/Auckland'
@@ -174,7 +175,7 @@ function RsvpInner() {
                     <p>{confirmed ? 'You have already RSVP’d for this event. You can update your headcount below.' : "You're confirmed for the HIVE launch event."}</p>
                     <div className="event-meta">
                         <p>
-                            <strong>When:</strong> 12 December 2025 · 5:30 pm — 10:00 pm NZDT
+                            <strong>When:</strong> 12 December 2025 · 7:00 pm — 11:00 pm NZDT
                         </p>
                         <p>
                             <strong>Where:</strong> The HIVE · 120 Victoria Ave, Whanganui
@@ -191,7 +192,6 @@ function RsvpInner() {
                     <div className="slider-group">
                         <div className="slider-header">
                             <label htmlFor="guest-count">Attendees (including you): </label>
-                            
                         </div>
                         <input
                             id="guest-count"
@@ -213,7 +213,6 @@ function RsvpInner() {
                         <button type="button" className="btn secondary" onClick={handleCalendar}>
                             Add to calendar
                         </button>
-                       
                         <button type="button" className="btn primary" onClick={handleSubmit} disabled={submitting}>
                             {submitting ? 'Saving…' : confirmed ? 'Update RSVP' : 'Confirm RSVP'}
                         </button>
