@@ -178,7 +178,7 @@ function RsvpInner() {
                             <strong>When:</strong> 12 December 2025 · 7:00 pm — 11:00 pm NZDT
                         </p>
                         <p>
-                            <strong>Where:</strong> The HIVE · 120 Victoria Ave, Whanganui
+                            <strong>Where:</strong> The HIVE · Level 2, 120 Victoria Ave, Whanganui
                         </p>
                         {/* <p>
                             <strong>Dress code:</strong> Festive founder chic ✨
