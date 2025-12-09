@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 
+const CONTACT_WEBHOOK = 'https://default0e0b3a79370449f29479196dbc8677.af.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/54d9568b936b4920a428e69659871612/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=BpeMk2K0gj7HMpwJPzS1zNR33Qkc4twQV-eqF1eJI68';
+
 const heroStats = [
     { label: 'Startups', value: 1000 },
     { label: 'High-income jobs', value: 3000 },
@@ -232,17 +234,29 @@ export default function HomePage() {
         event.preventDefault();
         const form = event.currentTarget;
         const formData = new FormData(form);
-        formData.append('access_key', 'ef9d79f8-ed58-4a40-bb56-35269e76f05b');
-        formData.append('subject', 'New contact from hivehq.nz');
-        formData.append('from_name', 'HIVE Website');
-        formData.append('botcheck', '');
+
+        // Build JSON payload expected by the Power Automate webhook
+        const payload = {
+            name: formData.get('name'),
+            email: formData.get('email'),
+            message: formData.get('message'),
+            subject: 'New contact from hivehq.nz',
+            from: 'HIVE Website'
+        };
+
         try {
-            const res = await fetch('https://api.web3forms.com/submit', {
+            // Directly post to Power Automate public webhook (no backend route required)
+            const res = await fetch(CONTACT_WEBHOOK, {
                 method: 'POST',
-                body: formData
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
-            const data = await res.json();
-            if (!data.success) throw new Error(data.message || 'Failed to send');
+
+            if (!res.ok) {
+                const text = await res.text().catch(() => '');
+                throw new Error(`Request failed: ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`);
+            }
+
             form.reset();
             setToastVisible(true);
         } catch (err) {
