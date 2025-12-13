@@ -8,7 +8,10 @@ export default function SiteNav({
     hashPrefix = '',
     logoHref = '#top',
     ctaHref = '#contact',
-    ctaLabel = 'Book a tour'
+    ctaLabel = 'Book a tour',
+    showBookings = true,
+    bookingsHref = '/bookings',
+    bookingsLabel = 'Bookings'
 }) {
     const [navOpen, setNavOpen] = useState(false);
 
@@ -27,6 +30,33 @@ export default function SiteNav({
                     <Image className="site-logo" src="/logo.png" alt="HIVE Whanganui logo" width={72} height={72} priority />
                 </Link>
             </div>
+            <ul id="nav-links" className={`nav-links ${navOpen ? 'open' : ''}`}>
+                {links.map(link => (
+                    <li key={link.href}>
+                        <Link href={link.href} onClick={() => setNavOpen(false)}>
+                            {link.label}
+                        </Link>
+                    </li>
+                ))}
+                {/* Mobile-only Bookings item inside dropdown */}
+                {showBookings && (
+                    <li className="nav-bookings">
+                        <Link href={bookingsHref} onClick={() => setNavOpen(false)}>
+                            {bookingsLabel}
+                        </Link>
+                    </li>
+                )}
+            </ul>
+            <div className="nav-ctas">
+                {showBookings && (
+                    <Link className="btn bookings" href={bookingsHref}>
+                        {bookingsLabel}
+                    </Link>
+                )}
+                <Link className="btn ghost" href={ctaHref}>
+                    {ctaLabel}
+                </Link>
+            </div>
             <button
                 className="menu-toggle"
                 aria-expanded={navOpen}
@@ -36,18 +66,6 @@ export default function SiteNav({
             >
                 Menu
             </button>
-            <ul id="nav-links" className={`nav-links ${navOpen ? 'open' : ''}`}>
-                {links.map(link => (
-                    <li key={link.href}>
-                        <Link href={link.href} onClick={() => setNavOpen(false)}>
-                            {link.label}
-                        </Link>
-                    </li>
-                ))}
-            </ul>
-            <Link className="btn ghost" href={ctaHref}>
-                {ctaLabel}
-            </Link>
         </nav>
     );
 }

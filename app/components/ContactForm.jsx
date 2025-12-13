@@ -8,9 +8,13 @@ export default function ContactForm({
     eventName,
     subject = 'New contact from hivehq.nz',
     from = 'HIVE Website',
-    submitLabel = 'Send'
+    submitLabel = 'Send',
+    mode = 'general',
+    minHour = 8,
+    maxHour = 22
 }) {
     const [toastVisible, setToastVisible] = useState(false);
+    const [todayStr, setTodayStr] = useState('');
 
     useEffect(() => {
         if (!toastVisible) return undefined;
@@ -18,13 +22,50 @@ export default function ContactForm({
         return () => clearTimeout(timeout);
     }, [toastVisible]);
 
+    useEffect(() => {
+        // Compute local today date in YYYY-MM-DD for min attribute on date input
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        setTodayStr(`${yyyy}-${mm}-${dd}`);
+    }, []);
+
     const handleSubmit = async event => {
         event.preventDefault();
         const form = event.currentTarget;
         const formData = new FormData(form);
 
         const message = String(formData.get('message') ?? '');
-        const fullMessage = eventName ? `Event: ${eventName}\n\n${message}` : message;
+        const preferredDate = formData.get('preferredDate');
+        const startTime = formData.get('startTime');
+        const endTime = formData.get('endTime');
+        const attendees = formData.get('attendees');
+        const charity = formData.get('charity') ? 'Yes' : 'No';
+
+        // Note: UI restricts to hour steps via input step; no additional validation enforced here.
+
+        const bookingHeader =
+            mode === 'booking'
+                ? [
+                      `Venue: ${eventName ?? ''}`.trim(),
+                      `Preferred date: ${preferredDate || ''}`.trim(),
+                      `Time: ${startTime || ''} to ${endTime || ''}`.trim(),
+                      `Attendees: ${attendees || ''}`.trim(),
+                      `Charity/Not-for-profit: ${charity}`
+                  ]
+                      .filter(line =>
+                          line && !line.endsWith(':') && !line.endsWith('to') && !line.endsWith('Attendees:')
+                      )
+                      .join('\n')
+                : null;
+
+        const fullMessage =
+            mode === 'booking'
+                ? `${bookingHeader}\n\n${message}`
+                : eventName
+                ? `Event: ${eventName}\n\n${message}`
+                : message;
 
         const payload = {
             name: formData.get('name'),
@@ -65,6 +106,52 @@ export default function ContactForm({
                     Email
                     <input type="email" name="email" required />
                 </label>
+                {mode === 'booking' && (
+                    <>
+                        <label>
+                            Preferred date
+                            <input type="date" name="preferredDate" min={todayStr} required />
+                        </label>
+                        <label>
+                            Start time
+                            <input
+                                type="time"
+                                name="startTime"
+                                step={3600}
+                                min={`${String(minHour).padStart(2, '0')}:00`}
+                                max={`${String(maxHour).padStart(2, '0')}:00`}
+                                list="hourSteps"
+                                required
+                            />
+                        </label>
+                        <label>
+                            End time
+                            <input
+                                type="time"
+                                name="endTime"
+                                step={3600}
+                                min={`${String(minHour).padStart(2, '0')}:00`}
+                                max={`${String(maxHour).padStart(2, '0')}:00`}
+                                list="hourSteps"
+                                required
+                            />
+                        </label>
+                        <datalist id="hourSteps">
+                            {Array.from({ length: maxHour - minHour + 1 }, (_, i) => minHour + i).map(h => {
+                                const hh = String(h).padStart(2, '0');
+                                return <option value={`${hh}:00`} key={hh} />;
+                            })}
+                        </datalist>
+                        <label>
+                            Number of people (approx.)
+                            <input type="number" name="attendees" min="1" inputMode="numeric" />
+                        </label>
+                        <label className="checkbox-row">
+                            <span>Charity / not-for-profit (discounts available)</span>
+                            <input type="checkbox" name="charity" value="yes" />
+                        </label>
+                    </>
+                )}
                 <label>
                     How can we help?
                     <textarea name="message" rows={4} required />
