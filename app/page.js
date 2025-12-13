@@ -1,9 +1,12 @@
 ﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 
-const CONTACT_WEBHOOK = 'https://default0e0b3a79370449f29479196dbc8677.af.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/54d9568b936b4920a428e69659871612/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=BpeMk2K0gj7HMpwJPzS1zNR33Qkc4twQV-eqF1eJI68';
+import ContactForm from './components/ContactForm';
+import SiteNav from './components/SiteNav';
+import { events as programs } from '../lib/events';
 
 const heroStats = [
     { label: 'Startups', value: 1000 },
@@ -54,23 +57,7 @@ const metrics = [
     { label: 'New companies', progress: 100 }
 ];
 
-const programs = [
-    { title: 'Hackathons & design camps', copy: 'Quarterly build sprints for all ages that end with investor table reads.' },
-    { title: 'Tri-annual incubators', copy: 'Ideation weekends, six-week mentorship blocks, and pitch deck workshops.' },
-    { title: 'Youth coding camps', copy: 'Seasonal curriculum from first line of code to product launch by 18.' },
-    { title: '13-week accelerator', copy: 'Intensive roadmap, revenue architecture, and Demo Day with investors.' },
-    { title: 'Startup Weekend', copy: '72 hours of ideation, prototyping, and launch to celebrate local culture.' },
-    { title: 'Community showcases', copy: 'Monthly events, workshops, and salons with Whanganui & Partners.' }
-];
-
-const programImages = [
-    '/hackathon.jpg',
-    'https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1200&q=80',
-    '/youth2.jpg',
-    '/accelerator.jpg',
-    'https://images.unsplash.com/photo-1515187029135-18ee286d815b?auto=format&fit=crop&w=1200&q=80',
-    '/community.jpg'
-];
+// Images now live on each event in lib/events.js (event.image)
 
 const strategy = [
     { title: 'Program design', copy: 'Structured, scalable playbooks for every phase of the startup journey powered by volunteer experts.' },
@@ -107,9 +94,6 @@ const gallery = [
 ];
 
 export default function HomePage() {
-    const [navOpen, setNavOpen] = useState(false);
-    const [toastVisible, setToastVisible] = useState(false);
-
     useEffect(() => {
         const counters = document.querySelectorAll('.stat-counter');
         const observer = new IntersectionObserver(
@@ -155,12 +139,6 @@ export default function HomePage() {
 
         return () => observer.disconnect();
     }, []);
-
-    useEffect(() => {
-        if (!toastVisible) return undefined;
-        const timeout = setTimeout(() => setToastVisible(false), 2600);
-        return () => clearTimeout(timeout);
-    }, [toastVisible]);
 
     // Pin-and-scroll horizontally for the industries section
     useEffect(() => {
@@ -230,70 +208,11 @@ export default function HomePage() {
         return () => obs.disconnect();
     }, []);
 
-    const handleSubmit = async event => {
-        event.preventDefault();
-        const form = event.currentTarget;
-        const formData = new FormData(form);
-
-        // Build JSON payload expected by the Power Automate webhook
-        const payload = {
-            name: formData.get('name'),
-            email: formData.get('email'),
-            message: formData.get('message'),
-            subject: 'New contact from hivehq.nz',
-            from: 'HIVE Website'
-        };
-
-        try {
-            // Directly post to Power Automate public webhook (no backend route required)
-            const res = await fetch(CONTACT_WEBHOOK, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!res.ok) {
-                const text = await res.text().catch(() => '');
-                throw new Error(`Request failed: ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`);
-            }
-
-            form.reset();
-            setToastVisible(true);
-        } catch (err) {
-            console.error(err);
-            alert('Sending failed. Please email info@hivehq.nz');
-        }
-    };
-
     return (
         <>
             <div className="hex-overlay" aria-hidden="true" />
             <header className="hero" id="top">
-                <nav className="nav">
-                    <div className="logo-wrap">
-                        <Image className="site-logo" src="/logo.png" alt="HIVE Whanganui logo" width={72} height={72} priority />
-                        {/* <span>HIVE Whanganui</span> */}
-                    </div>
-                    <button
-                        className="menu-toggle"
-                        aria-expanded={navOpen}
-                        aria-controls="nav-links"
-                        onClick={() => setNavOpen(open => !open)}
-                    >
-                        Menu
-                    </button>
-                    <ul id="nav-links" className={`nav-links ${navOpen ? 'open' : ''}`}>
-                        <li><a href="#why">Why</a></li>
-                        <li><a href="#who">Who</a></li>
-                        <li><a href="#where">Location</a></li>
-                        <li><a href="#problems">Pains</a></li>
-                        <li><a href="#solution">Events</a></li>
-                        <li><a href="#memberships">Memberships</a></li>
-                    </ul>
-                    <a className="btn ghost" href="#contact">
-                        Book a tour
-                    </a>
-                </nav>
+                <SiteNav />
 
                 <div className="hero-content">
                     <div className="hero-copy">
@@ -529,10 +448,15 @@ export default function HomePage() {
                     <h2>Year-round programming that keeps founders shipping.</h2>
                     <div className="programs-list">
                         {programs.map((program, i) => (
-                            <div className={`program-item ${i % 2 === 0 ? 'left' : 'right'}`} key={program.title}>
+                            <Link
+                                className={`program-item ${i % 2 === 0 ? 'left' : 'right'}`}
+                                href={`/events/${program.slug}`}
+                                key={program.slug}
+                                aria-label={`${program.title} details`}
+                            >
                                 <figure
                                     className="hex hex-program"
-                                    style={{ backgroundImage: `url(${programImages[i % programImages.length]})` }}
+                                    style={{ backgroundImage: `url(${program.image})` }}
                                 >
                                     <figcaption>{program.title}</figcaption>
                                 </figure>
@@ -540,7 +464,7 @@ export default function HomePage() {
                                     <h3>{program.title}</h3>
                                     <p>{program.copy}</p>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
                 </section>
@@ -597,23 +521,7 @@ export default function HomePage() {
                     <div className="section-tag">Connect</div>
                     <h2>Ready to land at HIVE?</h2>
                     <p>Book a tour, host an event, or pitch a partnership. Let us know how you would like to engage.</p>
-                    <form className="contact-form" onSubmit={handleSubmit}>
-                        <label>
-                            Name
-                            <input type="text" name="name" required />
-                        </label>
-                        <label>
-                            Email
-                            <input type="email" name="email" required />
-                        </label>
-                        <label>
-                            How can we help?
-                            <textarea name="message" rows={4} required />
-                        </label>
-                        <button type="submit" className="btn primary">
-                            Send
-                        </button>
-                    </form>
+                    <ContactForm />
                     <div className="contact-meta">
                         <p>
                             <strong>General:</strong> info@hivehq.nz
@@ -632,8 +540,6 @@ export default function HomePage() {
                 <p>© {new Date().getFullYear()} HIVE Whanganui. Built for founders who want to get things moving.</p>
                 <a href="#top">Back to top ↑</a>
             </footer>
-
-            {toastVisible && <div className="toast visible">Thanks! We will be in touch shortly.</div>}
         </>
     );
 }
