@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import ContactForm from './components/ContactForm';
+import ImageCarousel from './components/ImageCarousel';
 import SiteNav from './components/SiteNav';
 import { events as programs } from '../lib/events';
 
@@ -69,18 +70,21 @@ const memberships = [
     {
         title: 'Private office',
         price: 125,
+        image: '/office6.jpg',
         perks: ['24/7 secure access', 'Lockable Privacy', 'Priority Space Booking', 'Additional Members'],
         cta: 'Join the waitlist'
     },
     {
         title: 'Assigned desk',
         price: 50,
+        image: '/desks.jpg',
         perks: ['Dedicated desk', 'Allocated Secure Storeroom', 'Event + workshop invites', 'Guest pass access'],
         cta: 'Reserve a private desk'
     },
     {
         title: 'Hive membership',
         price: 25,
+        image: '/lounge1.jpg',
         perks: ['Drop-in lounge access', 'HIVE Event Access', 'Hot desk access', 'Coffee!'],
         cta: 'Become a member'
     }
@@ -260,13 +264,24 @@ export default function HomePage() {
                         </ul>
                     </div>
                     <div className="media-right">
-                        <Image
-                            src="https://plus.unsplash.com/premium_photo-1661951926748-413f9a5b0f55?auto=format&fit=crop&w=1200&q=80"
-                            alt="Modern workspace at HIVE"
-                            width={900}
-                            height={600}
+                        <ImageCarousel
+                            images={[
+                                '/lounge1.jpg',
+                                '/office9.jpg',
+                                '/lounge3.jpg',
+                                '/nikau2.jpg',
+                                '/meeting1.jpg',
+                                '/nikau3.jpg',
+                                '/manukau1.jpg',
+                                '/design1.jpg',
+                                '/desks.jpg',
+                                '/watering2.jpg',
+                                '/watering3.jpg',
+                                '/entrance1.jpg',
+                                '/entrance2.jpg'
+                            ]}
+                            alt="HIVE spaces and work areas"
                             priority
-                            style={{ width: '100%', height: 'auto' }}
                         />
                     </div>
                 </section>
@@ -309,7 +324,7 @@ export default function HomePage() {
                     </div>
                     <div className="who-media">
                         <Image
-                            src="https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1600&q=80"
+                            src="/Hive 5.jpg"
                             alt="Builders collaborating at HIVE"
                             fill
                             priority
@@ -488,6 +503,15 @@ export default function HomePage() {
                         {memberships.map(tier => (
                             <article key={tier.title}>
                                 <h3>{tier.title}</h3>
+                                <div className="membership-photo" aria-hidden="true">
+                                    <Image
+                                        src={tier.image}
+                                        alt=""
+                                        fill
+                                        sizes="(max-width: 960px) 100vw, 33vw"
+                                        style={{ objectFit: 'cover' }}
+                                    />
+                                </div>
                                 <p className="price">
                                     ${tier.price}
                                     <span>/week</span>

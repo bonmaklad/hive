@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import ImageCarousel from '../components/ImageCarousel';
 
 import SiteNav from '../components/SiteNav';
 import { bookingInclusions, spaces } from '../../lib/spaces';
@@ -24,11 +25,7 @@ export default function BookingsPage() {
                 className="hero"
                 id="top"
                 style={{
-                    minHeight: '70vh',
-                    backgroundImage:
-                        `linear-gradient(120deg, rgba(11, 12, 16, 0.9), rgba(28, 38, 52, 0.85)), url('${spaces[0]?.images?.[0]}')`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center'
+                    minHeight: '70vh'
                 }}
             >
                 <SiteNav hashPrefix="/" logoHref="/" ctaHref="/#contact" ctaLabel="Book a tour" />
@@ -87,6 +84,23 @@ export default function BookingsPage() {
                                         </div>
                                     </div>
                                 </Link>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
+                <section className="section" id="feel">
+                    <div className="container">
+                        <div className="section-tag">Preview</div>
+                        <h2>Get a feel for the room.</h2>
+                        <div className="room-feel-grid">
+                            {spaces.map(space => (
+                                <article className="card" key={space.slug}>
+                                    <h3>{space.title}</h3>
+                                    <div className="room-feel-media" aria-hidden="true">
+                                        <ImageCarousel images={space.images.slice(0, 3)} alt={`${space.title} preview`} />
+                                    </div>
+                                </article>
                             ))}
                         </div>
                     </div>
