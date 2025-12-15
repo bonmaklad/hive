@@ -24,13 +24,13 @@ jobs:
       - name: Build site
         run: npm run build
 
-      - name: Deploy to server
-        uses: burnett01/rsync-deployments@v7
-        with:
-          switches: -avz --delete
-          path: dist/
-          remote_path: /srv/sites/hivehq
-          remote_host: ${{ secrets.SERVER_IP }}
-          remote_user: deploy
-          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
+      - name: Deploy via rsync
+        run: |
+          rsync -avz --delete dist/ deploy@${{ secrets.SERVER_IP }}:/srv/sites/hivehq
