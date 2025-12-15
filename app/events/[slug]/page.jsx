@@ -25,7 +25,7 @@ export default function EventPage({ params }) {
             <header
                 className="hero"
                 id="top"
-                style={{
+                style={{ 
                     minHeight: '80vh',
                     backgroundImage:
                         `linear-gradient(120deg, rgba(11, 12, 16, 0.9), rgba(28, 38, 52, 0.85)), url('${event.image}')`,
