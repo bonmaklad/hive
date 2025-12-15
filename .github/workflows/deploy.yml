@@ -29,9 +29,15 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H ssh.hivehq.nz >> ~/.ssh/known_hosts
+          cat <<EOF > ~/.ssh/config
+          Host ssh.hivehq.nz
+            User deploy
+            IdentityFile ~/.ssh/id_ed25519
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
 
       - name: Deploy via rsync
         run: |
-          rsync -avz --delete dist/ deploy@ssh.hivehq.nz:/srv/sites/hivehq
-
+          rsync -avz --delete \
+            dist/ deploy@ssh.hivehq.nz:/srv/sites/hivehq
