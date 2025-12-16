@@ -212,7 +212,7 @@ export default function HomePage() {
         return () => obs.disconnect();
     }, []);
 
-    return (
+    return ( 
         <>
             <div className="hex-overlay" aria-hidden="true" />
             <header className="hero" id="top">
