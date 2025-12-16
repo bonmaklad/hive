@@ -924,6 +924,181 @@ main {
     letter-spacing: 0.2em;
 }
 
+/* Platform (self-hosted deployment UI) */
+.platform-shell {
+    min-height: 100vh;
+    padding: 2rem 1.5rem;
+}
+
+.platform-header,
+.platform-main {
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.platform-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.platform-brand {
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.platform-nav,
+.platform-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.platform-content {
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.platform-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin: 1.25rem 0;
+}
+
+.platform-subtitle {
+    color: var(--muted);
+    margin: 0.4rem 0 0;
+}
+
+.platform-card {
+    background: rgba(13, 17, 22, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 24px;
+    padding: 1.5rem;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+}
+
+.platform-footer {
+    margin-top: 1.25rem;
+}
+
+.platform-table-wrap {
+    overflow-x: auto;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.platform-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 680px;
+}
+
+.platform-table th,
+.platform-table td {
+    text-align: left;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    vertical-align: middle;
+}
+
+.platform-table th {
+    color: var(--muted);
+    font-size: 0.85rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.platform-link {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.platform-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: 0.95rem;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.badge.success {
+    border-color: rgba(111, 255, 182, 0.55);
+    background: rgba(111, 255, 182, 0.12);
+}
+
+.badge.error {
+    border-color: rgba(255, 99, 99, 0.55);
+    background: rgba(255, 99, 99, 0.12);
+}
+
+.badge.pending {
+    border-color: rgba(255, 210, 111, 0.55);
+    background: rgba(255, 210, 111, 0.12);
+}
+
+.badge.neutral {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.platform-message {
+    padding: 0.75rem 1rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--muted);
+    margin: 0.5rem 0 0;
+}
+
+.platform-message.error {
+    color: rgba(255, 199, 199, 0.95);
+    border-color: rgba(255, 99, 99, 0.35);
+    background: rgba(255, 99, 99, 0.08);
+}
+
+.platform-message.info {
+    color: rgba(199, 255, 226, 0.95);
+    border-color: rgba(111, 255, 182, 0.35);
+    background: rgba(111, 255, 182, 0.08);
+}
+
+.platform-empty {
+    margin-top: 1.5rem;
+    text-align: left;
+    max-width: 620px;
+}
+
+.contact-form select {
+    padding: 0.75rem 1rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(18, 20, 27, 0.8);
+    color: var(--text);
+    font-size: 1rem;
+}
+
 @media (max-width: 960px) {
     .hero-copy {
         width: 100%;
