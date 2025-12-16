@@ -221,7 +221,7 @@ export default function HomePage() {
                 <div className="hero-content">
                     <div className="hero-copy">
                         <p className="eyebrow">Technology Capital of Aotearoa</p>
-                        <h1>Where collaboration meets momentum.</h1>
+                        <h1>Where collaboration meets momentum</h1>
                         <p>
                             We are the tech-focused innovation hub with a goal to power 1,000 new Whanganui businesses, $1B in regional GDP, and 3,000 high-income jobs.
                             If you are building, scaling, or searching for a HQ where ideas turn into measurable outcomes, land at HIVE.
