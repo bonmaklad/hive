@@ -48,7 +48,7 @@ export default function EventPage({ params }) {
                             </a>
                         </div>
                     </div>
-                </div>
+                </div> 
             </header>
 
             <main>
