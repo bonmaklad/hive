@@ -205,7 +205,7 @@ export default function HomePage() {
                         obs.unobserve(e.target);
                     }
                 });
-            },
+            }, 
             { threshold: 0.3 }
         );
         items.forEach(el => obs.observe(el));
