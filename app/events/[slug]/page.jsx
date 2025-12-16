@@ -31,7 +31,7 @@ export default function EventPage({ params }) {
                         `linear-gradient(120deg, rgba(11, 12, 16, 0.9), rgba(28, 38, 52, 0.85)), url('${event.image}')`,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center'
-                }}
+                }} 
             > 
                 <SiteNav hashPrefix="/" logoHref="/" ctaHref="#get-info" ctaLabel="Get more info" />
                 <div className="hero-content">
