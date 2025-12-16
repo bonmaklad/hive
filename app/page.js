@@ -203,7 +203,7 @@ export default function HomePage() {
                     if (e.isIntersecting) {
                         e.target.classList.add('in-view');
                         obs.unobserve(e.target);
-                    }
+                    } 
                 });
             },  
             { threshold: 0.3 }
