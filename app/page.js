@@ -324,7 +324,7 @@ export default function HomePage() {
                     </div>
                     <div className="who-media">
                         <Image
-                            src="/Hive 5.jpg"
+                            src="/Hive 5.JPG"
                             alt="Builders collaborating at HIVE"
                             fill
                             priority
