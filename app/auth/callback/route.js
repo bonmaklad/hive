@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseRouteHandlerClient } from '@/lib/supabase/route';
 import { getPublicOrigin } from '@/lib/http/origin';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +11,11 @@ export async function GET(request) {
     const type = url.searchParams.get('type');
     const next = url.searchParams.get('next') || '/platform';
 
-    const supabase = createSupabaseServerClient();
+    const origin = getPublicOrigin(request);
+    const safeNext = next.startsWith('/') ? next : '/platform';
+
+    const response = NextResponse.redirect(new URL(safeNext, origin));
+    const supabase = createSupabaseRouteHandlerClient(request, response);
 
     if (code) {
         await supabase.auth.exchangeCodeForSession(code);
@@ -19,7 +23,5 @@ export async function GET(request) {
         await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
     }
 
-    const origin = getPublicOrigin(request);
-    const safeNext = next.startsWith('/') ? next : '/platform';
-    return NextResponse.redirect(new URL(safeNext, origin));
+    return response;
 }
