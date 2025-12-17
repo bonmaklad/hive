@@ -24,7 +24,7 @@ export default function EventPage({ params }) {
             <div className="hex-overlay" aria-hidden="true" />
             <header
                 className="hero"
-                id="top" 
+                id="top"  
                 style={{ 
                     minHeight: '80vh', 
                     backgroundImage:
