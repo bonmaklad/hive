@@ -32,7 +32,7 @@ export default function EventPage({ params }) {
                     backgroundSize: 'cover',
                     backgroundPosition: 'center'
                 }}   
-            >  
+            >   
                 <SiteNav hashPrefix="/" logoHref="/" ctaHref="#get-info" ctaLabel="Get more info" />
                 <div className="hero-content">
                     <div className="hero-copy">
