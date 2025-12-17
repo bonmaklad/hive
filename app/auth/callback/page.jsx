@@ -45,7 +45,15 @@ export default function AuthCallbackPage() {
 
                 if (code) {
                     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-                    if (exchangeError) throw exchangeError;
+                    if (exchangeError) {
+                        const message = exchangeError?.message || '';
+                        if (/code verifier/i.test(message)) {
+                            throw new Error(
+                                'This sign-in link must be opened in the same browser where you requested it. Please go back and request a new magic link in this browser.'
+                            );
+                        }
+                        throw exchangeError;
+                    }
                 } else if (tokenHash && type) {
                     const { error: verifyError } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
                     if (verifyError) throw verifyError;
