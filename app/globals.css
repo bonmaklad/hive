@@ -7,6 +7,7 @@
     --wood: #8a5a3c;
     --sand: #f5efe0;
     --accent: #8a5a3c;
+    --accent-contrast: #b67d58;
     --text: #e2e7ec;
     --muted: #9ea7b3;
     --shadow: rgba(0, 0, 0, 0.35);
@@ -57,12 +58,36 @@ main {
 .hero {
     position: relative;
     padding: 2rem clamp(1rem, 4vw, 5rem) 4rem;
-    background: linear-gradient(120deg, rgba(11, 12, 16, 0.9), rgba(28, 38, 52, 0.85)),
-        url('/Hive%204.JPG') center/cover;
+    background: linear-gradient(120deg, rgba(11, 12, 16, 0.9), rgba(28, 38, 52, 0.85));
     overflow: hidden;
     min-height: 100vh;
     display: grid;
     grid-template-rows: auto 1fr;
+}
+
+.hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, rgba(11, 12, 16, 0.8), rgba(28, 38, 52, 0.7));
+    z-index: 1;
+}
+
+.hero-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+}
+
+.hero-bg img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.hero > :not(.hero-bg) {
+    position: relative;
+    z-index: 2;
 }
 
 .nav {
@@ -177,7 +202,7 @@ main {
     text-transform: uppercase;
     letter-spacing: 0.4em;
     font-size: 0.85rem;
-    color: var(--accent);
+    color: var(--accent-contrast);
 }
 
 .hero-cta {
@@ -207,7 +232,7 @@ main {
 
 .btn.primary {
     background: var(--accent);
-    color: var(--ink);
+    color: var(--text);
 }
 
 .btn.secondary {
@@ -236,7 +261,7 @@ main {
 .hero-stats span {
     font-size: 2.2rem;
     font-weight: 600;
-    color: var(--accent);
+    color: var(--accent-contrast);
 }
 
 .hero-media {
@@ -293,6 +318,8 @@ main {
 
 .section {
     padding: clamp(3rem, 6vw, 5rem) clamp(1rem, 4vw, 5rem);
+    content-visibility: auto;
+    contain-intrinsic-size: 1000px;
 }
 
 .section:nth-of-type(even) {
@@ -303,7 +330,7 @@ main {
     text-transform: uppercase;
     letter-spacing: 0.4em;
     font-size: 0.75rem;
-    color: var(--accent);
+    color: var(--accent-contrast);
     margin-bottom: 1rem;
 }
 
@@ -373,7 +400,7 @@ main {
     border-radius: 999px;
     font-size: 0.95rem;
     background: var(--accent);
-    color: var(--ink);
+    color: var(--text);
     font-weight: 600;
     cursor: default;
     transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
@@ -714,7 +741,7 @@ main {
 
 .metrics span {
     font-size: 2rem;
-    color: var(--accent);
+    color: var(--accent-contrast);
 }
 
 .metrics-bars {
@@ -776,7 +803,7 @@ main {
 
 .price {
     font-size: 2.2rem;
-    color: var(--accent);
+    color: var(--accent-contrast);
     margin: 0.5rem 0;
 }
 
@@ -919,7 +946,10 @@ main {
 }
 
 .footer a {
-    color: var(--accent);
+    color: var(--accent-contrast);
+    text-decoration: underline;
+    text-underline-offset: 0.25em;
+    text-decoration-thickness: 2px;
     text-transform: uppercase;
     letter-spacing: 0.2em;
 }
@@ -1021,7 +1051,7 @@ main {
 }
 
 .platform-link {
-    color: var(--accent);
+    color: var(--accent-contrast);
     font-weight: 600;
 }
 

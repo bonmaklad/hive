@@ -1,6 +1,5 @@
-﻿'use client';
-
-import { useEffect } from 'react';
+﻿import HomePageEffects from './components/HomePageEffects';
+import DeferredIframe from './components/DeferredIframe';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -98,124 +97,30 @@ const gallery = [
 ];
 
 export default function HomePage() {
-    useEffect(() => {
-        const counters = document.querySelectorAll('.stat-counter');
-        const observer = new IntersectionObserver(
-            entries => {
-                entries.forEach(entry => {
-                    if (!entry.isIntersecting) return;
-                    const target = Number(entry.target.dataset.target);
-                    const duration = 2000;
-                    const start = performance.now();
-
-                    const step = now => {
-                        const progress = Math.min((now - start) / duration, 1);
-                        entry.target.textContent = Math.floor(progress * target).toLocaleString();
-                        if (progress < 1) requestAnimationFrame(step);
-                    };
-
-                    requestAnimationFrame(step);
-                    observer.unobserve(entry.target);
-                });
-            },
-            { threshold: 0.4 }
-        );
-
-        counters.forEach(counter => observer.observe(counter));
-
-        return () => observer.disconnect();
-    }, []);
-
-    useEffect(() => {
-        const bars = document.querySelectorAll('.metric-bar');
-        const observer = new IntersectionObserver(
-            entries => {
-                entries.forEach(entry => {
-                    if (!entry.isIntersecting) return;
-                    entry.target.style.width = `${entry.target.dataset.progress}%`;
-                    observer.unobserve(entry.target);
-                });
-            },
-            { threshold: 0.6 }
-        );
-
-        bars.forEach(bar => observer.observe(bar));
-
-        return () => observer.disconnect();
-    }, []);
-
-    // Pin-and-scroll horizontally for the industries section
-    useEffect(() => {
-        const section = document.querySelector('#industries.horizontal-scroll');
-        if (!section) return undefined;
-        const pin = section.querySelector('.pin');
-        const track = section.querySelector('.track');
-        if (!pin || !track) return undefined;
-
-        const vh = () => window.innerHeight;
-        const vw = () => window.innerWidth;
-
-        const setup = () => {
-            // Total horizontal distance needed
-            const total = track.scrollWidth;
-            // Small buffer so the last tile fully enters view
-            const buffer = 32; // px
-            const range = Math.max(total - vw() + buffer, 0);
-            // Expand the section height so you can scroll enough
-            section.style.height = `${range + vh()}px`;
-        };
-
-        const onScroll = () => {
-            const rect = section.getBoundingClientRect();
-            const start = rect.top; // distance from viewport top
-            const max = section.offsetHeight - vh();
-            const y = Math.min(Math.max(-start, 0), max);
-            const total = track.scrollWidth;
-            const buffer = 32; // match setup()
-            const range = Math.max(total - vw() + buffer, 0);
-            const progress = max > 0 ? y / max : 0;
-            const x = -progress * range;
-            track.style.transform = `translate3d(${x}px, 0, 0)`;
-        };
-
-        const onResize = () => {
-            setup();
-            onScroll();
-        };
-
-        setup();
-        onScroll();
-        window.addEventListener('scroll', onScroll, { passive: true });
-        window.addEventListener('resize', onResize);
-        return () => {
-            window.removeEventListener('scroll', onScroll);
-            window.removeEventListener('resize', onResize);
-        };
-    }, []);
-
-    // Reveal programs as they enter viewport (alternating left/right)
-    useEffect(() => {
-        const items = document.querySelectorAll('.program-item');
-        if (!items.length) return undefined;
-        const obs = new IntersectionObserver(
-            entries => {
-                entries.forEach(e => {
-                    if (e.isIntersecting) {
-                        e.target.classList.add('in-view');
-                        obs.unobserve(e.target);
-                    }  
-                }); 
-            },  
-            { threshold: 0.3 }
-        );
-        items.forEach(el => obs.observe(el));
-        return () => obs.disconnect();
-    }, []);
-
     return ( 
         <>
+            <HomePageEffects />
             <div className="hex-overlay" aria-hidden="true" />
             <header className="hero" id="top">
+                <picture className="hero-bg">
+                    <source
+                        type="image/avif"
+                        srcSet="/hero/hive-hero-800.avif 800w, /hero/hive-hero-1600.avif 1600w"
+                        sizes="100vw"
+                    />
+                    <source
+                        type="image/webp"
+                        srcSet="/hero/hive-hero-800.webp 800w, /hero/hive-hero-1600.webp 1600w"
+                        sizes="100vw"
+                    />
+                    <img
+                        src="/hero/hive-hero-1600.jpg"
+                        alt=""
+                        decoding="async"
+                        loading="lazy"
+                        fetchPriority="low"
+                    />
+                </picture>
                 <SiteNav />
 
                 <div className="hero-content">
@@ -252,7 +157,7 @@ export default function HomePage() {
                 {/* Spaces section moved below hero with text left and image right */}
                 <section id="spaces" className="section split">
                     <div>
-                        <h3>Spaces built for velocity</h3>
+                        <h2>Spaces built for velocity</h2>
                         <ul className="feature-list">
                             <li>9 Premium Offices</li>
                             <li>12 Private Offices</li>
@@ -281,7 +186,6 @@ export default function HomePage() {
                                 '/entrance2.jpg'
                             ]}
                             alt="HIVE spaces and work areas"
-                            priority
                         />
                     </div>
                 </section>
@@ -327,7 +231,8 @@ export default function HomePage() {
                             src="/Hive 5.JPG"
                             alt="Builders collaborating at HIVE"
                             fill
-                            priority
+                            sizes="(max-width: 960px) 0px, 50vw"
+                            quality={60}
                             style={{ objectFit: 'cover' }}
                         />
                     </div>
@@ -347,11 +252,9 @@ export default function HomePage() {
                             <p>Minutes from the riverfront, surrounded by cafes, galleries, and ammenities.</p>
                         </div>
                         <div className="map-embed">
-                            <iframe
+                            <DeferredIframe
                                 title="HIVE Whanganui on Google Maps"
                                 src="https://www.google.com/maps?q=120%20Victoria%20Avenue%2C%20Whanganui%2C%20New%20Zealand&t=k&z=18&output=embed"
-                                loading="lazy"
-                                referrerPolicy="no-referrer-when-downgrade"
                                 allowFullScreen
                             />
                         </div>

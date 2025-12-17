@@ -27,7 +27,7 @@ export default function SiteNav({
         <nav className="nav">
             <div className="logo-wrap">
                 <Link href={logoHref} aria-label="HIVE Whanganui">
-                    <Image className="site-logo" src="/logo.png" alt="HIVE Whanganui logo" width={72} height={72} priority />
+                    <Image className="site-logo" src="/logo-square.png" alt="HIVE Whanganui logo" width={72} height={72} priority />
                 </Link>
             </div>
             <ul id="nav-links" className={`nav-links ${navOpen ? 'open' : ''}`}>

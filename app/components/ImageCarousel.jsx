@@ -26,7 +26,9 @@ export default function ImageCarousel({
     alt = 'HIVE space',
     intervalMs = 4500,
     fadeMs = 650,
-    priority = false
+    priority = false,
+    sizes = '(max-width: 960px) 100vw, 800px',
+    quality = 60
 }) {
     const normalizedImages = useMemo(() => {
         if (!Array.isArray(images)) {
@@ -101,7 +103,8 @@ export default function ImageCarousel({
                 alt={alt}
                 fill
                 priority={priority}
-                sizes="(max-width: 960px) 100vw, 45vw"
+                sizes={sizes}
+                quality={quality}
             />
             {upcomingSrc && (
                 <Image
@@ -109,7 +112,8 @@ export default function ImageCarousel({
                     src={upcomingSrc}
                     alt={alt}
                     fill
-                    sizes="(max-width: 960px) 100vw, 45vw"
+                    sizes={sizes}
+                    quality={quality}
                 />
             )}
         </div>
