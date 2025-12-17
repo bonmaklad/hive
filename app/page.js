@@ -204,7 +204,7 @@ export default function HomePage() {
                         e.target.classList.add('in-view');
                         obs.unobserve(e.target);
                     } 
-                });
+                }); 
             },  
             { threshold: 0.3 }
         );
