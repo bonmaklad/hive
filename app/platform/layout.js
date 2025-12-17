@@ -32,6 +32,9 @@ export default async function PlatformLayout({ children }) {
                     <Link href="/platform/sites/new" className="btn primary">
                         New site
                     </Link>
+                    <Link href="/platform/settings" className="btn ghost">
+                        Settings
+                    </Link>
                     <Link href="/auth/signout" className="btn secondary">
                         Sign out
                     </Link>
