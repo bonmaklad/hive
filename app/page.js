@@ -113,20 +113,20 @@ export default function HomePage() {
                         srcSet="/hero/hive-hero-800.webp 800w, /hero/hive-hero-1600.webp 1600w"
                         sizes="100vw"
                     />
-                    <img
-                        src="/hero/hive-hero-1600.jpg"
-                        alt=""
-                        decoding="async"
-                        loading="lazy"
-                        fetchPriority="low"
-                    />
-                </picture>
-                <SiteNav />
+	                    <img
+	                        src="/hero/hive-hero-1600.jpg"
+	                        alt=""
+	                        decoding="async"
+	                        loading="eager"
+	                        fetchPriority="high"
+	                    />
+	                </picture>
+	                <SiteNav />
 
                 <div className="hero-content">
                     <div className="hero-copy">
                         <p className="eyebrow">Technology Capital of Aotearoa</p>
-                        <h1>Where collaboration meets momentum</h1>
+                        <h1>Where collaboration meets momentum.</h1>
                         <p>
                             We are the tech-focused innovation hub with a goal to power 1,000 new Whanganui businesses, $1B in regional GDP, and 3,000 high-income jobs.
                             If you are building, scaling, or searching for a HQ where ideas turn into measurable outcomes, land at HIVE.
@@ -294,9 +294,18 @@ export default function HomePage() {
                             {futureIndustryTiles.map(tile => (
                                 <figure
                                     className="hex hex-industry"
-                                    style={{ backgroundImage: `url(${tile.src})` }}
                                     key={tile.label}
                                 >
+                                    <div className="hex-media" aria-hidden="true">
+                                        <Image
+                                            src={tile.src}
+                                            alt=""
+                                            fill
+                                            sizes="(max-width: 900px) 75vw, 50vh"
+                                            quality={55}
+                                            style={{ objectFit: 'cover' }}
+                                        />
+                                    </div>
                                     <figcaption>{tile.label}</figcaption>
                                 </figure>
                             ))}
@@ -374,8 +383,17 @@ export default function HomePage() {
                             >
                                 <figure
                                     className="hex hex-program"
-                                    style={{ backgroundImage: `url(${program.image})` }}
                                 >
+                                    <div className="hex-media" aria-hidden="true">
+                                        <Image
+                                            src={program.image}
+                                            alt=""
+                                            fill
+                                            sizes="(max-width: 900px) 92vw, (max-width: 1200px) 420px, 520px"
+                                            quality={55}
+                                            style={{ objectFit: 'cover' }}
+                                        />
+                                    </div>
                                     <figcaption>{program.title}</figcaption>
                                 </figure>
                                 <div className="program-copy">
