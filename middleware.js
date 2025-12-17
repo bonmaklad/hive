@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { getSupabaseEnv } from './lib/supabase/env';
+import { getPublicOrigin } from './lib/http/origin';
 
 export async function middleware(request) {
     const { url, anonKey } = getSupabaseEnv();
@@ -27,17 +28,15 @@ export async function middleware(request) {
     } = await supabase.auth.getUser();
 
     if (request.nextUrl.pathname === '/login' && user) {
-        const redirectUrl = request.nextUrl.clone();
-        const next = redirectUrl.searchParams.get('next') || '/platform';
+        const origin = getPublicOrigin(request);
+        const next = request.nextUrl.searchParams.get('next') || '/platform';
         const safeNext = next.startsWith('/') ? next : '/platform';
-        redirectUrl.pathname = safeNext;
-        redirectUrl.search = '';
-        return NextResponse.redirect(redirectUrl);
+        return NextResponse.redirect(new URL(safeNext, origin));
     }
 
     if (request.nextUrl.pathname.startsWith('/platform') && !user) {
-        const redirectUrl = request.nextUrl.clone();
-        redirectUrl.pathname = '/login';
+        const origin = getPublicOrigin(request);
+        const redirectUrl = new URL('/login', origin);
         redirectUrl.searchParams.set('next', request.nextUrl.pathname);
         return NextResponse.redirect(redirectUrl);
     }

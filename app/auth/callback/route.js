@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getPublicOrigin } from '@/lib/http/origin';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,7 @@ export async function GET(request) {
         await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
     }
 
-    return NextResponse.redirect(new URL(next, url.origin));
+    const origin = getPublicOrigin(request);
+    const safeNext = next.startsWith('/') ? next : '/platform';
+    return NextResponse.redirect(new URL(safeNext, origin));
 }
-
