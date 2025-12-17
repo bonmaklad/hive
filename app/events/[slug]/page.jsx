@@ -49,7 +49,7 @@ export default function EventPage({ params }) {
                         </div>
                     </div>
                 </div> 
-            </header>
+            </header> 
 
             <main>
                 {/* Intro copy to set context */}
