@@ -1,116 +1,74 @@
-'use client';
-
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
-import StatusBadge from './components/StatusBadge';
 
 export const dynamic = 'force-dynamic';
 
-function formatTimestamp(value) {
-    if (!value) return '—';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleString();
-}
-
 export default function PlatformDashboardPage() {
-    const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-    const [sites, setSites] = useState([]);
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        let cancelled = false;
-
-        const load = async () => {
-            setError('');
-            setLoading(true);
-
-            const { data, error } = await supabase
-                .from('sites')
-                .select('id, domain, repo, framework, created_at, deployments(status, created_at)')
-                .order('created_at', { ascending: false })
-                .order('created_at', { foreignTable: 'deployments', ascending: false })
-                .limit(1, { foreignTable: 'deployments' });
-
-            if (cancelled) return;
-
-            if (error) {
-                setError(error.message);
-                setSites([]);
-            } else {
-                setSites(data || []);
-            }
-
-            setLoading(false);
-        };
-
-        load();
-        return () => {
-            cancelled = true;
-        };
-    }, [supabase]);
-
     return (
         <main className="platform-main">
             <div className="platform-title-row">
                 <div>
-                    <h1>Your sites</h1>
-                    <p className="platform-subtitle">Manage domains and track deployment status.</p>
+                    <h1>Dashboard</h1>
+                    <p className="platform-subtitle">Manage your membership, bookings, and hosting in one place.</p>
                 </div>
-                <Link className="btn primary" href="/platform/sites/new">
-                    Create site
-                </Link>
             </div>
 
-            {error ? (
-                <p className="platform-message error">{error}</p>
-            ) : loading ? (
-                <p className="platform-subtitle">Loading…</p>
-            ) : sites?.length ? (
-                <div className="platform-table-wrap">
-                    <table className="platform-table">
-                        <thead>
-                            <tr>
-                                <th>Domain</th>
-                                <th>Repo</th>
-                                <th>Framework</th>
-                                <th>Latest deploy</th>
-                                <th>Deployed at</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {sites.map(site => {
-                                const latestDeployment = site.deployments?.[0] || null;
-                                return (
-                                    <tr key={site.id}>
-                                        <td>
-                                            <Link className="platform-link" href={`/platform/sites/${site.id}`}>
-                                                {site.domain}
-                                            </Link>
-                                        </td>
-                                        <td>{site.repo}</td>
-                                        <td className="platform-mono">{site.framework}</td>
-                                        <td>
-                                            <StatusBadge status={latestDeployment?.status || 'No deployments'} />
-                                        </td>
-                                        <td className="platform-mono">{formatTimestamp(latestDeployment?.created_at)}</td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            ) : (
-                <div className="platform-empty">
-                    <h2>No sites yet</h2>
-                    <p>Create your first site to start tracking deployments.</p>
-                    <Link className="btn primary" href="/platform/sites/new">
-                        Create your first site
-                    </Link>
-                </div>
-            )}
+            <div className="platform-grid">
+                <section className="platform-card span-6" aria-label="Membership">
+                    <div className="platform-kpi-row">
+                        <h2 style={{ margin: 0 }}>Membership</h2>
+                        <span className="badge success">Live</span>
+                    </div>
+                    <p className="platform-subtitle">Plan: Premium • $499 / month</p>
+                    <p className="platform-subtitle">Next invoice: 05 Jan 2026</p>
+                    <div className="platform-card-actions">
+                        <Link className="btn primary" href="/platform/membership">
+                            See details
+                        </Link>
+                    </div>
+                </section>
+
+                <section className="platform-card span-6" aria-label="Room booking">
+                    <div className="platform-kpi-row">
+                        <h2 style={{ margin: 0 }}>Book a room</h2>
+                        <span className="badge neutral">3 tokens</span>
+                    </div>
+                    <p className="platform-subtitle">Use your monthly credits, or pay-as-you-go when you run out.</p>
+                    <div className="platform-card-actions">
+                        <Link className="btn primary" href="/platform/rooms">
+                            Book now
+                        </Link>
+                    </div>
+                </section>
+
+                <section className="platform-card span-6" aria-label="Website hosting">
+                    <div className="platform-kpi-row">
+                        <h2 style={{ margin: 0 }}>Website hosting</h2>
+                        <span className="badge neutral">Sites</span>
+                    </div>
+                    <p className="platform-subtitle">View sites, create new ones, and track deployment status.</p>
+                    <div className="platform-card-actions">
+                        <Link className="btn primary" href="/platform/hosting">
+                            Manage hosting
+                        </Link>
+                        <Link className="btn ghost" href="/platform/sites/new">
+                            Create site
+                        </Link>
+                    </div>
+                </section>
+
+                <section className="platform-card span-6" aria-label="Membership benefits">
+                    <div className="platform-kpi-row">
+                        <h2 style={{ margin: 0 }}>Membership benefits</h2>
+                        <span className="badge pending">Coming soon</span>
+                    </div>
+                    <p className="platform-subtitle">Perks, partner discounts, events, and member-only resources.</p>
+                    <div className="platform-card-actions">
+                        <Link className="btn ghost" href="/platform/benefits">
+                            View benefits
+                        </Link>
+                    </div>
+                </section>
+            </div>
         </main>
     );
 }

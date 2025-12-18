@@ -1,9 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
+import { PlatformSessionProvider } from './PlatformContext';
+import ChatDrawer from './components/ChatDrawer';
 
 function safeLoginRedirect(pathname) {
     const next = typeof pathname === 'string' && pathname.startsWith('/platform') ? pathname : '/platform';
@@ -105,27 +108,42 @@ export default function PlatformShell({ children }) {
     }
 
     return (
-        <div className="platform-shell">
-            <header className="platform-header">
-                <Link href="/platform" className="platform-brand">
-                    Platform
-                </Link>
-                <nav className="platform-nav">
-                    <Link href="/platform" className="btn ghost">
-                        Dashboard
+        <PlatformSessionProvider value={{ user, supabase }}>
+            <div className="platform-shell">
+                <header className="platform-header">
+                    <Link href="/platform" className="platform-brand">
+                        <Image
+                            src="/logo-square.png"
+                            width={36}
+                            height={36}
+                            alt="HIVE"
+                            priority
+                            className="platform-logo"
+                        />
+                        <span>Platform</span>
                     </Link>
-                    <Link href="/platform/sites/new" className="btn primary">
-                        New site
+                    <nav className="platform-nav">
+                        <Link href="/platform" className="btn ghost">
+                            Dashboard
+                        </Link>
+                        <Link href="/platform/settings" className="btn ghost">
+                            Settings
+                        </Link>
+                        <Link href="/auth/signout" className="btn secondary">
+                            Sign out
+                        </Link>
+                    </nav>
+                </header>
+                <div className="platform-content">{children}</div>
+
+                <footer className="platform-footer-bar">
+                    <Link className="btn ghost" href="/platform/tickets">
+                        Raise a ticket
                     </Link>
-                    <Link href="/platform/settings" className="btn ghost">
-                        Settings
-                    </Link>
-                    <Link href="/auth/signout" className="btn secondary">
-                        Sign out
-                    </Link>
-                </nav>
-            </header>
-            <div className="platform-content">{children}</div>
-        </div>
+                </footer>
+
+                <ChatDrawer />
+            </div>
+        </PlatformSessionProvider>
     );
 }

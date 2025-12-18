@@ -76,8 +76,8 @@ export default function SiteDetailPage({ params }) {
                         </p>
                     )}
                 </div>
-                <Link className="btn ghost" href="/platform">
-                    Back to dashboard
+                <Link className="btn ghost" href="/platform/hosting">
+                    Back to hosting
                 </Link>
             </div>
 

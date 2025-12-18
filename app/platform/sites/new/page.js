@@ -11,8 +11,8 @@ export default function NewSitePage() {
                     <h1>Create a site</h1>
                     <p className="platform-subtitle">This only stores metadata and deployment status in Supabase.</p>
                 </div>
-                <Link className="btn ghost" href="/platform">
-                    Back to dashboard
+                <Link className="btn ghost" href="/platform/hosting">
+                    Back to hosting
                 </Link>
             </div>
 
@@ -22,4 +22,3 @@ export default function NewSitePage() {
         </main>
     );
 }
-

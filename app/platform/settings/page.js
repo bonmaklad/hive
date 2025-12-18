@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import UpdatePasswordForm from './update-password-form';
+import ProfileForm from './profile-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +42,11 @@ export default function PlatformSettingsPage() {
             cancelled = true;
         };
     }, [supabase]);
+
+    const refreshUser = async () => {
+        const { data } = await supabase.auth.getUser();
+        setUser(data?.user ?? null);
+    };
 
     return (
         <main className="platform-main">
@@ -80,6 +86,12 @@ export default function PlatformSettingsPage() {
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            <div className="platform-card" style={{ marginTop: '1.5rem' }}>
+                <h2>Profile</h2>
+                <p className="platform-subtitle">Set your name for chat and tickets.</p>
+                <ProfileForm user={user} onUpdated={refreshUser} />
             </div>
 
             <div className="platform-card" style={{ marginTop: '1.5rem' }}>
