@@ -17,22 +17,36 @@ export default function PlatformShell({ children }) {
 
     const [ready, setReady] = useState(false);
     const [user, setUser] = useState(null);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => {
         let cancelled = false;
 
         const load = async () => {
-            const { data, error } = await supabase.auth.getSession();
-            if (cancelled) return;
+            try {
+                const timeout = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Timed out while checking your session.')), 2000)
+                );
+                const result = await Promise.race([supabase.auth.getSession(), timeout]);
+                if (cancelled) return;
 
-            if (error) {
+                const { data, error } = result;
+                if (error) {
+                    setLoadError(error.message);
+                    setUser(null);
+                    setReady(true);
+                    return;
+                }
+
+                setLoadError('');
+                setUser(data?.session?.user ?? null);
+                setReady(true);
+            } catch (err) {
+                if (cancelled) return;
+                setLoadError(err?.message || 'Could not check session.');
                 setUser(null);
                 setReady(true);
-                return;
             }
-
-            setUser(data?.session?.user ?? null);
-            setReady(true);
         };
 
         load();
@@ -74,7 +88,20 @@ export default function PlatformShell({ children }) {
     }
 
     if (!user) {
-        return null;
+        return (
+            <div className="platform-shell">
+                <div className="platform-card">
+                    <h1>Redirecting…</h1>
+                    <p className="platform-subtitle">Sending you to sign in.</p>
+                    {loadError && <p className="platform-message error">{loadError}</p>}
+                    <p className="platform-footer">
+                        <Link href={safeLoginRedirect(pathname)} className="btn primary">
+                            Go to sign in
+                        </Link>
+                    </p>
+                </div>
+            </div>
+        );
     }
 
     return (

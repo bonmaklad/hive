@@ -16,6 +16,8 @@ export default function LoginForm() {
     const [info, setInfo] = useState('');
 
     const next = searchParams.get('next') || '/platform';
+    const urlError = searchParams.get('error');
+    const urlErrorDescription = searchParams.get('error_description');
 
     const signInWithPassword = async event => {
         event.preventDefault();
@@ -61,6 +63,11 @@ export default function LoginForm() {
 
     return (
         <form className="contact-form" onSubmit={signInWithPassword}>
+            {(urlError || urlErrorDescription) && !error && (
+                <p className="platform-message error">
+                    {urlErrorDescription || (urlError === 'otp_expired' ? 'Email link is invalid or has expired.' : urlError)}
+                </p>
+            )}
             <label>
                 Email
                 <input

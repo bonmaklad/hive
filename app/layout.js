@@ -1,5 +1,6 @@
 ﻿import './globals.css';
 import { Space_Grotesk } from 'next/font/google';
+import AuthSessionSync from './AuthSessionSync';
 
 const spaceGrotesk = Space_Grotesk({
     subsets: ['latin'],
@@ -27,7 +28,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
     return (
         <html lang="en">
-            <body className={spaceGrotesk.className}>{children}</body>
+            <body className={spaceGrotesk.className}>
+                <AuthSessionSync />
+                {children}
+            </body>
         </html>
     );
 }
