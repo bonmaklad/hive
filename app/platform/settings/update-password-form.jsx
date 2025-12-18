@@ -26,7 +26,10 @@ export default function UpdatePasswordForm() {
                 throw new Error('Passwords do not match.');
             }
 
-            const { error: updateError } = await supabase.auth.updateUser({ password });
+            const { error: updateError } = await supabase.auth.updateUser({
+                password,
+                data: { must_set_password: false }
+            });
             if (updateError) throw updateError;
 
             setPassword('');
@@ -77,4 +80,3 @@ export default function UpdatePasswordForm() {
         </form>
     );
 }
-

@@ -1,5 +1,8 @@
+'use client';
+
 import Link from 'next/link';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { useEffect, useMemo, useState } from 'react';
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import StatusBadge from './components/StatusBadge';
 
 export const dynamic = 'force-dynamic';
@@ -11,19 +14,43 @@ function formatTimestamp(value) {
     return date.toLocaleString();
 }
 
-export default async function PlatformDashboardPage() {
-    const supabase = createSupabaseServerClient();
+export default function PlatformDashboardPage() {
+    const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+    const [sites, setSites] = useState([]);
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(true);
 
-    const { data: sites, error } = await supabase
-        .from('sites')
-        .select('id, domain, repo, framework, created_at, deployments(status, created_at)')
-        .order('created_at', { ascending: false })
-        .order('created_at', { foreignTable: 'deployments', ascending: false })
-        .limit(1, { foreignTable: 'deployments' });
+    useEffect(() => {
+        let cancelled = false;
 
-    if (error) {
-        throw new Error(error.message);
-    }
+        const load = async () => {
+            setError('');
+            setLoading(true);
+
+            const { data, error } = await supabase
+                .from('sites')
+                .select('id, domain, repo, framework, created_at, deployments(status, created_at)')
+                .order('created_at', { ascending: false })
+                .order('created_at', { foreignTable: 'deployments', ascending: false })
+                .limit(1, { foreignTable: 'deployments' });
+
+            if (cancelled) return;
+
+            if (error) {
+                setError(error.message);
+                setSites([]);
+            } else {
+                setSites(data || []);
+            }
+
+            setLoading(false);
+        };
+
+        load();
+        return () => {
+            cancelled = true;
+        };
+    }, [supabase]);
 
     return (
         <main className="platform-main">
@@ -37,7 +64,11 @@ export default async function PlatformDashboardPage() {
                 </Link>
             </div>
 
-            {sites?.length ? (
+            {error ? (
+                <p className="platform-message error">{error}</p>
+            ) : loading ? (
+                <p className="platform-subtitle">Loading…</p>
+            ) : sites?.length ? (
                 <div className="platform-table-wrap">
                     <table className="platform-table">
                         <thead>
@@ -83,4 +114,3 @@ export default async function PlatformDashboardPage() {
         </main>
     );
 }
-

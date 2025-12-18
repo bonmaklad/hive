@@ -17,28 +17,6 @@ export default function LoginForm() {
 
     const next = searchParams.get('next') || '/platform';
 
-    const sendMagicLink = async event => {
-        event.preventDefault();
-        setBusy(true);
-        setError('');
-        setInfo('');
-
-        try {
-            const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-            const { error: signInError } = await supabase.auth.signInWithOtp({
-                email,
-                options: { emailRedirectTo: redirectTo }
-            });
-            if (signInError) throw signInError;
-
-            setInfo('Magic link sent. Check your email to finish signing in.');
-        } catch (err) {
-            setError(err?.message || 'Sign in failed.');
-        } finally {
-            setBusy(false);
-        }
-    };
-
     const signInWithPassword = async event => {
         event.preventDefault();
         setBusy(true);
@@ -48,7 +26,7 @@ export default function LoginForm() {
         try {
             const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
             if (signInError) throw signInError;
-            router.push(next);
+            router.replace(next);
             router.refresh();
         } catch (err) {
             setError(err?.message || 'Sign in failed.');
@@ -57,8 +35,32 @@ export default function LoginForm() {
         }
     };
 
+    const sendPasswordReset = async () => {
+        setBusy(true);
+        setError('');
+        setInfo('');
+
+        try {
+            if (!email) {
+                throw new Error('Enter your email first.');
+            }
+
+            const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+                '/platform/settings'
+            )}`;
+            const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+            if (resetError) throw resetError;
+
+            setInfo('Password reset email sent. Open the link to set a new password.');
+        } catch (err) {
+            setError(err?.message || 'Could not send reset email.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
     return (
-        <form className="contact-form" onSubmit={sendMagicLink}>
+        <form className="contact-form" onSubmit={signInWithPassword}>
             <label>
                 Email
                 <input
@@ -72,11 +74,12 @@ export default function LoginForm() {
                 />
             </label>
             <label>
-                Password (optional)
+                Password
                 <input
                     type="password"
                     name="password"
                     autoComplete="current-password"
+                    required
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     disabled={busy}
@@ -88,13 +91,12 @@ export default function LoginForm() {
 
             <div className="platform-actions">
                 <button className="btn primary" type="submit" disabled={busy}>
-                    {busy ? 'Working…' : 'Send magic link'}
+                    {busy ? 'Working…' : 'Sign in'}
                 </button>
-                <button className="btn secondary" type="button" onClick={signInWithPassword} disabled={busy || !password}>
-                    {busy ? 'Working…' : 'Sign in with password'}
+                <button className="btn secondary" type="button" onClick={sendPasswordReset} disabled={busy || !email}>
+                    {busy ? 'Working…' : 'Forgot password'}
                 </button>
             </div>
         </form>
     );
 }
-

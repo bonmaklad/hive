@@ -11,12 +11,6 @@ function getSafeNext(next) {
     return next;
 }
 
-function readHashParams() {
-    if (typeof window === 'undefined') return new URLSearchParams();
-    const hash = window.location.hash || '';
-    return new URLSearchParams(hash.replace(/^#/, ''));
-}
-
 export default function AuthCallbackPage() {
     const router = useRouter();
     const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -43,34 +37,39 @@ export default function AuthCallbackPage() {
                     throw new Error(errorDescription);
                 }
 
-                if (code) {
-                    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-                    if (exchangeError) {
-                        const message = exchangeError?.message || '';
-                        if (/code verifier/i.test(message)) {
-                            throw new Error(
-                                'This sign-in link must be opened in the same browser where you requested it. Please go back and request a new magic link in this browser.'
-                            );
-                        }
-                        throw exchangeError;
+                const waitForSession = async () => {
+                    for (let attempt = 0; attempt < 6; attempt += 1) {
+                        const { data, error } = await supabase.auth.getSession();
+                        if (error) throw error;
+                        if (data?.session) return data.session;
+                        await new Promise(resolve => setTimeout(resolve, 200));
                     }
-                } else if (tokenHash && type) {
-                    const { error: verifyError } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-                    if (verifyError) throw verifyError;
-                } else {
-                    const hashParams = readHashParams();
-                    const accessToken = hashParams.get('access_token');
-                    const refreshToken = hashParams.get('refresh_token');
+                    return null;
+                };
 
-                    if (accessToken && refreshToken) {
-                        const { error: sessionError } = await supabase.auth.setSession({
-                            access_token: accessToken,
-                            refresh_token: refreshToken
-                        });
-                        if (sessionError) throw sessionError;
-                    } else {
-                        throw new Error('Missing auth callback params. Try signing in again.');
+                const existingSession = await waitForSession();
+
+                if (!existingSession) {
+                    if (code) {
+                        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+                        if (exchangeError) {
+                            const message = exchangeError?.message || 'Could not finish sign-in.';
+                            if (message.toLowerCase().includes('code verifier')) {
+                                throw new Error(
+                                    'This sign-in link was opened in a different browser/device. Please open the link on the same device you requested it from, or request a new invite link.'
+                                );
+                            }
+                            throw exchangeError;
+                        }
+                    } else if (tokenHash && type) {
+                        const { error: verifyError } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+                        if (verifyError) throw verifyError;
                     }
+                }
+
+                const session = existingSession || (await waitForSession());
+                if (!session) {
+                    throw new Error('No session found. Please try the link again, or request a new invite.');
                 }
 
                 if (cancelled) return;

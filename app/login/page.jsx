@@ -1,9 +1,6 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import LoginForm from './LoginForm';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
-
-export const dynamic = 'force-dynamic';
 
 export const metadata = {
     robots: {
@@ -12,20 +9,18 @@ export const metadata = {
     }
 };
 
-export default async function LoginPage({ searchParams }) {
-    const supabase = createSupabaseServerClient();
-    const { data } = await supabase.auth.getUser();
-
-    if (data?.user) {
-        redirect(searchParams?.next || '/platform');
-    }
-
+export default function LoginPage() {
     return (
         <main className="platform-shell">
             <div className="platform-card">
                 <h1>Platform sign in</h1>
                 <p className="platform-subtitle">Sign in to manage your sites and view deployments.</p>
-                <LoginForm />
+                <Suspense fallback={<p className="platform-subtitle">Loading…</p>}>
+                    <LoginForm />
+                </Suspense>
+                <p className="platform-message info" style={{ marginTop: '1rem' }}>
+                    First time here? Use the invite email you received to sign in and set your password.
+                </p>
                 <p className="platform-footer">
                     <Link href="/" className="btn ghost">
                         Back to site

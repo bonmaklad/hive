@@ -1,5 +1,8 @@
+'use client';
+
 import Link from 'next/link';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { useEffect, useMemo, useState } from 'react';
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import UpdatePasswordForm from './update-password-form';
 
 export const dynamic = 'force-dynamic';
@@ -11,15 +14,33 @@ function formatTimestamp(value) {
     return date.toLocaleString();
 }
 
-export default async function PlatformSettingsPage() {
-    const supabase = createSupabaseServerClient();
-    const { data, error } = await supabase.auth.getUser();
+export default function PlatformSettingsPage() {
+    const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+    const [user, setUser] = useState(null);
+    const [error, setError] = useState('');
 
-    if (error) {
-        throw new Error(error.message);
-    }
+    useEffect(() => {
+        let cancelled = false;
 
-    const user = data?.user;
+        const load = async () => {
+            const { data, error } = await supabase.auth.getUser();
+            if (cancelled) return;
+
+            if (error) {
+                setError(error.message);
+                setUser(null);
+                return;
+            }
+
+            setError('');
+            setUser(data?.user ?? null);
+        };
+
+        load();
+        return () => {
+            cancelled = true;
+        };
+    }, [supabase]);
 
     return (
         <main className="platform-main">
@@ -36,6 +57,7 @@ export default async function PlatformSettingsPage() {
             <div className="platform-card">
                 <h2>Account</h2>
                 <p className="platform-subtitle">Your Supabase user profile.</p>
+                {error && <p className="platform-message error">{error}</p>}
                 <div className="platform-table-wrap" style={{ marginTop: '1rem' }}>
                     <table className="platform-table">
                         <tbody>
@@ -71,4 +93,3 @@ export default async function PlatformSettingsPage() {
         </main>
     );
 }
-
