@@ -20,6 +20,12 @@ function clearHash() {
     }
 }
 
+function getSafeNext(value) {
+    if (typeof value !== 'string') return null;
+    if (!value.startsWith('/')) return null;
+    return value;
+}
+
 export default function AuthSessionSync() {
     const router = useRouter();
     const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -36,6 +42,7 @@ export default function AuthSessionSync() {
             const error = hashParams.get('error');
             const errorCode = hashParams.get('error_code');
             const errorDescription = hashParams.get('error_description');
+            const authType = hashParams.get('type');
 
             if (error || errorCode) {
                 clearHash();
@@ -61,14 +68,23 @@ export default function AuthSessionSync() {
                 if (cancelled) return;
                 clearHash();
 
-                const next = urlSearchParams.get('next');
-                if (typeof next === 'string' && next.startsWith('/')) {
-                    router.replace(next);
-                } else if (pathname === '/') {
-                    router.replace('/platform');
-                } else {
-                    router.refresh();
+                const explicitNext = getSafeNext(urlSearchParams.get('next'));
+                if (explicitNext) {
+                    router.replace(explicitNext);
+                    return;
                 }
+
+                if (authType === 'magiclink' || authType === 'invite' || authType === 'recovery') {
+                    router.replace('/platform/settings');
+                    return;
+                }
+
+                if (pathname === '/') {
+                    router.replace('/platform/settings');
+                    return;
+                }
+
+                router.refresh();
             } catch (err) {
                 if (cancelled) return;
                 clearHash();

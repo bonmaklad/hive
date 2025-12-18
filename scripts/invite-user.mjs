@@ -26,7 +26,7 @@ async function main() {
     const siteUrl = trimTrailingSlash(
         process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     );
-    const nextPath = process.env.INVITE_NEXT || '/platform';
+    const nextPath = process.env.INVITE_NEXT || '/platform/settings';
 
     requireEnv('SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL)', supabaseUrl);
     requireEnv('SUPABASE_SERVICE_ROLE_KEY', serviceRoleKey);

@@ -27,10 +27,11 @@ export default function AuthCallbackPage() {
 
             try {
                 const url = new URL(window.location.href);
-                const next = getSafeNext(url.searchParams.get('next') || '/platform');
+                const type = url.searchParams.get('type');
+                const defaultNext = type === 'recovery' || type === 'invite' || type === 'magiclink' ? '/platform/settings' : '/platform';
+                const next = getSafeNext(url.searchParams.get('next') || defaultNext);
                 const code = url.searchParams.get('code');
                 const tokenHash = url.searchParams.get('token_hash');
-                const type = url.searchParams.get('type');
                 const errorDescription = url.searchParams.get('error_description') || url.searchParams.get('error');
 
                 if (errorDescription) {
