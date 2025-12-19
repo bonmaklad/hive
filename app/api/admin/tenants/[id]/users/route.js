@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../../_lib/adminGuard';
+import { createSupabaseAnonClient } from '../../../../_lib/supabaseAuth';
 
 export const runtime = 'nodejs';
 
@@ -8,6 +9,17 @@ function getSiteUrl() {
         /\/$/,
         ''
     );
+}
+
+async function sendMagicLink({ email }) {
+    const redirectTo = `${getSiteUrl()}/auth/callback?next=${encodeURIComponent('/platform/settings')}`;
+    const supabase = createSupabaseAnonClient();
+    const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirectTo, shouldCreateUser: false }
+    });
+    if (error) throw new Error(error.message);
+    return redirectTo;
 }
 
 export async function POST(request, { params }) {
@@ -20,6 +32,7 @@ export async function POST(request, { params }) {
     const payload = await request.json().catch(() => ({}));
     const email = typeof payload?.email === 'string' ? payload.email.trim().toLowerCase() : '';
     const role = typeof payload?.role === 'string' ? payload.role : 'member';
+    const shouldSendMagicLink = payload?.send_magic_link === false ? false : true;
 
     if (!email) return NextResponse.json({ error: 'Missing email' }, { status: 400 });
     if (!['owner', 'member', 'admin'].includes(role)) return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
@@ -33,17 +46,16 @@ export async function POST(request, { params }) {
     if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
 
     let userId = existingProfile?.id || null;
-    let invited = false;
+    let created = false;
 
     if (!userId) {
-        const redirectTo = `${getSiteUrl()}/auth/callback?next=${encodeURIComponent('/platform/settings')}`;
-        const { data: invitedUser, error: inviteError } = await guard.admin.auth.admin.inviteUserByEmail(email, {
-            redirectTo,
-            data: { must_set_password: true }
+        const { data: createdUser, error: createError } = await guard.admin.auth.admin.createUser({
+            email,
+            email_confirm: true
         });
-        if (inviteError) return NextResponse.json({ error: inviteError.message }, { status: 500 });
-        userId = invitedUser?.user?.id || null;
-        invited = true;
+        if (createError) return NextResponse.json({ error: createError.message }, { status: 500 });
+        userId = createdUser?.user?.id || null;
+        created = true;
     }
 
     if (!userId) return NextResponse.json({ error: 'Could not resolve user id' }, { status: 500 });
@@ -59,5 +71,25 @@ export async function POST(request, { params }) {
 
     if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 });
 
-    return NextResponse.json({ ok: true, user_id: userId, invited });
+    let magicLinkSent = false;
+    let redirectTo = null;
+
+    if (shouldSendMagicLink) {
+        try {
+            redirectTo = await sendMagicLink({ email });
+            magicLinkSent = true;
+        } catch (err) {
+            return NextResponse.json(
+                {
+                    error: err?.message || 'Failed to send magic link.',
+                    ok: false,
+                    user_id: userId,
+                    created
+                },
+                { status: 500 }
+            );
+        }
+    }
+
+    return NextResponse.json({ ok: true, user_id: userId, created, magic_link_sent: magicLinkSent, redirect_to: redirectTo });
 }

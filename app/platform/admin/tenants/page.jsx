@@ -37,6 +37,7 @@ const OFFICE_MONTHLY_CENTS = {
 
 const FRIDGE_WEEKLY_CENTS = 2500;
 const WEEKS_PER_MONTH = 4.333;
+const FRIDGE_MONTHLY_CENTS = Math.round(FRIDGE_WEEKLY_CENTS * WEEKS_PER_MONTH);
 
 function computeMonthlyCents({ plan, officeId, donationCents, fridgeEnabled, monthlyOverrideCents }) {
     const hasOverride = monthlyOverrideCents !== null && monthlyOverrideCents !== undefined && monthlyOverrideCents !== '';
@@ -59,6 +60,36 @@ function parseEmail(value) {
     if (email.length > 254) return '';
     if (!email.includes('@')) return '';
     return email;
+}
+
+function toCentsOrZero(value) {
+    const cleaned = String(value || '').replace(/[^0-9.]/g, '');
+    const parsed = Number.parseFloat(cleaned);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(0, Math.round(parsed * 100));
+}
+
+async function readJsonResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+        return response.json();
+    }
+
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch {
+        return { _raw: text };
+    }
+}
+
+function errorFromNonJson(response, payload) {
+    const snippet = typeof payload?._raw === 'string' ? payload._raw.slice(0, 200) : '';
+    const hint =
+        snippet.includes('Cannot find module') || snippet.includes('webpack-runtime')
+            ? ' (Next dev server cache looks corrupted — stop dev server, delete `.next`, restart `npm run dev`.)'
+            : '';
+    return new Error(`Request failed (${response.status}). Server returned non-JSON.${hint}`);
 }
 
 function Modal({ open, title, subtitle, onClose, children, footer }) {
@@ -195,7 +226,7 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
                 headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            const json = await res.json();
+            const json = await readJsonResponse(res);
             if (!res.ok) throw new Error(json?.error || 'Failed to create tenant.');
 
             onCreated?.(json?.tenant?.id || null);
@@ -426,7 +457,7 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
                             disabled={busy}
                             style={{ marginRight: '0.5rem' }}
                         />
-                        Send magic links to existing users (in addition to invite emails for new users)
+                        Send magic links to all users
                     </label>
                 </div>
             ) : null}
@@ -489,7 +520,7 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                     headers,
                     body: JSON.stringify({ name })
                 });
-                const json = await res.json();
+                const json = await readJsonResponse(res);
                 if (!res.ok) throw new Error(json?.error || 'Failed to update tenant name.');
             }
 
@@ -506,7 +537,7 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                     monthly_amount_cents: monthlyOverrideCents
                 })
             });
-            const jsonMembership = await resMembership.json();
+            const jsonMembership = await readJsonResponse(resMembership);
             if (!resMembership.ok) throw new Error(jsonMembership?.error || 'Failed to update membership.');
 
             const tokens = Math.max(0, Math.floor(Number(tokensTotal || 0)));
@@ -519,7 +550,7 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                     tokens_total: tokens
                 })
             });
-            const jsonCredits = await resCredits.json();
+            const jsonCredits = await readJsonResponse(resCredits);
             if (!resCredits.ok) throw new Error(jsonCredits?.error || 'Failed to update token pool.');
 
             onSaved?.();
@@ -633,6 +664,267 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
     );
 }
 
+function UserDetailsModal({ open, tenantId, userRow, authHeader, onClose, onSaved, setGlobalError, sendMagicLink }) {
+    const userId = userRow?.user_id || null;
+    const email = userRow?.profile?.email || '';
+    const name = userRow?.profile?.name || '';
+
+    const [loading, setLoading] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const [info, setInfo] = useState('');
+    const [membership, setMembership] = useState(null);
+
+    const [status, setStatus] = useState('live');
+    const [planId, setPlanId] = useState('member');
+    const [officeId, setOfficeId] = useState('office-a');
+    const [donationText, setDonationText] = useState('');
+    const [fridgeEnabled, setFridgeEnabled] = useState(false);
+    const [customPriceText, setCustomPriceText] = useState('');
+
+    const loadMembership = async () => {
+        if (!userId) return;
+        setLoading(true);
+        setError('');
+        setInfo('');
+        try {
+            const res = await fetch(`/api/admin/memberships/${userId}`, { headers: await authHeader() });
+            const json = await readJsonResponse(res);
+            if (!res.ok) {
+                if (json?._raw) throw errorFromNonJson(res, json);
+                throw new Error(json?.error || 'Failed to load membership.');
+            }
+
+            const row = json?.membership || null;
+            setMembership(row);
+
+            if (row) {
+                setStatus(row.status || 'live');
+                setPlanId(row.plan || 'member');
+                setOfficeId(row.office_id || 'office-a');
+                setDonationText(row.donation_cents ? String(row.donation_cents / 100) : '');
+                setFridgeEnabled(Boolean(row.fridge_enabled));
+                if (row.plan === 'custom') {
+                    const donationCents = row.donation_cents || 0;
+                    const fridgeCents = row.fridge_enabled ? FRIDGE_MONTHLY_CENTS : 0;
+                    const baseCents = Math.max(0, (row.monthly_amount_cents || 0) - donationCents - fridgeCents);
+                    setCustomPriceText(baseCents ? String(baseCents / 100) : '');
+                } else {
+                    setCustomPriceText('');
+                }
+            } else {
+                setStatus('live');
+                setPlanId('member');
+                setOfficeId('office-a');
+                setDonationText('');
+                setFridgeEnabled(false);
+                setCustomPriceText('');
+            }
+        } catch (err) {
+            setError(err?.message || 'Failed to load membership.');
+            setMembership(null);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!open) return;
+        loadMembership();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, userId]);
+
+    const donationCents = toCentsOrZero(donationText);
+    const fridgeCents = fridgeEnabled ? FRIDGE_MONTHLY_CENTS : 0;
+    const customBaseCents = toCentsOrZero(customPriceText);
+    const baseCents =
+        planId === 'custom'
+            ? customBaseCents
+            : planId === 'office'
+                ? OFFICE_MONTHLY_CENTS[officeId] || PLAN_MONTHLY_CENTS.office
+                : PLAN_MONTHLY_CENTS[planId] ?? 0;
+
+    const estimatedMonthlyCents = Math.max(0, baseCents + donationCents + fridgeCents);
+
+    const saveMembership = async () => {
+        if (!tenantId || !userId) return;
+
+        setBusy(true);
+        setError('');
+        setInfo('');
+        setGlobalError('');
+        try {
+            if (!['member', 'desk', 'pod', 'office', 'premium', 'custom'].includes(planId)) {
+                throw new Error('Invalid plan.');
+            }
+            if (!['live', 'expired', 'cancelled'].includes(status)) {
+                throw new Error('Invalid status.');
+            }
+            if (planId === 'office' && !officeId) throw new Error('Office is required.');
+            if (planId === 'custom' && customBaseCents <= 0) throw new Error('Custom price is required.');
+
+            const res = await fetch(`/api/admin/tenants/${tenantId}/membership`, {
+                method: 'POST',
+                headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    owner_id: userId,
+                    plan: planId,
+                    office_id: planId === 'office' ? officeId : null,
+                    status,
+                    donation_cents: donationCents,
+                    fridge_enabled: fridgeEnabled,
+                    monthly_amount_cents: planId === 'custom' ? estimatedMonthlyCents : null
+                })
+            });
+
+            const json = await readJsonResponse(res);
+            if (!res.ok) {
+                if (json?._raw) throw errorFromNonJson(res, json);
+                throw new Error(json?.error || 'Failed to update membership.');
+            }
+
+            setInfo('Saved.');
+            await onSaved?.();
+            await loadMembership();
+        } catch (err) {
+            setError(err?.message || 'Failed to update membership.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const footer = (
+        <>
+            <button className="btn secondary" type="button" onClick={onClose} disabled={busy}>
+                Close
+            </button>
+            <button className="btn primary" type="button" onClick={saveMembership} disabled={busy || loading || !userId}>
+                {busy ? 'Saving…' : 'Save membership'}
+            </button>
+        </>
+    );
+
+    return (
+        <Modal
+            open={open}
+            title={name ? name : email ? email : 'User'}
+            subtitle={email ? `Tenant role: ${userRow?.role || '—'} • ${email}` : `Tenant role: ${userRow?.role || '—'}`}
+            onClose={() => (busy ? null : onClose())}
+            footer={footer}
+        >
+            {loading ? <p className="platform-subtitle">Loading…</p> : null}
+            {error && <p className="platform-message error">{error}</p>}
+            {info && <p className="platform-message info">{info}</p>}
+
+            <div className="platform-card" style={{ marginTop: '0.75rem' }}>
+                <h3 style={{ marginTop: 0 }}>Membership</h3>
+
+                <label className="platform-subtitle">Plan</label>
+                <select value={planId} onChange={e => setPlanId(e.target.value)} disabled={busy || loading}>
+                    <option value="member">member</option>
+                    <option value="desk">desk</option>
+                    <option value="pod">pod</option>
+                    <option value="office">office</option>
+                    <option value="premium">premium</option>
+                    <option value="custom">custom</option>
+                </select>
+
+                {planId === 'office' ? (
+                    <>
+                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                            Office
+                        </label>
+                        <select value={officeId} onChange={e => setOfficeId(e.target.value)} disabled={busy || loading}>
+                            <option value="office-a">office-a</option>
+                            <option value="office-b">office-b</option>
+                            <option value="office-c">office-c</option>
+                        </select>
+                    </>
+                ) : null}
+
+                {planId === 'custom' ? (
+                    <>
+                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                            Custom price (NZD / month)
+                        </label>
+                        <input
+                            value={customPriceText}
+                            onChange={e => setCustomPriceText(e.target.value)}
+                            disabled={busy || loading}
+                            inputMode="decimal"
+                            placeholder="e.g. 499"
+                        />
+                    </>
+                ) : null}
+
+                <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                    Status
+                </label>
+                <select value={status} onChange={e => setStatus(e.target.value)} disabled={busy || loading}>
+                    <option value="live">live</option>
+                    <option value="expired">expired</option>
+                    <option value="cancelled">cancelled</option>
+                </select>
+
+                <div style={{ marginTop: '1rem' }}>
+                    <h3 style={{ margin: 0 }}>Extras</h3>
+                    <p className="platform-subtitle">Add-ons that adjust the monthly total.</p>
+                </div>
+
+                <label className="platform-subtitle">Donation (NZD / month)</label>
+                <input
+                    value={donationText}
+                    onChange={e => setDonationText(e.target.value)}
+                    disabled={busy || loading}
+                    inputMode="decimal"
+                    placeholder="e.g. 50"
+                />
+
+                <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                    <input
+                        type="checkbox"
+                        checked={fridgeEnabled}
+                        onChange={e => setFridgeEnabled(e.target.checked)}
+                        disabled={busy || loading}
+                        style={{ marginRight: '0.5rem' }}
+                    />
+                    Fridge access ({formatNZD(FRIDGE_WEEKLY_CENTS)} / week)
+                </label>
+
+                <p className="platform-message info" style={{ marginTop: '1rem' }}>
+                    Estimated total: <span className="platform-mono">{formatNZD(estimatedMonthlyCents)} / month</span>
+                </p>
+
+                {membership ? (
+                    <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
+                        Current stored monthly: <span className="platform-mono">{formatNZD(membership.monthly_amount_cents)}</span>
+                    </p>
+                ) : (
+                    <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>No membership row yet.</p>
+                )}
+
+                <div className="platform-card-actions">
+                    <button
+                        className="btn ghost"
+                        type="button"
+                        onClick={async () => {
+                            try {
+                                await sendMagicLink({ email, userId });
+                                setInfo('Magic link sent.');
+                            } catch (err) {
+                                setError(err?.message || 'Failed to send magic link.');
+                            }
+                        }}
+                        disabled={!email || busy || loading}
+                    >
+                        Send magic link
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
 function TenantInlineActions({ tenant, monthStart, authHeader, onReload, setGlobalError, sendMagicLink }) {
     const [busy, setBusy] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
@@ -662,13 +954,12 @@ function TenantInlineActions({ tenant, monthStart, authHeader, onReload, setGlob
             const res = await fetch(`/api/admin/tenants/${tenant.id}/users`, {
                 method: 'POST',
                 headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, role: inviteRole })
+                body: JSON.stringify({ email, role: inviteRole, send_magic_link: true })
             });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json?.error || 'Failed to add user.');
-
-            if (!json?.invited) {
-                await sendMagicLink({ email });
+            const json = await readJsonResponse(res);
+            if (!res.ok) {
+                if (json?._raw) throw errorFromNonJson(res, json);
+                throw new Error(json?.error || 'Failed to add user.');
             }
 
             setInviteEmail('');
@@ -691,8 +982,11 @@ function TenantInlineActions({ tenant, monthStart, authHeader, onReload, setGlob
                 headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ owner_id: tokenHolderId, period_start: monthStart, tokens_total: tokens })
             });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json?.error || 'Failed to save token pool.');
+            const json = await readJsonResponse(res);
+            if (!res.ok) {
+                if (json?._raw) throw errorFromNonJson(res, json);
+                throw new Error(json?.error || 'Failed to save token pool.');
+            }
             await onReload?.();
         } catch (err) {
             setGlobalError(err?.message || 'Failed to save token pool.');
@@ -716,7 +1010,7 @@ function TenantInlineActions({ tenant, monthStart, authHeader, onReload, setGlob
                 </select>
                 <div className="platform-card-actions">
                     <button className="btn primary" type="button" onClick={addUser} disabled={busy || !inviteEmail.trim()}>
-                        {busy ? 'Working…' : 'Add + invite'}
+                        {busy ? 'Working…' : 'Add + magic link'}
                     </button>
                 </div>
             </div>
@@ -760,6 +1054,7 @@ export default function AdminTenantsPage() {
     const [createOpen, setCreateOpen] = useState(false);
     const [editTenantId, setEditTenantId] = useState(null);
     const [openTenantId, setOpenTenantId] = useState(null);
+    const [selectedUser, setSelectedUser] = useState(null);
 
     const authHeader = async () => {
         const { data } = await supabase.auth.getSession();
@@ -773,7 +1068,7 @@ export default function AdminTenantsPage() {
         setError('');
         try {
             const res = await fetch('/api/admin/tenants', { headers: await authHeader() });
-            const json = await res.json();
+            const json = await readJsonResponse(res);
             if (!res.ok) throw new Error(json?.error || 'Failed to load tenants.');
             setTenants(Array.isArray(json?.tenants) ? json.tenants : []);
             if (typeof json?.month_start === 'string') setMonthStart(json.month_start);
@@ -821,8 +1116,11 @@ export default function AdminTenantsPage() {
             headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, user_id: userId, next })
         });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json?.error || 'Failed to send magic link.');
+        const json = await readJsonResponse(res);
+        if (!res.ok) {
+            if (json?._raw) throw errorFromNonJson(res, json);
+            throw new Error(json?.error || 'Failed to send magic link.');
+        }
         return true;
     };
 
@@ -924,7 +1222,7 @@ export default function AdminTenantsPage() {
                                                             <th>Name</th>
                                                             <th>Email</th>
                                                             <th>Role</th>
-                                                            <th>Tokens</th>
+                                                            <th>Membership</th>
                                                             <th>Magic link</th>
                                                         </tr>
                                                     </thead>
@@ -932,13 +1230,25 @@ export default function AdminTenantsPage() {
                                                         {users.length ? (
                                                             users.map(u => (
                                                                 <tr key={`${u.tenant_id}:${u.user_id}`}>
-                                                                    <td>{u.profile?.name || '—'}</td>
+                                                                    <td>
+                                                                        <button
+                                                                            className="btn ghost"
+                                                                            type="button"
+                                                                            onClick={() => setSelectedUser({ tenantId: t.id, userRow: u })}
+                                                                        >
+                                                                            {u.profile?.name || '—'}
+                                                                        </button>
+                                                                    </td>
                                                                     <td className="platform-mono">{u.profile?.email || '—'}</td>
                                                                     <td className="platform-mono">{u.role}</td>
-                                                                    <td className="platform-mono">
-                                                                        {u.room_credits
-                                                                            ? `${Math.max(0, (u.room_credits.tokens_total || 0) - (u.room_credits.tokens_used || 0))} left`
-                                                                            : '—'}
+                                                                    <td>
+                                                                        <button
+                                                                            className="btn ghost"
+                                                                            type="button"
+                                                                            onClick={() => setSelectedUser({ tenantId: t.id, userRow: u })}
+                                                                        >
+                                                                            View / edit
+                                                                        </button>
                                                                     </td>
                                                                     <td>
                                                                         <button
@@ -1050,6 +1360,17 @@ export default function AdminTenantsPage() {
                 onClose={() => setEditTenantId(null)}
                 onSaved={load}
                 setGlobalError={setError}
+            />
+
+            <UserDetailsModal
+                open={Boolean(selectedUser?.userRow)}
+                tenantId={selectedUser?.tenantId || null}
+                userRow={selectedUser?.userRow || null}
+                authHeader={authHeader}
+                onClose={() => setSelectedUser(null)}
+                onSaved={load}
+                setGlobalError={setError}
+                sendMagicLink={sendMagicLink}
             />
         </main>
     );

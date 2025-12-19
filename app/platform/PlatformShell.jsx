@@ -24,6 +24,7 @@ export default function PlatformShell({ children }) {
     const [profile, setProfile] = useState(null);
     const [tenantRole, setTenantRole] = useState(null);
     const [tenantRoleError, setTenantRoleError] = useState('');
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -138,6 +139,21 @@ export default function PlatformShell({ children }) {
     }, [supabase]);
 
     useEffect(() => {
+        setMobileNavOpen(false);
+    }, [pathname]);
+
+    useEffect(() => {
+        if (!mobileNavOpen) return;
+
+        const onKeyDown = event => {
+            if (event.key === 'Escape') setMobileNavOpen(false);
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [mobileNavOpen]);
+
+    useEffect(() => {
         if (!ready) return;
 
         if (!user) {
@@ -193,6 +209,15 @@ export default function PlatformShell({ children }) {
                         />
                         <span>Platform</span>
                     </Link>
+                    <button
+                        className="btn ghost platform-nav-toggle"
+                        type="button"
+                        onClick={() => setMobileNavOpen(open => !open)}
+                        aria-expanded={mobileNavOpen}
+                        aria-controls="platform-mobile-nav"
+                    >
+                        Menu
+                    </button>
                     <nav className="platform-nav">
                         <Link href="/platform" className="btn ghost">
                             Dashboard
@@ -210,6 +235,49 @@ export default function PlatformShell({ children }) {
                         </Link>
                     </nav>
                 </header>
+
+                {mobileNavOpen ? (
+                    <div
+                        id="platform-mobile-nav"
+                        className="platform-mobile-nav-overlay"
+                        role="presentation"
+                        onMouseDown={() => setMobileNavOpen(false)}
+                    >
+                        <div className="platform-mobile-nav" role="dialog" aria-modal="true" onMouseDown={event => event.stopPropagation()}>
+                            <div className="platform-mobile-nav-header">
+                                <div>
+                                    <div className="platform-mobile-nav-title">Navigation</div>
+                                    <div className="platform-subtitle" style={{ marginTop: '0.25rem' }}>
+                                        {profile?.email || user?.email || ''}
+                                    </div>
+                                </div>
+                                <button className="btn ghost" type="button" onClick={() => setMobileNavOpen(false)}>
+                                    Close
+                                </button>
+                            </div>
+
+                            <div className="platform-mobile-nav-links">
+                                <Link href="/platform" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
+                                    Dashboard
+                                </Link>
+                                {profile?.is_admin ? (
+                                    <Link href="/platform/admin" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
+                                        Admin
+                                    </Link>
+                                ) : null}
+                                <Link href="/platform/tickets" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
+                                    Raise a ticket
+                                </Link>
+                                <Link href="/platform/settings" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
+                                    Settings
+                                </Link>
+                                <Link href="/auth/signout" className="btn secondary" onClick={() => setMobileNavOpen(false)}>
+                                    Sign out
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
                 <div className="platform-content">{children}</div>
 
                 <footer className="platform-footer-bar">

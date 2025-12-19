@@ -78,25 +78,24 @@ async function ensureUser({ guard, email }) {
     if (profileError) throw new Error(profileError.message);
 
     let userId = existingProfile?.id || null;
-    let invited = false;
+    let created = false;
 
     if (!userId) {
-        const redirectTo = `${getSiteUrl()}/auth/callback?next=${encodeURIComponent('/platform/settings')}`;
-        const { data: invitedUser, error: inviteError } = await guard.admin.auth.admin.inviteUserByEmail(email, {
-            redirectTo,
-            data: { must_set_password: true }
+        const { data: createdUser, error: createError } = await guard.admin.auth.admin.createUser({
+            email,
+            email_confirm: true
         });
-        if (inviteError) throw new Error(inviteError.message);
-        userId = invitedUser?.user?.id || null;
-        invited = true;
+        if (createError) throw new Error(createError.message);
+        userId = createdUser?.user?.id || null;
+        created = true;
     }
 
     if (!userId) throw new Error('Could not resolve user id');
 
-    return { userId, invited };
+    return { userId, created };
 }
 
-async function sendMagicLinkIfExisting({ email }) {
+async function sendMagicLink({ email }) {
     const redirectTo = `${getSiteUrl()}/auth/callback?next=${encodeURIComponent('/platform/settings')}`;
     const supabase = createSupabaseAnonClient();
     const { error } = await supabase.auth.signInWithOtp({
@@ -142,8 +141,6 @@ export async function POST(request) {
     if (!Number.isFinite(tokensTotal) || tokensTotal < 0) return NextResponse.json({ error: 'tokens_total must be >= 0' }, { status: 400 });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(periodStart)) return NextResponse.json({ error: 'period_start must be YYYY-MM-DD' }, { status: 400 });
 
-    const redirectTo = `${getSiteUrl()}/auth/callback?next=${encodeURIComponent('/platform/settings')}`;
-
     const { data: tenant, error: tenantError } = await guard.admin
         .from('tenants')
         .insert({ name: tenantName })
@@ -156,7 +153,7 @@ export async function POST(request) {
         const createdUsers = [];
 
         const primary = await ensureUser({ guard, email: primaryEmail });
-        createdUsers.push({ email: primaryEmail, user_id: primary.userId, role: primaryRole, invited: primary.invited });
+        createdUsers.push({ email: primaryEmail, user_id: primary.userId, role: primaryRole, created: primary.created });
 
         const { error: upsertPrimaryError } = await guard.admin.from('tenant_users').upsert(
             { tenant_id: tenant.id, user_id: primary.userId, role: primaryRole },
@@ -211,7 +208,7 @@ export async function POST(request) {
             if (!['member', 'admin'].includes(role)) continue;
 
             const user = await ensureUser({ guard, email });
-            createdUsers.push({ email, user_id: user.userId, role, invited: user.invited });
+            createdUsers.push({ email, user_id: user.userId, role, created: user.created });
 
             const { error: upsertUserError } = await guard.admin.from('tenant_users').upsert(
                 { tenant_id: tenant.id, user_id: user.userId, role },
@@ -221,17 +218,16 @@ export async function POST(request) {
         }
 
         if (sendMagicLinks) {
-            const existingEmails = createdUsers.filter(u => !u.invited).map(u => u.email);
-            for (const email of existingEmails) {
-                await sendMagicLinkIfExisting({ email });
+            for (const u of createdUsers) {
+                await sendMagicLink({ email: u.email });
             }
         }
 
         return NextResponse.json({
             ok: true,
             tenant,
-            redirect_to: redirectTo,
-            users: createdUsers
+            users: createdUsers,
+            magic_links_sent: sendMagicLinks
         });
     } catch (err) {
         return NextResponse.json(

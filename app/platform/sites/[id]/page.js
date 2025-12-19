@@ -22,6 +22,7 @@ export default function SiteDetailPage({ params }) {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [savingEnv, setSavingEnv] = useState(false);
+    const [showGithubModal, setShowGithubModal] = useState(false);
 
     // Editable fields
     const [name, setName] = useState('');
@@ -29,6 +30,12 @@ export default function SiteDetailPage({ params }) {
     const [repo, setRepo] = useState('');
     const [framework, setFramework] = useState('next');
     const [envEntries, setEnvEntries] = useState([]); // [{id, key, value}]
+    const [installationId, setInstallationId] = useState('');
+    const [repos, setRepos] = useState([]);
+    const [repoQuery, setRepoQuery] = useState('');
+    const [repoError, setRepoError] = useState('');
+    const [loadingRepos, setLoadingRepos] = useState(false);
+    const [showRepoModal, setShowRepoModal] = useState(false);
 
     function toEntries(obj) {
         if (!obj || typeof obj !== 'object') return [];
@@ -54,7 +61,7 @@ export default function SiteDetailPage({ params }) {
 
             const { data: site, error: siteError } = await supabase
                 .from('sites')
-                .select('id, owner_id, name, domain, repo, framework, env, created_at')
+                .select('id, owner_id, name, domain, repo, framework, env, github_installation_id, created_at')
                 .eq('id', params.id)
                 .single();
 
@@ -89,12 +96,21 @@ export default function SiteDetailPage({ params }) {
             setRepo(site.repo || '');
             setFramework(site.framework || 'next');
             setEnvEntries(toEntries(site.env));
+            if (site.github_installation_id) setInstallationId(String(site.github_installation_id));
 
             setSite(site);
             setLoading(false);
         };
 
         load();
+        // Load GitHub installation id saved during app install
+        try {
+            const key = `github_installation_by_site:${params.id}`;
+            const val = window.localStorage.getItem(key);
+            if (val) setInstallationId(val);
+        } catch {
+            // noop
+        }
         return () => {
             cancelled = true;
         };
@@ -160,13 +176,57 @@ export default function SiteDetailPage({ params }) {
     }
 
     function connectGitHub() {
-        alert('Connecting GitHub coming soon. For now, paste owner/repo into the Repo field.');
+        const appSlug = process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || 'hive-deploy';
+        const returnTo = typeof window !== 'undefined' ? window.location.origin + `/platform/sites/${params.id}` : '';
+        const state = encodeURIComponent(JSON.stringify({ siteId: params.id, returnTo }));
+        const url = `https://github.com/apps/${appSlug}/installations/new?state=${state}`;
+        window.open(url, '_blank', 'noopener,noreferrer');
     }
 
     function chooseRepo() {
-        const value = prompt('Enter repo as owner/repo (e.g. vercel/next.js):', repo || '');
-        if (value != null) setRepo(value);
+        setRepoError('');
+        setShowRepoModal(true);
+        if (!repos.length && installationId) {
+            // lazy load
+            void loadRepos();
+        }
     }
+
+    async function loadRepos(page = 1) {
+        try {
+            setRepoError('');
+            setLoadingRepos(true);
+            if (!installationId) {
+                setRepoError('Missing installation. Click Connect GitHub first or enter the installation ID.');
+                setLoadingRepos(false);
+                return;
+            }
+            const res = await fetch(`/api/github/repos?installation_id=${encodeURIComponent(installationId)}&per_page=100&page=${page}`, {
+                headers: { Accept: 'application/json' }
+            });
+            const body = await res.json();
+            if (!res.ok) {
+                setRepoError(body?.error || 'Could not load repositories.');
+                setRepos([]);
+                setLoadingRepos(false);
+                return;
+            }
+            setRepos(Array.isArray(body.repositories) ? body.repositories : []);
+        } catch (e) {
+            setRepoError('Could not load repositories.');
+            setRepos([]);
+        } finally {
+            setLoadingRepos(false);
+        }
+    }
+
+    const FRAMEWORK_HELP = {
+        next: 'Next.js handles front end, API routes, and backend functions in one unified framework.',
+        gatsby: 'Gatsby builds fast static sites using React and a data layer, then serves optimised HTML/JS.',
+        static: 'Static serves pre-built HTML/CSS/JS. Great for simple sites and export builds from other tools.',
+        node: 'Node runs your server application and serves responses directly (bring your own framework).',
+        vue: 'Vue is a progressive front-end framework. Use Nuxt or a build tool to generate and serve your app.'
+    };
 
     return (
         <main className="platform-main">
@@ -221,14 +281,30 @@ export default function SiteDetailPage({ params }) {
                                 Custom domain
                                 <input type="text" value={domain} onChange={e => setDomain(e.target.value)} disabled={saving} />
                             </label>
-                            <label>
-                                Framework
-                                <select value={framework} onChange={e => setFramework(e.target.value)} disabled={saving}>
-                                    <option value="next">next</option>
-                                    <option value="static">static</option>
-                                    <option value="node">node</option>
-                                </select>
-                            </label>
+                            <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr', alignItems: 'end' }}>
+                                <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.2fr)' }}>
+                                    <div>
+                                        <label>
+                                            Framework
+                                            <select value={framework} onChange={e => setFramework(e.target.value)} disabled={saving}>
+                                                <option value="next">next</option>
+                                                <option value="gatsby">gatsby</option>
+                                                <option value="static">static</option>
+                                                <option value="node">node</option>
+                                                <option value="vue">vue</option>
+                                            </select>
+                                        </label>
+                                        <p className="platform-subtitle" style={{ marginTop: '0.5rem' }}>
+                                            All frameworks can be hooked up to your Supabase authentication, data storage and Postgres database.
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="platform-message info" style={{ margin: 0 }}>
+                                            {FRAMEWORK_HELP[framework] || 'Choose a framework to see how it is handled.'}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
 
                             <div style={{ display: 'grid', gap: '0.5rem' }}>
                                 <label>
@@ -242,12 +318,20 @@ export default function SiteDetailPage({ params }) {
                                     />
                                 </label>
                                 <div className="platform-actions">
-                                    <button className="btn ghost" type="button" onClick={connectGitHub} disabled={saving}>
+                                    <button
+                                        className="btn ghost"
+                                        type="button"
+                                        onClick={() => setShowGithubModal(true)}
+                                        disabled={saving}
+                                    >
                                         Connect GitHub
                                     </button>
                                     <button className="btn ghost" type="button" onClick={chooseRepo} disabled={saving}>
                                         Choose repo
                                     </button>
+                                    <span className={`badge ${installationId ? 'success' : 'neutral'}`}>
+                                        {installationId ? 'GitHub installed' : 'Not connected'}
+                                    </span>
                                 </div>
                             </div>
 
@@ -364,6 +448,156 @@ export default function SiteDetailPage({ params }) {
                     )}
                     </section>
                 </>
+            )}
+
+            {showGithubModal && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="github-modal-title"
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        background: 'rgba(0,0,0,0.6)',
+                        display: 'grid',
+                        placeItems: 'center',
+                        zIndex: 1000
+                    }}
+                >
+                    <div className="platform-card" style={{ width: 'min(680px, 92vw)' }}>
+                        <h2 id="github-modal-title" style={{ marginTop: 0 }}>Connect GitHub</h2>
+                        <p className="platform-subtitle">
+                            You’ll be redirected to GitHub to install the Hive Deploy app for your account or organization.
+                        </p>
+                        <ul className="feature-list" style={{ marginTop: '0.75rem' }}>
+                            <li>Pick the account/organization where your repo lives.</li>
+                            <li>
+                                Choose access: <strong>All repositories</strong> (recommended) or <strong>Only select repositories</strong>.
+                                You can change this later in GitHub → Settings → Installed GitHub Apps.
+                            </li>
+                            <li>We’ll open GitHub in a new tab. Complete installation there, then return here and click “I’ve installed it”.</li>
+                        </ul>
+                        <p className="platform-message info" style={{ marginTop: '0.75rem' }}>
+                            Tip: If you plan to add more sites later, choose “All repositories” so you won’t need to reinstall.
+                        </p>
+                        <div className="platform-actions" style={{ marginTop: '1rem' }}>
+                            <button className="btn primary" type="button" onClick={connectGitHub}>
+                                Open GitHub
+                            </button>
+                            <button
+                                className="btn secondary"
+                                type="button"
+                                onClick={() => {
+                                    setShowGithubModal(false);
+                                    try { window.location.reload(); } catch {}
+                                }}
+                            >
+                                I’ve installed it
+                            </button>
+                            <button className="btn ghost" type="button" onClick={() => setShowGithubModal(false)}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showRepoModal && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="repo-modal-title"
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        background: 'rgba(0,0,0,0.6)',
+                        display: 'grid',
+                        placeItems: 'center',
+                        zIndex: 1000
+                    }}
+                >
+                    <div className="platform-card" style={{ width: 'min(800px, 95vw)' }}>
+                        <h2 id="repo-modal-title" style={{ marginTop: 0 }}>Choose a repository</h2>
+                        <p className="platform-subtitle">Select from repositories the Hive Deploy app can access.</p>
+                        <div className="platform-actions" style={{ gap: '0.5rem' }}>
+                            <input
+                                className="table-input platform-mono"
+                                placeholder="Installation ID"
+                                value={installationId}
+                                onChange={e => setInstallationId(e.target.value)}
+                                style={{ maxWidth: 260 }}
+                            />
+                            <button className="btn secondary" type="button" onClick={() => loadRepos()} disabled={loadingRepos}>
+                                {loadingRepos ? 'Loading…' : 'Load repos'}
+                            </button>
+                            <button className="btn ghost" type="button" onClick={() => setShowRepoModal(false)}>
+                                Close
+                            </button>
+                        </div>
+                        {repoError && <p className="platform-message error" style={{ marginTop: '0.75rem' }}>{repoError}</p>}
+
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '1rem' }}>
+                            <input
+                                className="table-input platform-mono"
+                                placeholder="Search repos…"
+                                value={repoQuery}
+                                onChange={e => setRepoQuery(e.target.value)}
+                                style={{ maxWidth: 360 }}
+                            />
+                        </div>
+                        <div className="platform-table-wrap" style={{ marginTop: '0.75rem' }}>
+                            <table className="platform-table">
+                                <thead>
+                                    <tr>
+                                        <th>Repository</th>
+                                        <th>Default branch</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {repos.length ? (
+                                        repos
+                                          .filter(r => {
+                                            const q = repoQuery.trim().toLowerCase();
+                                            if (!q) return true;
+                                            return (
+                                              r.full_name?.toLowerCase().includes(q) ||
+                                              r.name?.toLowerCase().includes(q) ||
+                                              r.owner?.toLowerCase().includes(q)
+                                            );
+                                          })
+                                          .map(r => (
+                                            <tr key={r.id}>
+                                                <td className="platform-mono">
+                                                    <a className="platform-link" href={r.html_url} target="_blank" rel="noreferrer noopener">
+                                                        {r.full_name}
+                                                    </a>
+                                                </td>
+                                                <td className="platform-mono">{r.default_branch}</td>
+                                                <td style={{ width: 1 }}>
+                                                    <button
+                                                        className="btn primary"
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setRepo(r.full_name);
+                                                            setShowRepoModal(false);
+                                                        }}
+                                                    >
+                                                        Use this repo
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                          ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={3} className="platform-subtitle">{loadingRepos ? 'Loading…' : 'No repositories loaded.'}</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             )}
         </main>
     );
