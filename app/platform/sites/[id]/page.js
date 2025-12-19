@@ -18,6 +18,10 @@ export default function SiteDetailPage({ params }) {
     const supabase = useMemo(() => createSupabaseBrowserClient(), []);
     const [site, setSite] = useState(null);
     const [deployments, setDeployments] = useState([]);
+    const [depModalOpen, setDepModalOpen] = useState(false);
+    const [depDetail, setDepDetail] = useState(null);
+    const [depDetailLoading, setDepDetailLoading] = useState(false);
+    const [depDetailError, setDepDetailError] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -228,6 +232,34 @@ export default function SiteDetailPage({ params }) {
         vue: 'Vue is a progressive front-end framework. Use Nuxt or a build tool to generate and serve your app.'
     };
 
+    async function viewDeploymentDetails(depId) {
+        try {
+            setDepDetailError('');
+            setDepDetail(null);
+            setDepDetailLoading(true);
+            setDepModalOpen(true);
+
+            // Try to fetch rich failure information for this deployment
+            const { data, error } = await supabase
+                .from('deployments')
+                .select('*')
+                .eq('id', depId)
+                .maybeSingle();
+
+            if (error) {
+                setDepDetailError(error.message);
+                setDepDetail(null);
+            } else {
+                setDepDetail(data || null);
+            }
+        } catch (e) {
+            setDepDetailError(e?.message || 'Could not load deployment details.');
+            setDepDetail(null);
+        } finally {
+            setDepDetailLoading(false);
+        }
+    }
+
     return (
         <main className="platform-main">
             <div className="platform-title-row">
@@ -429,6 +461,7 @@ export default function SiteDetailPage({ params }) {
                                     <tr>
                                         <th>Status</th>
                                         <th>Created at</th>
+                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -438,6 +471,19 @@ export default function SiteDetailPage({ params }) {
                                                 <StatusBadge status={dep.status} />
                                             </td>
                                             <td className="platform-mono">{formatTimestamp(dep.created_at)}</td>
+                                            <td style={{ width: 1 }}>
+                                                {String(dep.status).toLowerCase() === 'failed' || String(dep.status).toLowerCase() === 'error' ? (
+                                                    <button
+                                                        className="btn secondary"
+                                                        type="button"
+                                                        onClick={() => viewDeploymentDetails(dep.id)}
+                                                    >
+                                                        View details
+                                                    </button>
+                                                ) : (
+                                                    <span className="platform-subtitle">—</span>
+                                                )}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -595,6 +641,64 @@ export default function SiteDetailPage({ params }) {
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {depModalOpen && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="dep-modal-title"
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', zIndex: 1000 }}
+                >
+                    <div className="platform-card" style={{ width: 'min(800px, 95vw)' }}>
+                        <h2 id="dep-modal-title" style={{ marginTop: 0 }}>Deployment details</h2>
+                        {depDetailLoading ? (
+                            <p className="platform-subtitle">Loading…</p>
+                        ) : depDetailError ? (
+                            <p className="platform-message error">{depDetailError}</p>
+                        ) : depDetail ? (
+                            <>
+                                <div className="platform-table-wrap">
+                                    <table className="platform-table">
+                                        <tbody>
+                                            <tr>
+                                                <th>Status</th>
+                                                <td className="platform-mono">{depDetail.status || '—'}</td>
+                                            </tr>
+                                            <tr>
+                                                <th>Created at</th>
+                                                <td className="platform-mono">{formatTimestamp(depDetail.created_at)}</td>
+                                            </tr>
+                                            <tr>
+                                                <th>Reason</th>
+                                                <td className="platform-mono">{depDetail.error_reason || depDetail.error || depDetail.error_message || '—'}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {(depDetail.logs || depDetail.output || depDetail.details) && (
+                                    <div style={{ marginTop: '1rem' }}>
+                                        <h3 style={{ marginTop: 0 }}>Raw details</h3>
+                                        <pre className="platform-mono" style={{ whiteSpace: 'pre-wrap', overflowX: 'auto' }}>
+{JSON.stringify({ logs: depDetail.logs, output: depDetail.output, details: depDetail.details }, null, 2)}
+                                        </pre>
+                                    </div>
+                                )}
+                                {!depDetail.error && !depDetail.error_message && !depDetail.error_reason && !depDetail.logs && !depDetail.output && !depDetail.details && (
+                                    <p className="platform-subtitle">No failure details were provided for this deployment.</p>
+                                )}
+                            </>
+                        ) : (
+                            <p className="platform-subtitle">No details found.</p>
+                        )}
+
+                        <div className="platform-actions" style={{ marginTop: '1rem' }}>
+                            <button className="btn ghost" type="button" onClick={() => setDepModalOpen(false)}>
+                                Close
+                            </button>
                         </div>
                     </div>
                 </div>
