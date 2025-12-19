@@ -21,6 +21,7 @@ export default function SiteDetailPage({ params }) {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [savingEnv, setSavingEnv] = useState(false);
 
     // Editable fields
     const [name, setName] = useState('');
@@ -108,8 +109,7 @@ export default function SiteDetailPage({ params }) {
                 name: name.trim() || null,
                 domain: domain.trim(),
                 repo: repo.trim(),
-                framework: framework.trim() || 'next',
-                env: entriesToObject(envEntries)
+                framework: framework.trim() || 'next'
             };
 
             const { data: updated, error: updError } = await supabase
@@ -125,6 +125,27 @@ export default function SiteDetailPage({ params }) {
             setError(err?.message || 'Could not save site changes.');
         } finally {
             setSaving(false);
+        }
+    }
+
+    async function saveEnv(e) {
+        e?.preventDefault?.();
+        setSavingEnv(true);
+        setError('');
+        try {
+            const envPayload = entriesToObject(envEntries);
+            const { data: updated, error: updError } = await supabase
+                .from('sites')
+                .update({ env: envPayload })
+                .eq('id', params.id)
+                .select('id, env')
+                .single();
+            if (updError) throw updError;
+            setSite(prev => ({ ...(prev || {}), ...updated }));
+        } catch (err) {
+            setError(err?.message || 'Could not save environment variables.');
+        } finally {
+            setSavingEnv(false);
         }
     }
 
@@ -230,70 +251,6 @@ export default function SiteDetailPage({ params }) {
                                 </div>
                             </div>
 
-                            <div style={{ marginTop: '1rem' }}>
-                                <h3 style={{ margin: 0 }}>Environment variables</h3>
-                                <p className="platform-subtitle">Key-value pairs stored in this site’s env (jsonb).</p>
-                            </div>
-
-                            <div className="platform-table-wrap">
-                                <table className="platform-table" style={{ minWidth: 520 }}>
-                                    <thead>
-                                        <tr>
-                                            <th>Key</th>
-                                            <th>Value</th>
-                                            <th></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {envEntries.length ? (
-                                            envEntries.map(row => (
-                                                <tr key={row.id}>
-                                                    <td style={{ width: '35%' }}>
-                                                        <input
-                                                            type="text"
-                                                            value={row.key}
-                                                            onChange={e => updateEnvRow(row.id, { key: e.target.value })}
-                                                            className="platform-mono"
-                                                            disabled={saving}
-                                                        />
-                                                    </td>
-                                                    <td>
-                                                        <input
-                                                            type="text"
-                                                            value={row.value}
-                                                            onChange={e => updateEnvRow(row.id, { value: e.target.value })}
-                                                            className="platform-mono"
-                                                            disabled={saving}
-                                                        />
-                                                    </td>
-                                                    <td style={{ width: 1 }}>
-                                                        <button
-                                                            type="button"
-                                                            className="btn secondary"
-                                                            onClick={() => removeEnvRow(row.id)}
-                                                            disabled={saving}
-                                                        >
-                                                            Remove
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))
-                                        ) : (
-                                            <tr>
-                                                <td colSpan={3} className="platform-subtitle">
-                                                    No environment variables.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div className="platform-actions" style={{ marginTop: '0.75rem' }}>
-                                <button type="button" className="btn ghost" onClick={addEnvRow} disabled={saving}>
-                                    Add variable
-                                </button>
-                            </div>
-
                             {error && <p className="platform-message error">{error}</p>}
 
                             <div className="platform-actions" style={{ marginTop: '1rem' }}>
@@ -302,6 +259,80 @@ export default function SiteDetailPage({ params }) {
                                 </button>
                             </div>
                         </form>
+                    </section>
+
+                    <section className="platform-card" style={{ marginTop: '1.25rem' }} aria-label="Environment variables">
+                        <h2 style={{ marginTop: 0 }}>Environment variables</h2>
+                        <p className="platform-subtitle">Key-value pairs stored in this site’s env (jsonb).</p>
+
+                        <div className="platform-table-wrap">
+                            <table className="platform-table">
+                                <thead>
+                                    <tr>
+                                        <th>Key</th>
+                                        <th>Value</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {envEntries.length ? (
+                                        envEntries.map(row => (
+                                            <tr key={row.id}>
+                                                <td style={{ width: '40%' }}>
+                                                    <input
+                                                        type="text"
+                                                        value={row.key}
+                                                        onChange={e => updateEnvRow(row.id, { key: e.target.value })}
+                                                        className="platform-mono table-input"
+                                                        style={{ width: '100%' }}
+                                                        disabled={savingEnv}
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <input
+                                                        type="text"
+                                                        value={row.value}
+                                                        onChange={e => updateEnvRow(row.id, { value: e.target.value })}
+                                                        className="platform-mono table-input"
+                                                        style={{ width: '100%' }}
+                                                        disabled={savingEnv}
+                                                    />
+                                                </td>
+                                                <td style={{ width: 1 }}>
+                                                    <button
+                                                        type="button"
+                                                        className="btn secondary"
+                                                        onClick={() => removeEnvRow(row.id)}
+                                                        disabled={savingEnv}
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={3} className="platform-subtitle">
+                                                No environment variables.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="platform-actions" style={{ marginTop: '0.75rem' }}>
+                            <button type="button" className="btn ghost" onClick={addEnvRow} disabled={savingEnv}>
+                                Add variable
+                            </button>
+                        </div>
+
+                        {error && <p className="platform-message error">{error}</p>}
+
+                        <div className="platform-actions" style={{ marginTop: '1rem' }}>
+                            <button className="btn primary" type="button" onClick={saveEnv} disabled={savingEnv}>
+                                {savingEnv ? 'Saving…' : 'Save variables'}
+                            </button>
+                        </div>
                     </section>
 
                     <section className="platform-card" style={{ marginTop: '1.25rem' }}>

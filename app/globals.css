@@ -1408,6 +1408,21 @@ main {
     min-width: 680px;
 }
 
+/* Inputs inside tables (e.g., Environment variables editor) */
+.table-input {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(18, 20, 27, 0.8);
+    color: var(--text);
+    font-size: 0.95rem;
+}
+
+.table-input::placeholder {
+    color: var(--muted);
+}
+
 .platform-table th,
 .platform-table td {
     text-align: left;
