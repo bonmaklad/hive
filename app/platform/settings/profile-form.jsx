@@ -40,7 +40,7 @@ export default function ProfileForm({ user, onUpdated }) {
         return () => {
             cancelled = true;
         };
-    }, [supabase, user?.id]);
+    }, [supabase, user]);
 
     const save = async event => {
         event.preventDefault();

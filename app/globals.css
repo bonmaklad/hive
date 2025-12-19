@@ -1164,6 +1164,49 @@ main {
     outline-offset: 2px;
 }
 
+.platform-chat-input {
+    position: relative;
+}
+
+.platform-chat-suggest {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 0.6rem);
+    background: rgba(10, 12, 18, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    padding: 0.5rem;
+    max-height: 260px;
+    overflow: auto;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.55);
+    z-index: 260;
+}
+
+.platform-chat-suggest-item {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    color: var(--text);
+    padding: 0.7rem 0.8rem;
+    border-radius: 14px;
+    display: grid;
+    gap: 0.2rem;
+    cursor: pointer;
+}
+
+.platform-chat-suggest-item:hover,
+.platform-chat-suggest-item:focus-visible {
+    background: rgba(255, 255, 255, 0.06);
+    outline: none;
+}
+
+.platform-chat-suggest-empty {
+    color: var(--muted);
+    padding: 0.6rem 0.8rem;
+}
+
 .platform-kanban {
     display: grid;
     grid-template-columns: 1fr;

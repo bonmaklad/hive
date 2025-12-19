@@ -197,6 +197,11 @@ export default function PlatformShell({ children }) {
                         <Link href="/platform" className="btn ghost">
                             Dashboard
                         </Link>
+                        {profile?.is_admin ? (
+                            <Link href="/platform/admin" className="btn ghost">
+                                Admin
+                            </Link>
+                        ) : null}
                         <Link href="/platform/settings" className="btn ghost">
                             Settings
                         </Link>

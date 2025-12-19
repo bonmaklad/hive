@@ -3,12 +3,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getDisplayName, usePlatformSession } from '../PlatformContext';
 
+function getMentionQuery(text) {
+    const value = String(text || '');
+    const match = value.match(/(^|\\s)@([\\w.+-]{0,64})$/);
+    if (!match) return null;
+    return match[2] || '';
+}
+
+function replaceTrailingMention(text, replacement) {
+    return String(text || '').replace(/(^|\\s)@[\\w.+-]{0,64}$/, `$1${replacement} `);
+}
+
 export default function ChatDrawer() {
     const { user, profile, supabase } = usePlatformSession();
     const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState([]);
     const [text, setText] = useState('');
     const [error, setError] = useState('');
+    const [mentionError, setMentionError] = useState('');
+    const [suggestions, setSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [mentionedUserIds, setMentionedUserIds] = useState([]);
+    const [mentionEveryone, setMentionEveryone] = useState(false);
 
     const listRef = useRef(null);
     const name = useMemo(() => getDisplayName({ user, profile }), [profile, user]);
@@ -67,25 +83,138 @@ export default function ChatDrawer() {
         el.scrollTop = el.scrollHeight;
     }, [messages, open]);
 
+    useEffect(() => {
+        if (!open) return;
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('chat') === '1') {
+            setOpen(true);
+        }
+    }, [open]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const query = getMentionQuery(text);
+        if (query == null) {
+            setShowSuggestions(false);
+            setSuggestions([]);
+            setMentionError('');
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        setShowSuggestions(true);
+        setMentionError('');
+
+        const run = async () => {
+            if (query.toLowerCase() === 'everyone') {
+                setSuggestions([]);
+                return;
+            }
+
+            if (query.length < 2) {
+                setSuggestions([]);
+                return;
+            }
+
+            try {
+                const { data: sessionData } = await supabase.auth.getSession();
+                const token = sessionData?.session?.access_token;
+                if (!token) throw new Error('No session token.');
+
+                const res = await fetch(`/api/profiles/search?q=${encodeURIComponent(query)}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const json = await res.json();
+                if (!res.ok) throw new Error(json?.error || 'Search failed.');
+
+                if (!cancelled) {
+                    setSuggestions(Array.isArray(json?.results) ? json.results : []);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    setMentionError(err?.message || 'Could not load mentions.');
+                    setSuggestions([]);
+                }
+            }
+        };
+
+        const t = setTimeout(run, 150);
+        return () => {
+            cancelled = true;
+            clearTimeout(t);
+        };
+    }, [supabase, text, open]);
+
+    const pickEveryone = () => {
+        setMentionEveryone(true);
+        setText(current => replaceTrailingMention(current, '@everyone'));
+        setShowSuggestions(false);
+    };
+
+    const pickUser = u => {
+        if (!u?.id) return;
+        setMentionedUserIds(current => Array.from(new Set([...current, u.id])));
+        const display = u.name ? `@${u.name}` : u.email ? `@${u.email}` : '@member';
+        setText(current => replaceTrailingMention(current, display));
+        setShowSuggestions(false);
+    };
+
     const send = async event => {
         event.preventDefault();
         const trimmed = text.trim();
         if (!trimmed) return;
 
         setError('');
-        const { error } = await supabase.from('chat_messages').insert({
-            channel: 'members',
-            user_id: user.id,
-            user_name: name,
-            body: trimmed
-        });
+        setMentionError('');
 
-        if (error) {
-            setError(error.message);
+        const { data: inserted, error: insertError } = await supabase
+            .from('chat_messages')
+            .insert({
+                channel: 'members',
+                user_id: user.id,
+                user_name: name,
+                body: trimmed
+            })
+            .select('id')
+            .single();
+
+        if (insertError) {
+            setError(insertError.message);
             return;
         }
 
+        const messageId = inserted?.id;
+        if (messageId) {
+            try {
+                const { data: sessionData } = await supabase.auth.getSession();
+                const token = sessionData?.session?.access_token;
+                if (token && (mentionEveryone || mentionedUserIds.length)) {
+                    const res = await fetch('/api/chat/mentions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            message_id: messageId,
+                            mention_everyone: mentionEveryone,
+                            mentioned_user_ids: mentionedUserIds
+                        })
+                    });
+                    const json = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                        setMentionError(json?.error || 'Could not send mention notifications.');
+                    }
+                }
+            } catch (err) {
+                setMentionError(err?.message || 'Could not send mention notifications.');
+            }
+        }
+
         setText('');
+        setMentionedUserIds([]);
+        setMentionEveryone(false);
     };
 
     return (
@@ -111,6 +240,7 @@ export default function ChatDrawer() {
                 </div>
 
                 {error && <p className="platform-message error">{error}</p>}
+                {mentionError && <p className="platform-message error">{mentionError}</p>}
 
                 <div className="platform-chat-list" ref={listRef}>
                     {messages.length ? (
@@ -146,6 +276,28 @@ export default function ChatDrawer() {
                             placeholder="Write a message…"
                             autoComplete="off"
                         />
+                        {showSuggestions && (
+                            <div className="platform-chat-suggest">
+                                <button type="button" className="platform-chat-suggest-item" onClick={pickEveryone}>
+                                    @everyone
+                                    <span className="platform-subtitle">Email all members (admin only)</span>
+                                </button>
+                                {suggestions.map(u => (
+                                    <button
+                                        key={u.id}
+                                        type="button"
+                                        className="platform-chat-suggest-item"
+                                        onClick={() => pickUser(u)}
+                                    >
+                                        <strong>{u.name || 'Member'}</strong>
+                                        <span className="platform-subtitle">{u.email}</span>
+                                    </button>
+                                ))}
+                                {!suggestions.length && getMentionQuery(text)?.length >= 2 && (
+                                    <div className="platform-chat-suggest-empty">No matches.</div>
+                                )}
+                            </div>
+                        )}
                     </label>
                     <button className="btn primary" type="submit" disabled={!text.trim()}>
                         Send
