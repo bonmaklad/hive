@@ -33,15 +33,17 @@ export async function POST(request, { params }) {
     if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
 
     let userId = existingProfile?.id || null;
+    let invited = false;
 
     if (!userId) {
         const redirectTo = `${getSiteUrl()}/auth/callback?next=${encodeURIComponent('/platform/settings')}`;
-        const { data: invited, error: inviteError } = await guard.admin.auth.admin.inviteUserByEmail(email, {
+        const { data: invitedUser, error: inviteError } = await guard.admin.auth.admin.inviteUserByEmail(email, {
             redirectTo,
             data: { must_set_password: true }
         });
         if (inviteError) return NextResponse.json({ error: inviteError.message }, { status: 500 });
-        userId = invited?.user?.id || null;
+        userId = invitedUser?.user?.id || null;
+        invited = true;
     }
 
     if (!userId) return NextResponse.json({ error: 'Could not resolve user id' }, { status: 500 });
@@ -57,6 +59,5 @@ export async function POST(request, { params }) {
 
     if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 });
 
-    return NextResponse.json({ ok: true, user_id: userId });
+    return NextResponse.json({ ok: true, user_id: userId, invited });
 }
-

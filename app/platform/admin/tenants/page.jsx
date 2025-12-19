@@ -20,20 +20,746 @@ function formatNZD(cents) {
     }
 }
 
+const PLAN_MONTHLY_CENTS = {
+    member: 9900,
+    desk: 24900,
+    pod: 34900,
+    office: 69900,
+    premium: 49900,
+    custom: 0
+};
+
+const OFFICE_MONTHLY_CENTS = {
+    'office-a': 69900,
+    'office-b': 109900,
+    'office-c': 149900
+};
+
+const FRIDGE_WEEKLY_CENTS = 2500;
+const WEEKS_PER_MONTH = 4.333;
+
+function computeMonthlyCents({ plan, officeId, donationCents, fridgeEnabled, monthlyOverrideCents }) {
+    const hasOverride = monthlyOverrideCents !== null && monthlyOverrideCents !== undefined && monthlyOverrideCents !== '';
+    if (hasOverride) {
+        const override = Number.isFinite(monthlyOverrideCents) ? monthlyOverrideCents : Number(monthlyOverrideCents);
+        if (Number.isFinite(override) && override >= 0) return Math.floor(override);
+    }
+
+    const base =
+        plan === 'office'
+            ? OFFICE_MONTHLY_CENTS[officeId] || PLAN_MONTHLY_CENTS.office
+            : PLAN_MONTHLY_CENTS[plan] ?? 0;
+    const fridge = fridgeEnabled ? Math.round(FRIDGE_WEEKLY_CENTS * WEEKS_PER_MONTH) : 0;
+    return Math.max(0, base + (donationCents || 0) + fridge);
+}
+
+function parseEmail(value) {
+    const email = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    if (!email) return '';
+    if (email.length > 254) return '';
+    if (!email.includes('@')) return '';
+    return email;
+}
+
+function Modal({ open, title, subtitle, onClose, children, footer }) {
+    useEffect(() => {
+        if (!open) return;
+
+        const onKeyDown = event => {
+            if (event.key === 'Escape') onClose();
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [open, onClose]);
+
+    if (!open) return null;
+
+    return (
+        <div className="platform-modal-overlay" role="presentation" onMouseDown={onClose}>
+            <div className="platform-modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={event => event.stopPropagation()}>
+                <div className="platform-modal-header">
+                    <div>
+                        <h2 style={{ margin: 0 }}>{title}</h2>
+                        {subtitle && <p className="platform-subtitle">{subtitle}</p>}
+                    </div>
+                    <button className="btn ghost" type="button" onClick={onClose}>
+                        Close
+                    </button>
+                </div>
+                <div style={{ marginTop: '1rem' }}>{children}</div>
+                {footer ? <div className="platform-card-actions">{footer}</div> : null}
+            </div>
+        </div>
+    );
+}
+
+function WizardSteps({ current, steps }) {
+    return (
+        <div className="platform-steps" aria-label="Setup steps">
+            {steps.map((label, index) => (
+                <span key={label} className={`platform-step ${index === current ? 'active' : index < current ? 'done' : ''}`}>
+                    {index + 1}. {label}
+                </span>
+            ))}
+        </div>
+    );
+}
+
+function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, setGlobalError }) {
+    const steps = ['Tenant + primary user', 'Membership', 'Initial tokens', 'Additional users', 'Confirm'];
+    const [step, setStep] = useState(0);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+
+    const [tenantName, setTenantName] = useState('');
+    const [primaryEmail, setPrimaryEmail] = useState('');
+    const [primaryRole, setPrimaryRole] = useState('owner');
+
+    const [membershipPlan, setMembershipPlan] = useState('member');
+    const [membershipOfficeId, setMembershipOfficeId] = useState('office-a');
+    const [membershipStatus, setMembershipStatus] = useState('live');
+    const [membershipDonationNZD, setMembershipDonationNZD] = useState('0');
+    const [membershipFridgeEnabled, setMembershipFridgeEnabled] = useState(false);
+    const [membershipMonthlyOverrideNZD, setMembershipMonthlyOverrideNZD] = useState('');
+
+    const [tokensTotal, setTokensTotal] = useState('10');
+    const [additionalUsers, setAdditionalUsers] = useState([{ email: '', role: 'member' }]);
+    const [sendMagicLinks, setSendMagicLinks] = useState(true);
+
+    useEffect(() => {
+        if (!open) return;
+        setStep(0);
+        setBusy(false);
+        setError('');
+        setTenantName('');
+        setPrimaryEmail('');
+        setPrimaryRole('owner');
+        setMembershipPlan('member');
+        setMembershipOfficeId('office-a');
+        setMembershipStatus('live');
+        setMembershipDonationNZD('0');
+        setMembershipFridgeEnabled(false);
+        setMembershipMonthlyOverrideNZD('');
+        setTokensTotal('10');
+        setAdditionalUsers([{ email: '', role: 'member' }]);
+        setSendMagicLinks(true);
+    }, [open]);
+
+    const donationCents = Math.max(0, Math.round(Number(membershipDonationNZD || 0) * 100));
+    const monthlyOverrideCents = membershipMonthlyOverrideNZD.trim()
+        ? Math.max(0, Math.round(Number(membershipMonthlyOverrideNZD || 0) * 100))
+        : null;
+    const computedMonthlyCents = computeMonthlyCents({
+        plan: membershipPlan,
+        officeId: membershipPlan === 'office' ? membershipOfficeId : null,
+        donationCents,
+        fridgeEnabled: membershipFridgeEnabled,
+        monthlyOverrideCents
+    });
+
+    const canNext = useMemo(() => {
+        if (step === 0) return Boolean(tenantName.trim()) && Boolean(parseEmail(primaryEmail));
+        if (step === 1) return Boolean(membershipPlan) && (membershipPlan !== 'office' || Boolean(membershipOfficeId));
+        if (step === 2) return Number.isFinite(Number(tokensTotal)) && Number(tokensTotal) >= 0;
+        return true;
+    }, [membershipOfficeId, membershipPlan, primaryEmail, step, tenantName, tokensTotal]);
+
+    const create = async () => {
+        setBusy(true);
+        setError('');
+        setGlobalError('');
+        try {
+            const payload = {
+                tenant_name: tenantName,
+                primary_email: parseEmail(primaryEmail),
+                primary_role: primaryRole,
+                membership: {
+                    plan: membershipPlan,
+                    office_id: membershipPlan === 'office' ? membershipOfficeId : null,
+                    status: membershipStatus,
+                    donation_cents: donationCents,
+                    fridge_enabled: membershipFridgeEnabled,
+                    monthly_amount_cents: monthlyOverrideCents
+                },
+                period_start: monthStart,
+                tokens_total: Math.max(0, Math.floor(Number(tokensTotal || 0))),
+                additional_users: additionalUsers
+                    .map(u => ({ email: parseEmail(u.email), role: u.role }))
+                    .filter(u => u.email && ['member', 'admin'].includes(u.role)),
+                send_magic_links: sendMagicLinks
+            };
+
+            const res = await fetch('/api/admin/tenants/setup', {
+                method: 'POST',
+                headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error || 'Failed to create tenant.');
+
+            onCreated?.(json?.tenant?.id || null);
+            onClose();
+        } catch (err) {
+            setError(err?.message || 'Failed to create tenant.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const footer = (
+        <>
+            <button className="btn secondary" type="button" onClick={() => setStep(s => Math.max(0, s - 1))} disabled={busy || step === 0}>
+                Back
+            </button>
+            {step < steps.length - 1 ? (
+                <button className="btn primary" type="button" onClick={() => setStep(s => Math.min(steps.length - 1, s + 1))} disabled={busy || !canNext}>
+                    Next
+                </button>
+            ) : (
+                <button className="btn primary" type="button" onClick={create} disabled={busy || !canNext}>
+                    {busy ? 'Creating…' : 'Create tenant'}
+                </button>
+            )}
+        </>
+    );
+
+    return (
+        <Modal
+            open={open}
+            title="Add tenant"
+            subtitle={`Month start: ${monthStart}`}
+            onClose={() => (busy ? null : onClose())}
+            footer={footer}
+        >
+            <WizardSteps current={step} steps={steps} />
+            {error && <p className="platform-message error">{error}</p>}
+
+            {step === 0 ? (
+                <div className="platform-grid" style={{ marginTop: '1rem' }}>
+                    <div className="platform-card span-6">
+                        <h3 style={{ marginTop: 0 }}>Tenant</h3>
+                        <label className="platform-subtitle">Tenant name</label>
+                        <input value={tenantName} onChange={e => setTenantName(e.target.value)} disabled={busy} />
+                    </div>
+
+                    <div className="platform-card span-6">
+                        <h3 style={{ marginTop: 0 }}>Primary user</h3>
+                        <p className="platform-subtitle">This user holds the membership + token pool for the tenant.</p>
+                        <label className="platform-subtitle">Email</label>
+                        <input value={primaryEmail} onChange={e => setPrimaryEmail(e.target.value)} disabled={busy} />
+                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                            Role
+                        </label>
+                        <select value={primaryRole} onChange={e => setPrimaryRole(e.target.value)} disabled={busy}>
+                            <option value="owner">owner</option>
+                            <option value="admin">admin</option>
+                        </select>
+                    </div>
+                </div>
+            ) : null}
+
+            {step === 1 ? (
+                <div className="platform-grid" style={{ marginTop: '1rem' }}>
+                    <div className="platform-card span-6">
+                        <h3 style={{ marginTop: 0 }}>Membership</h3>
+                        <label className="platform-subtitle">Plan</label>
+                        <select value={membershipPlan} onChange={e => setMembershipPlan(e.target.value)} disabled={busy}>
+                            <option value="member">member</option>
+                            <option value="desk">desk</option>
+                            <option value="pod">pod</option>
+                            <option value="office">office</option>
+                            <option value="premium">premium</option>
+                            <option value="custom">custom</option>
+                        </select>
+
+                        {membershipPlan === 'office' ? (
+                            <>
+                                <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                                    Office
+                                </label>
+                                <select value={membershipOfficeId} onChange={e => setMembershipOfficeId(e.target.value)} disabled={busy}>
+                                    <option value="office-a">office-a</option>
+                                    <option value="office-b">office-b</option>
+                                    <option value="office-c">office-c</option>
+                                </select>
+                            </>
+                        ) : null}
+
+                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                            Status
+                        </label>
+                        <select value={membershipStatus} onChange={e => setMembershipStatus(e.target.value)} disabled={busy}>
+                            <option value="live">live</option>
+                            <option value="expired">expired</option>
+                            <option value="cancelled">cancelled</option>
+                        </select>
+                    </div>
+
+                    <div className="platform-card span-6">
+                        <h3 style={{ marginTop: 0 }}>Extras</h3>
+                        <label className="platform-subtitle">Donation (NZD / month)</label>
+                        <input
+                            value={membershipDonationNZD}
+                            onChange={e => setMembershipDonationNZD(e.target.value)}
+                            disabled={busy}
+                            inputMode="decimal"
+                        />
+                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                            Monthly override (NZD, optional)
+                        </label>
+                        <input
+                            value={membershipMonthlyOverrideNZD}
+                            onChange={e => setMembershipMonthlyOverrideNZD(e.target.value)}
+                            disabled={busy}
+                            inputMode="decimal"
+                            placeholder="Leave blank to auto-calc"
+                        />
+                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                            <input
+                                type="checkbox"
+                                checked={membershipFridgeEnabled}
+                                onChange={e => setMembershipFridgeEnabled(e.target.checked)}
+                                disabled={busy}
+                                style={{ marginRight: '0.5rem' }}
+                            />
+                            Fridge access
+                        </label>
+                        <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
+                            Monthly amount: <span className="platform-mono">{formatNZD(computedMonthlyCents)}</span>
+                        </p>
+                    </div>
+                </div>
+            ) : null}
+
+            {step === 2 ? (
+                <div className="platform-card" style={{ marginTop: '1rem' }}>
+                    <h3 style={{ marginTop: 0 }}>Initial token pool</h3>
+                    <p className="platform-subtitle">
+                        Tokens are assigned to the tenant’s primary user and shared across tenant users/profiles for this membership.
+                    </p>
+                    <label className="platform-subtitle">Tokens total (month starting {monthStart})</label>
+                    <input value={tokensTotal} onChange={e => setTokensTotal(e.target.value)} disabled={busy} inputMode="numeric" />
+                </div>
+            ) : null}
+
+            {step === 3 ? (
+                <div className="platform-card" style={{ marginTop: '1rem' }}>
+                    <h3 style={{ marginTop: 0 }}>Additional users</h3>
+                    <p className="platform-subtitle">Add tenant users (non-owners).</p>
+                    <div style={{ display: 'grid', gap: '0.75rem', marginTop: '0.75rem' }}>
+                        {additionalUsers.map((u, index) => (
+                            <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 160px auto', gap: '0.75rem' }}>
+                                <input
+                                    value={u.email}
+                                    onChange={e =>
+                                        setAdditionalUsers(list => {
+                                            const next = [...list];
+                                            next[index] = { ...next[index], email: e.target.value };
+                                            return next;
+                                        })
+                                    }
+                                    disabled={busy}
+                                    placeholder="email@company.com"
+                                />
+                                <select
+                                    value={u.role}
+                                    onChange={e =>
+                                        setAdditionalUsers(list => {
+                                            const next = [...list];
+                                            next[index] = { ...next[index], role: e.target.value };
+                                            return next;
+                                        })
+                                    }
+                                    disabled={busy}
+                                >
+                                    <option value="member">member</option>
+                                    <option value="admin">admin</option>
+                                </select>
+                                <button
+                                    className="btn secondary"
+                                    type="button"
+                                    onClick={() =>
+                                        setAdditionalUsers(list => {
+                                            const next = list.filter((_, idx) => idx !== index);
+                                            return next.length ? next : [{ email: '', role: 'member' }];
+                                        })
+                                    }
+                                    disabled={busy || additionalUsers.length <= 1}
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="platform-card-actions">
+                        <button
+                            className="btn ghost"
+                            type="button"
+                            onClick={() => setAdditionalUsers(list => [...list, { email: '', role: 'member' }])}
+                            disabled={busy}
+                        >
+                            Add another user
+                        </button>
+                    </div>
+                </div>
+            ) : null}
+
+            {step === 4 ? (
+                <div className="platform-card" style={{ marginTop: '1rem' }}>
+                    <h3 style={{ marginTop: 0 }}>Confirm</h3>
+                    <p className="platform-subtitle">
+                        Tenant: <span className="platform-mono">{tenantName || '—'}</span>
+                        <br />
+                        Primary: <span className="platform-mono">{parseEmail(primaryEmail) || '—'}</span> ({primaryRole})
+                        <br />
+                        Membership: <span className="platform-mono">{membershipPlan}</span> •{' '}
+                        <span className="platform-mono">{formatNZD(computedMonthlyCents)} / month</span>
+                        <br />
+                        Tokens: <span className="platform-mono">{Math.max(0, Math.floor(Number(tokensTotal || 0)))}</span> (from {monthStart})
+                    </p>
+                    <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                        <input
+                            type="checkbox"
+                            checked={sendMagicLinks}
+                            onChange={e => setSendMagicLinks(e.target.checked)}
+                            disabled={busy}
+                            style={{ marginRight: '0.5rem' }}
+                        />
+                        Send magic links to existing users (in addition to invite emails for new users)
+                    </label>
+                </div>
+            ) : null}
+        </Modal>
+    );
+}
+
+function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSaved, setGlobalError }) {
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+
+    const primary = tenant?.primary_user || null;
+    const primaryId = primary?.user_id || null;
+
+    const [name, setName] = useState('');
+    const [plan, setPlan] = useState('member');
+    const [officeId, setOfficeId] = useState('office-a');
+    const [status, setStatus] = useState('live');
+    const [donationNZD, setDonationNZD] = useState('0');
+    const [fridgeEnabled, setFridgeEnabled] = useState(false);
+    const [monthlyOverrideNZD, setMonthlyOverrideNZD] = useState('');
+    const [tokensTotal, setTokensTotal] = useState('0');
+
+    useEffect(() => {
+        if (!open) return;
+        setBusy(false);
+        setError('');
+        setName(tenant?.name || '');
+        setPlan(tenant?.membership?.plan || 'member');
+        setOfficeId(tenant?.membership?.office_id || 'office-a');
+        setStatus(tenant?.membership?.status || 'live');
+        setDonationNZD(String(Number(tenant?.membership?.donation_cents || 0) / 100));
+        setFridgeEnabled(Boolean(tenant?.membership?.fridge_enabled));
+        setMonthlyOverrideNZD('');
+        setTokensTotal(String(primary?.room_credits?.tokens_total ?? 0));
+    }, [open, tenant, primary]);
+
+    const donationCents = Math.max(0, Math.round(Number(donationNZD || 0) * 100));
+    const monthlyOverrideCents = monthlyOverrideNZD.trim() ? Math.max(0, Math.round(Number(monthlyOverrideNZD || 0) * 100)) : null;
+    const computedMonthlyCents = computeMonthlyCents({
+        plan,
+        officeId: plan === 'office' ? officeId : null,
+        donationCents,
+        fridgeEnabled,
+        monthlyOverrideCents
+    });
+
+    const save = async () => {
+        setBusy(true);
+        setError('');
+        setGlobalError('');
+        try {
+            if (!tenant?.id) throw new Error('Missing tenant id.');
+            if (!primaryId) throw new Error('Tenant is missing an owner/admin user.');
+            const headers = { ...(await authHeader()), 'Content-Type': 'application/json' };
+
+            if (name.trim() && name.trim() !== tenant.name) {
+                const res = await fetch(`/api/admin/tenants/${tenant.id}`, {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify({ name })
+                });
+                const json = await res.json();
+                if (!res.ok) throw new Error(json?.error || 'Failed to update tenant name.');
+            }
+
+            const resMembership = await fetch(`/api/admin/tenants/${tenant.id}/membership`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    owner_id: primaryId,
+                    plan,
+                    office_id: plan === 'office' ? officeId : null,
+                    status,
+                    donation_cents: donationCents,
+                    fridge_enabled: fridgeEnabled,
+                    monthly_amount_cents: monthlyOverrideCents
+                })
+            });
+            const jsonMembership = await resMembership.json();
+            if (!resMembership.ok) throw new Error(jsonMembership?.error || 'Failed to update membership.');
+
+            const tokens = Math.max(0, Math.floor(Number(tokensTotal || 0)));
+            const resCredits = await fetch(`/api/admin/tenants/${tenant.id}/credits`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    owner_id: primaryId,
+                    period_start: monthStart,
+                    tokens_total: tokens
+                })
+            });
+            const jsonCredits = await resCredits.json();
+            if (!resCredits.ok) throw new Error(jsonCredits?.error || 'Failed to update token pool.');
+
+            onSaved?.();
+            onClose();
+        } catch (err) {
+            setError(err?.message || 'Failed to save changes.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const footer = (
+        <>
+            <button className="btn secondary" type="button" onClick={onClose} disabled={busy}>
+                Cancel
+            </button>
+            <button className="btn primary" type="button" onClick={save} disabled={busy || !name.trim()}>
+                {busy ? 'Saving…' : 'Save changes'}
+            </button>
+        </>
+    );
+
+    return (
+        <Modal
+            open={open}
+            title={`Edit ${tenant?.name || 'tenant'}`}
+            subtitle={primary?.profile?.email ? `Primary: ${primary.profile.email}` : null}
+            onClose={() => (busy ? null : onClose())}
+            footer={footer}
+        >
+            {error && <p className="platform-message error">{error}</p>}
+            <div className="platform-grid">
+                <div className="platform-card span-6">
+                    <h3 style={{ marginTop: 0 }}>Tenant</h3>
+                    <label className="platform-subtitle">Tenant name</label>
+                    <input value={name} onChange={e => setName(e.target.value)} disabled={busy} />
+                </div>
+
+                <div className="platform-card span-6">
+                    <h3 style={{ marginTop: 0 }}>Token pool</h3>
+                    <p className="platform-subtitle">
+                        Period start: <span className="platform-mono">{monthStart}</span>
+                    </p>
+                    <label className="platform-subtitle">Tokens total</label>
+                    <input value={tokensTotal} onChange={e => setTokensTotal(e.target.value)} disabled={busy} inputMode="numeric" />
+                </div>
+
+                <div className="platform-card span-6">
+                    <h3 style={{ marginTop: 0 }}>Membership</h3>
+                    <label className="platform-subtitle">Plan</label>
+                    <select value={plan} onChange={e => setPlan(e.target.value)} disabled={busy}>
+                        <option value="member">member</option>
+                        <option value="desk">desk</option>
+                        <option value="pod">pod</option>
+                        <option value="office">office</option>
+                        <option value="premium">premium</option>
+                        <option value="custom">custom</option>
+                    </select>
+                    {plan === 'office' ? (
+                        <>
+                            <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                                Office
+                            </label>
+                            <select value={officeId} onChange={e => setOfficeId(e.target.value)} disabled={busy}>
+                                <option value="office-a">office-a</option>
+                                <option value="office-b">office-b</option>
+                                <option value="office-c">office-c</option>
+                            </select>
+                        </>
+                    ) : null}
+                    <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                        Status
+                    </label>
+                    <select value={status} onChange={e => setStatus(e.target.value)} disabled={busy}>
+                        <option value="live">live</option>
+                        <option value="expired">expired</option>
+                        <option value="cancelled">cancelled</option>
+                    </select>
+                </div>
+
+                <div className="platform-card span-6">
+                    <h3 style={{ marginTop: 0 }}>Extras</h3>
+                    <label className="platform-subtitle">Donation (NZD / month)</label>
+                    <input value={donationNZD} onChange={e => setDonationNZD(e.target.value)} disabled={busy} inputMode="decimal" />
+                    <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                        Monthly override (NZD, optional)
+                    </label>
+                    <input
+                        value={monthlyOverrideNZD}
+                        onChange={e => setMonthlyOverrideNZD(e.target.value)}
+                        disabled={busy}
+                        inputMode="decimal"
+                        placeholder="Leave blank to auto-calc"
+                    />
+                    <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                        <input
+                            type="checkbox"
+                            checked={fridgeEnabled}
+                            onChange={e => setFridgeEnabled(e.target.checked)}
+                            disabled={busy}
+                            style={{ marginRight: '0.5rem' }}
+                        />
+                        Fridge access
+                    </label>
+                    <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
+                        Monthly amount: <span className="platform-mono">{formatNZD(computedMonthlyCents)}</span>
+                    </p>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function TenantInlineActions({ tenant, monthStart, authHeader, onReload, setGlobalError, sendMagicLink }) {
+    const [busy, setBusy] = useState(false);
+    const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteRole, setInviteRole] = useState('member');
+    const [tokensTotal, setTokensTotal] = useState('10');
+
+    const primary = tenant?.primary_user || tenant?.owner || (Array.isArray(tenant?.users) ? tenant.users[0] : null) || null;
+    const tokenHolders = useMemo(() => {
+        const users = Array.isArray(tenant?.users) ? tenant.users : [];
+        const candidates = users.filter(u => u.role === 'owner' || u.role === 'admin');
+        return candidates.length ? candidates : users;
+    }, [tenant]);
+    const [tokenHolderId, setTokenHolderId] = useState(primary?.user_id || '');
+
+    useEffect(() => {
+        setTokenHolderId(primary?.user_id || '');
+        setTokensTotal(String(primary?.room_credits?.tokens_total ?? 10));
+    }, [primary]);
+
+    const addUser = async () => {
+        setBusy(true);
+        setGlobalError('');
+        try {
+            const email = parseEmail(inviteEmail);
+            if (!email) throw new Error('Enter a valid email.');
+
+            const res = await fetch(`/api/admin/tenants/${tenant.id}/users`, {
+                method: 'POST',
+                headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, role: inviteRole })
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error || 'Failed to add user.');
+
+            if (!json?.invited) {
+                await sendMagicLink({ email });
+            }
+
+            setInviteEmail('');
+            await onReload?.();
+        } catch (err) {
+            setGlobalError(err?.message || 'Failed to add user.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const saveTokenPool = async () => {
+        setBusy(true);
+        setGlobalError('');
+        try {
+            if (!tokenHolderId) throw new Error('Select a token holder (owner/admin).');
+            const tokens = Math.max(0, Math.floor(Number(tokensTotal || 0)));
+            const res = await fetch(`/api/admin/tenants/${tenant.id}/credits`, {
+                method: 'POST',
+                headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ owner_id: tokenHolderId, period_start: monthStart, tokens_total: tokens })
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error || 'Failed to save token pool.');
+            await onReload?.();
+        } catch (err) {
+            setGlobalError(err?.message || 'Failed to save token pool.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="platform-grid" style={{ marginTop: '1.25rem' }}>
+            <div className="platform-card span-6">
+                <h3 style={{ marginTop: 0 }}>Add user</h3>
+                <label className="platform-subtitle">Email</label>
+                <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} disabled={busy} />
+                <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                    Role
+                </label>
+                <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} disabled={busy}>
+                    <option value="member">member</option>
+                    <option value="admin">admin</option>
+                </select>
+                <div className="platform-card-actions">
+                    <button className="btn primary" type="button" onClick={addUser} disabled={busy || !inviteEmail.trim()}>
+                        {busy ? 'Working…' : 'Add + invite'}
+                    </button>
+                </div>
+            </div>
+
+            <div className="platform-card span-6">
+                <h3 style={{ marginTop: 0 }}>Token pool</h3>
+                <p className="platform-subtitle">
+                    Period start: <span className="platform-mono">{monthStart}</span>
+                </p>
+                <label className="platform-subtitle">Token holder</label>
+                <select value={tokenHolderId} onChange={e => setTokenHolderId(e.target.value)} disabled={busy}>
+                    <option value="">Select user…</option>
+                    {tokenHolders.map(u => (
+                        <option key={u.user_id} value={u.user_id}>
+                            {(u.profile?.email || u.user_id) + (u.role ? ` (${u.role})` : '')}
+                        </option>
+                    ))}
+                </select>
+                <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                    Tokens total (this month)
+                </label>
+                <input value={tokensTotal} onChange={e => setTokensTotal(e.target.value)} disabled={busy} inputMode="numeric" />
+                <div className="platform-card-actions">
+                    <button className="btn primary" type="button" onClick={saveTokenPool} disabled={busy || !tokenHolderId}>
+                        {busy ? 'Working…' : 'Save tokens'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function AdminTenantsPage() {
     const { supabase } = usePlatformSession();
     const [tenants, setTenants] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [monthStart, setMonthStart] = useState(() => getMonthStart());
+    const [query, setQuery] = useState('');
 
-    const [newTenantName, setNewTenantName] = useState('');
-    const [busy, setBusy] = useState(false);
-
-    const [inviteEmail, setInviteEmail] = useState('');
-    const [inviteRole, setInviteRole] = useState('member');
-    const [creditsUserId, setCreditsUserId] = useState('');
-    const [creditsTokens, setCreditsTokens] = useState('10');
-    const monthStart = useMemo(() => getMonthStart(), []);
+    const [createOpen, setCreateOpen] = useState(false);
+    const [editTenantId, setEditTenantId] = useState(null);
+    const [openTenantId, setOpenTenantId] = useState(null);
 
     const authHeader = async () => {
         const { data } = await supabase.auth.getSession();
@@ -50,6 +776,7 @@ export default function AdminTenantsPage() {
             const json = await res.json();
             if (!res.ok) throw new Error(json?.error || 'Failed to load tenants.');
             setTenants(Array.isArray(json?.tenants) ? json.tenants : []);
+            if (typeof json?.month_start === 'string') setMonthStart(json.month_start);
         } catch (err) {
             setError(err?.message || 'Failed to load tenants.');
             setTenants([]);
@@ -63,77 +790,40 @@ export default function AdminTenantsPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const createTenant = async event => {
-        event.preventDefault();
-        setBusy(true);
-        setError('');
-        try {
-            const res = await fetch('/api/admin/tenants', {
-                method: 'POST',
-                headers: {
-                    ...(await authHeader()),
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ name: newTenantName })
-            });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json?.error || 'Failed to create tenant.');
-            setNewTenantName('');
-            await load();
-        } catch (err) {
-            setError(err?.message || 'Failed to create tenant.');
-        } finally {
-            setBusy(false);
-        }
-    };
+    const filteredTenants = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return tenants;
 
-    const addUser = async (tenantId) => {
-        setBusy(true);
-        setError('');
-        try {
-            const res = await fetch(`/api/admin/tenants/${tenantId}/users`, {
-                method: 'POST',
-                headers: {
-                    ...(await authHeader()),
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ email: inviteEmail, role: inviteRole })
-            });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json?.error || 'Failed to add user.');
-            setInviteEmail('');
-            await load();
-        } catch (err) {
-            setError(err?.message || 'Failed to add user.');
-        } finally {
-            setBusy(false);
-        }
-    };
+        return tenants.filter(t => {
+            const users = Array.isArray(t.users) ? t.users : [];
+            const primaryEmail = t.primary_user?.profile?.email || '';
+            const primaryName = t.primary_user?.profile?.name || '';
+            const haystack = [
+                t.name || '',
+                t.id || '',
+                primaryEmail,
+                primaryName,
+                ...users.map(u => u.profile?.email || ''),
+                ...users.map(u => u.profile?.name || '')
+            ]
+                .join(' ')
+                .toLowerCase();
+            return haystack.includes(q);
+        });
+    }, [query, tenants]);
 
-    const setCredits = async (tenantId) => {
-        setBusy(true);
+    const selectedTenant = useMemo(() => tenants.find(t => t.id === editTenantId) || null, [editTenantId, tenants]);
+
+    const sendMagicLink = async ({ email, userId, next = '/platform/settings' }) => {
         setError('');
-        try {
-            const res = await fetch(`/api/admin/tenants/${tenantId}/credits`, {
-                method: 'POST',
-                headers: {
-                    ...(await authHeader()),
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    owner_id: creditsUserId,
-                    period_start: monthStart,
-                    tokens_total: Number(creditsTokens)
-                })
-            });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json?.error || 'Failed to set credits.');
-            await load();
-        } catch (err) {
-            setError(err?.message || 'Failed to set credits.');
-        } finally {
-            setBusy(false);
-        }
+        const res = await fetch('/api/admin/magic-link', {
+            method: 'POST',
+            headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, user_id: userId, next })
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || 'Failed to send magic link.');
+        return true;
     };
 
     return (
@@ -143,197 +833,224 @@ export default function AdminTenantsPage() {
                     <h1>Tenants</h1>
                     <p className="platform-subtitle">Month start: {monthStart}</p>
                 </div>
-                <Link className="btn ghost" href="/platform/admin">
-                    Back to admin
-                </Link>
+                <div className="platform-actions">
+                    <button className="btn primary" type="button" onClick={() => setCreateOpen(true)}>
+                        Add tenant
+                    </button>
+                    <Link className="btn ghost" href="/platform/admin">
+                        Back to admin
+                    </Link>
+                </div>
             </div>
 
             {error && <p className="platform-message error">{error}</p>}
 
-            <div className="platform-card">
-                <h2 style={{ marginTop: 0 }}>Create tenant</h2>
-                <form className="contact-form" onSubmit={createTenant}>
-                    <label>
-                        Tenant name
-                        <input value={newTenantName} onChange={e => setNewTenantName(e.target.value)} disabled={busy} />
-                    </label>
-                    <div className="platform-actions">
-                        <button className="btn primary" type="submit" disabled={busy || !newTenantName.trim()}>
-                            {busy ? 'Working…' : 'Create'}
-                        </button>
-                    </div>
-                </form>
+            <div className="platform-card" style={{ display: 'grid', gap: '0.75rem' }}>
+                <label className="platform-subtitle">Search</label>
+                <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by tenant, user, or email…" />
             </div>
 
             {loading ? (
                 <p className="platform-subtitle" style={{ marginTop: '1rem' }}>
                     Loading…
                 </p>
-            ) : (
+            ) : filteredTenants.length ? (
                 <div style={{ marginTop: '1.25rem', display: 'grid', gap: '1.25rem' }}>
-                    {tenants.map(t => {
+                    {filteredTenants.map(t => {
                         const users = Array.isArray(t.users) ? t.users : [];
-                        const owner = t.owner?.profile || null;
+                        const primary = t.primary_user || t.owner || users[0] || null;
+                        const primaryProfile = primary?.profile || null;
                         const membership = t.membership || null;
                         const invoices = Array.isArray(t.invoices) ? t.invoices : [];
-                        const totalCredits = users.reduce((sum, u) => sum + (u.room_credits?.tokens_total || 0), 0);
-                        const totalUsed = users.reduce((sum, u) => sum + (u.room_credits?.tokens_used || 0), 0);
+
+                        const credits = primary?.room_credits || null;
+                        const tokensTotal = credits?.tokens_total || 0;
+                        const tokensUsed = credits?.tokens_used || 0;
+                        const tokensLeft = Math.max(0, tokensTotal - tokensUsed);
+
+                        const isOpen = openTenantId === t.id;
 
                         return (
                             <section key={t.id} className="platform-card">
-                                <div className="platform-kpi-row">
-                                    <h2 style={{ margin: 0 }}>{t.name}</h2>
-                                    <span className="badge neutral">{t.id?.slice(0, 8)}</span>
-                                </div>
-
-                                <p className="platform-subtitle">
-                                    Owner: {owner ? `${owner.name || '—'} (${owner.email || '—'})` : '—'}
-                                </p>
-                                <p className="platform-subtitle">
-                                    Membership:{' '}
-                                    {membership ? (
-                                        <>
-                                            <span className={`badge ${membership.status === 'live' ? 'success' : 'pending'}`}>
-                                                {membership.status || '—'}
-                                            </span>{' '}
-                                            <span className="platform-mono">
-                                                {membership.plan} • {formatNZD(membership.monthly_amount_cents)} / month
-                                            </span>
-                                        </>
-                                    ) : (
-                                        '—'
-                                    )}
-                                </p>
-                                <p className="platform-subtitle">
-                                    Room credits (this month): {totalCredits - totalUsed} left ({totalCredits} total)
-                                </p>
-                                <p className="platform-subtitle">Invoices: {invoices.length}</p>
-
-                                <div style={{ marginTop: '1rem' }}>
-                                    <h3 style={{ margin: 0 }}>Tenant users</h3>
-                                    <div className="platform-table-wrap" style={{ marginTop: '0.75rem' }}>
-                                        <table className="platform-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Name</th>
-                                                    <th>Email</th>
-                                                    <th>Role</th>
-                                                    <th>Credits</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {users.length ? (
-                                                    users.map(u => (
-                                                        <tr key={`${u.tenant_id}:${u.user_id}`}>
-                                                            <td>{u.profile?.name || '—'}</td>
-                                                            <td className="platform-mono">{u.profile?.email || '—'}</td>
-                                                            <td className="platform-mono">{u.role}</td>
-                                                            <td className="platform-mono">
-                                                                {u.room_credits
-                                                                    ? `${(u.room_credits.tokens_total || 0) - (u.room_credits.tokens_used || 0)} left`
-                                                                    : '—'}
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                ) : (
-                                                    <tr>
-                                                        <td colSpan={4} className="platform-subtitle">
-                                                            No users.
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                            </tbody>
-                                        </table>
+                                <button
+                                    className="platform-accordion-trigger"
+                                    type="button"
+                                    onClick={() => setOpenTenantId(prev => (prev === t.id ? null : t.id))}
+                                    aria-expanded={isOpen}
+                                >
+                                    <div style={{ display: 'grid', gap: '0.35rem', textAlign: 'left' }}>
+                                        <div className="platform-kpi-row">
+                                            <h2 style={{ margin: 0 }}>{t.name}</h2>
+                                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                                <span className="badge neutral">{t.id?.slice(0, 8)}</span>
+                                                {membership?.status ? (
+                                                    <span className={`badge ${membership.status === 'live' ? 'success' : 'pending'}`}>{membership.status}</span>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                        <p className="platform-subtitle" style={{ margin: 0 }}>
+                                            Primary: {primaryProfile ? `${primaryProfile.name || '—'} (${primaryProfile.email || '—'})` : '—'} •{' '}
+                                            <span className="platform-mono">{primary?.role || '—'}</span>
+                                        </p>
+                                        <p className="platform-subtitle" style={{ margin: 0 }}>
+                                            Membership:{' '}
+                                            {membership ? (
+                                                <span className="platform-mono">
+                                                    {membership.plan} • {formatNZD(membership.monthly_amount_cents)} / month
+                                                </span>
+                                            ) : (
+                                                '—'
+                                            )}{' '}
+                                            • Tokens: <span className="platform-mono">{tokensLeft}</span> left ({tokensTotal} total)
+                                        </p>
                                     </div>
-                                </div>
+                                    <span className="platform-mono">{isOpen ? '−' : '+'}</span>
+                                </button>
 
-                                <div style={{ marginTop: '1.25rem' }}>
-                                    <h3 style={{ margin: 0 }}>Invoices</h3>
-                                    <div className="platform-table-wrap" style={{ marginTop: '0.75rem' }}>
-                                        <table className="platform-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Number</th>
-                                                    <th>Amount</th>
-                                                    <th>Status</th>
-                                                    <th>Issued</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {invoices.length ? (
-                                                    invoices.slice(0, 12).map(inv => (
-                                                        <tr key={inv.id}>
-                                                            <td className="platform-mono">{inv.invoice_number || inv.id?.slice(0, 8)}</td>
-                                                            <td className="platform-mono">{formatNZD(inv.amount_cents)}</td>
-                                                            <td>
-                                                                <span className={`badge ${inv.status === 'paid' ? 'success' : 'pending'}`}>
-                                                                    {inv.status || '—'}
-                                                                </span>
-                                                            </td>
-                                                            <td className="platform-mono">
-                                                                {inv.issued_on ? String(inv.issued_on) : new Date(inv.created_at).toLocaleDateString()}
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                ) : (
-                                                    <tr>
-                                                        <td colSpan={4} className="platform-subtitle">
-                                                            No invoices.
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <div className="platform-grid" style={{ marginTop: '1.25rem' }}>
-                                    <div className="platform-card span-6">
-                                        <h3 style={{ marginTop: 0 }}>Add user</h3>
-                                        <label className="platform-subtitle">Email</label>
-                                        <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} disabled={busy} />
-                                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
-                                            Role
-                                        </label>
-                                        <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} disabled={busy}>
-                                            <option value="member">member</option>
-                                            <option value="owner">owner</option>
-                                            <option value="admin">admin</option>
-                                        </select>
-                                        <div className="platform-card-actions">
-                                            <button className="btn primary" type="button" onClick={() => addUser(t.id)} disabled={busy || !inviteEmail.trim()}>
-                                                {busy ? 'Working…' : 'Add / invite'}
+                                {isOpen ? (
+                                    <>
+                                        <div className="platform-card-actions" style={{ marginTop: '1rem' }}>
+                                            <button className="btn secondary" type="button" onClick={() => setEditTenantId(t.id)}>
+                                                Edit
                                             </button>
                                         </div>
-                                    </div>
 
-                                    <div className="platform-card span-6">
-                                        <h3 style={{ marginTop: 0 }}>Set room credits</h3>
-                                        <label className="platform-subtitle">User</label>
-                                        <select value={creditsUserId} onChange={e => setCreditsUserId(e.target.value)} disabled={busy}>
-                                            <option value="">Select user…</option>
-                                            {users.map(u => (
-                                                <option key={u.user_id} value={u.user_id}>
-                                                    {u.profile?.email || u.user_id}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
-                                            Tokens total (this month)
-                                        </label>
-                                        <input value={creditsTokens} onChange={e => setCreditsTokens(e.target.value)} disabled={busy} />
-                                        <div className="platform-card-actions">
-                                            <button className="btn primary" type="button" onClick={() => setCredits(t.id)} disabled={busy || !creditsUserId}>
-                                                {busy ? 'Working…' : 'Save credits'}
-                                            </button>
+                                        <div style={{ marginTop: '1rem' }}>
+                                            <h3 style={{ margin: 0 }}>Tenant users</h3>
+                                            <div className="platform-table-wrap" style={{ marginTop: '0.75rem' }}>
+                                                <table className="platform-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Name</th>
+                                                            <th>Email</th>
+                                                            <th>Role</th>
+                                                            <th>Tokens</th>
+                                                            <th>Magic link</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {users.length ? (
+                                                            users.map(u => (
+                                                                <tr key={`${u.tenant_id}:${u.user_id}`}>
+                                                                    <td>{u.profile?.name || '—'}</td>
+                                                                    <td className="platform-mono">{u.profile?.email || '—'}</td>
+                                                                    <td className="platform-mono">{u.role}</td>
+                                                                    <td className="platform-mono">
+                                                                        {u.room_credits
+                                                                            ? `${Math.max(0, (u.room_credits.tokens_total || 0) - (u.room_credits.tokens_used || 0))} left`
+                                                                            : '—'}
+                                                                    </td>
+                                                                    <td>
+                                                                        <button
+                                                                            className="btn ghost"
+                                                                            type="button"
+                                                                            onClick={async () => {
+                                                                                try {
+                                                                                    await sendMagicLink({ email: u.profile?.email, userId: u.user_id });
+                                                                                } catch (err) {
+                                                                                    setError(err?.message || 'Failed to send magic link.');
+                                                                                }
+                                                                            }}
+                                                                            disabled={!u.profile?.email}
+                                                                        >
+                                                                            Send
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))
+                                                        ) : (
+                                                            <tr>
+                                                                <td colSpan={5} className="platform-subtitle">
+                                                                    No users.
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
+
+                                        <div style={{ marginTop: '1.25rem' }}>
+                                            <h3 style={{ margin: 0 }}>Invoices</h3>
+                                            <div className="platform-table-wrap" style={{ marginTop: '0.75rem' }}>
+                                                <table className="platform-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Number</th>
+                                                            <th>Amount</th>
+                                                            <th>Status</th>
+                                                            <th>Issued</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {invoices.length ? (
+                                                            invoices.slice(0, 12).map(inv => (
+                                                                <tr key={inv.id}>
+                                                                    <td className="platform-mono">{inv.invoice_number || inv.id?.slice(0, 8)}</td>
+                                                                    <td className="platform-mono">{formatNZD(inv.amount_cents)}</td>
+                                                                    <td>
+                                                                        <span className={`badge ${inv.status === 'paid' ? 'success' : 'pending'}`}>
+                                                                            {inv.status || '—'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="platform-mono">
+                                                                        {inv.issued_on ? String(inv.issued_on) : new Date(inv.created_at).toLocaleDateString()}
+                                                                    </td>
+                                                                </tr>
+                                                            ))
+                                                        ) : (
+                                                            <tr>
+                                                                <td colSpan={4} className="platform-subtitle">
+                                                                    No invoices.
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
+                                        <TenantInlineActions
+                                            tenant={t}
+                                            monthStart={monthStart}
+                                            authHeader={authHeader}
+                                            onReload={load}
+                                            setGlobalError={setError}
+                                            sendMagicLink={sendMagicLink}
+                                        />
+                                    </>
+                                ) : null}
                             </section>
                         );
                     })}
                 </div>
+            ) : (
+                <div className="platform-empty">
+                    <p className="platform-subtitle">No tenants match this search.</p>
+                </div>
             )}
+
+            <TenantWizardModal
+                open={createOpen}
+                monthStart={monthStart}
+                authHeader={authHeader}
+                onClose={() => setCreateOpen(false)}
+                onCreated={async createdTenantId => {
+                    await load();
+                    if (createdTenantId) setOpenTenantId(createdTenantId);
+                }}
+                setGlobalError={setError}
+            />
+
+            <TenantEditModal
+                open={Boolean(editTenantId)}
+                tenant={selectedTenant}
+                monthStart={monthStart}
+                authHeader={authHeader}
+                onClose={() => setEditTenantId(null)}
+                onSaved={load}
+                setGlobalError={setError}
+            />
         </main>
     );
 }

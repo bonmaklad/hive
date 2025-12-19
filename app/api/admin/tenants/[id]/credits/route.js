@@ -36,12 +36,21 @@ export async function POST(request, { params }) {
     if (tuError) return NextResponse.json({ error: tuError.message }, { status: 500 });
     if (!tu) return NextResponse.json({ error: 'User is not in this tenant.' }, { status: 400 });
 
+    const { data: existing, error: existingError } = await guard.admin
+        .from('room_credits')
+        .select('tokens_used')
+        .eq('owner_id', ownerId)
+        .eq('period_start', periodStart)
+        .maybeSingle();
+
+    if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
+
     const { error: upsertError } = await guard.admin.from('room_credits').upsert(
         {
             owner_id: ownerId,
             period_start: periodStart,
             tokens_total: Math.max(0, Math.floor(tokensTotal)),
-            tokens_used: 0
+            tokens_used: Math.max(0, existing?.tokens_used || 0)
         },
         { onConflict: 'owner_id,period_start' }
     );
@@ -50,4 +59,3 @@ export async function POST(request, { params }) {
 
     return NextResponse.json({ ok: true });
 }
-

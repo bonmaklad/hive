@@ -41,50 +41,75 @@ export async function GET(request) {
 
     const userIds = Array.from(new Set((tenantUsers || []).map(tu => tu.user_id).filter(Boolean)));
 
-    const { data: profiles, error: profilesError } = await guard.admin
-        .from('profiles')
-        .select('id, name, email, is_admin')
-        .in('id', userIds);
-
-    if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 });
-
-    const { data: credits, error: creditsError } = await guard.admin
-        .from('room_credits')
-        .select('owner_id, period_start, tokens_total, tokens_used')
-        .eq('period_start', monthStart)
-        .in('owner_id', userIds);
-
-    if (creditsError) return NextResponse.json({ error: creditsError.message }, { status: 500 });
-
-    const ownerIds = Array.from(
-        new Set((tenantUsers || []).filter(tu => tu.role === 'owner').map(tu => tu.user_id).filter(Boolean))
-    );
-
-    const { data: memberships, error: memError } = await guard.admin
-        .from('memberships')
-        .select('*')
-        .in('owner_id', ownerIds);
-
-    if (memError) return NextResponse.json({ error: memError.message }, { status: 500 });
-
-    const { data: invoices, error: invError } = await guard.admin
-        .from('invoices')
-        .select('id, owner_id, invoice_number, amount_cents, status, issued_on, created_at')
-        .in('owner_id', ownerIds)
-        .order('created_at', { ascending: false })
-        .limit(500);
-
-    if (invError) return NextResponse.json({ error: invError.message }, { status: 500 });
-
-    const profilesById = Object.fromEntries((profiles || []).map(p => [p.id, p]));
-    const creditsByOwner = Object.fromEntries((credits || []).map(c => [c.owner_id, c]));
-    const membershipsByOwner = Object.fromEntries((memberships || []).map(m => [m.owner_id, m]));
-    const invoicesByOwner = invoices?.reduce((acc, inv) => {
-        (acc[inv.owner_id] ||= []).push(inv);
+    const groupedUsers = tenantUsers?.reduce((acc, tu) => {
+        (acc[tu.tenant_id] ||= []).push({
+            ...tu
+        });
         return acc;
     }, {});
 
-    const groupedUsers = tenantUsers?.reduce((acc, tu) => {
+    const resolvePrimaryUser = users => {
+        const list = Array.isArray(users) ? users : [];
+        return list.find(u => u.role === 'owner') || list.find(u => u.role === 'admin') || list[0] || null;
+    };
+
+    const primaryUserIds = Array.from(
+        new Set(
+            (tenantIds || [])
+                .map(tenantId => resolvePrimaryUser(groupedUsers?.[tenantId])?.user_id)
+                .filter(Boolean)
+        )
+    );
+
+    const profilesById = {};
+    const creditsByOwner = {};
+    const membershipsByOwner = {};
+    const invoicesByOwner = {};
+
+    if (userIds.length) {
+        const { data: profiles, error: profilesError } = await guard.admin
+            .from('profiles')
+            .select('id, name, email, is_admin')
+            .in('id', userIds);
+
+        if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 });
+
+        const { data: credits, error: creditsError } = await guard.admin
+            .from('room_credits')
+            .select('owner_id, period_start, tokens_total, tokens_used')
+            .eq('period_start', monthStart)
+            .in('owner_id', userIds);
+
+        if (creditsError) return NextResponse.json({ error: creditsError.message }, { status: 500 });
+
+        for (const profile of profiles || []) profilesById[profile.id] = profile;
+        for (const credit of credits || []) creditsByOwner[credit.owner_id] = credit;
+    }
+
+    if (primaryUserIds.length) {
+        const { data: memberships, error: memError } = await guard.admin
+            .from('memberships')
+            .select('*')
+            .in('owner_id', primaryUserIds);
+
+        if (memError) return NextResponse.json({ error: memError.message }, { status: 500 });
+
+        const { data: invoices, error: invError } = await guard.admin
+            .from('invoices')
+            .select('id, owner_id, invoice_number, amount_cents, status, issued_on, created_at')
+            .in('owner_id', primaryUserIds)
+            .order('created_at', { ascending: false })
+            .limit(500);
+
+        if (invError) return NextResponse.json({ error: invError.message }, { status: 500 });
+
+        for (const membership of memberships || []) membershipsByOwner[membership.owner_id] = membership;
+        for (const invoice of invoices || []) {
+            (invoicesByOwner[invoice.owner_id] ||= []).push(invoice);
+        }
+    }
+
+    const hydratedUsers = tenantUsers?.reduce((acc, tu) => {
         (acc[tu.tenant_id] ||= []).push({
             ...tu,
             profile: profilesById[tu.user_id] || null,
@@ -94,15 +119,17 @@ export async function GET(request) {
     }, {});
 
     const result = (tenants || []).map(t => {
-        const users = groupedUsers?.[t.id] || [];
+        const users = hydratedUsers?.[t.id] || [];
         const owner = users.find(u => u.role === 'owner') || null;
-        const ownerId = owner?.user_id || null;
+        const primary = owner || users.find(u => u.role === 'admin') || users[0] || null;
+        const primaryUserId = primary?.user_id || null;
         return {
             ...t,
             users,
             owner,
-            membership: ownerId ? membershipsByOwner[ownerId] || null : null,
-            invoices: ownerId ? invoicesByOwner?.[ownerId] || [] : []
+            primary_user: primary,
+            membership: primaryUserId ? membershipsByOwner[primaryUserId] || null : null,
+            invoices: primaryUserId ? invoicesByOwner?.[primaryUserId] || [] : []
         };
     });
 
@@ -122,4 +149,3 @@ export async function POST(request) {
 
     return NextResponse.json({ tenant: data });
 }
-
