@@ -5,7 +5,7 @@ export const runtime = 'nodejs';
 
 function safeQuery(value) {
     const q = typeof value === 'string' ? value.trim() : '';
-    if (q.length < 2) return '';
+    if (q.length < 1) return '';
     if (q.length > 64) return q.slice(0, 64);
     return q;
 }
@@ -45,4 +45,3 @@ export async function GET(request) {
 
     return NextResponse.json({ results });
 }
-

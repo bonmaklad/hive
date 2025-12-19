@@ -112,7 +112,7 @@ export default function ChatDrawer() {
                 return;
             }
 
-            if (query.length < 2) {
+            if (query.length < 1) {
                 setSuggestions([]);
                 return;
             }
@@ -148,12 +148,14 @@ export default function ChatDrawer() {
 
     const pickEveryone = () => {
         setMentionEveryone(true);
+        setMentionedUserIds([]);
         setText(current => replaceTrailingMention(current, '@everyone'));
         setShowSuggestions(false);
     };
 
     const pickUser = u => {
         if (!u?.id) return;
+        setMentionEveryone(false);
         setMentionedUserIds(current => Array.from(new Set([...current, u.id])));
         const display = u.name ? `@${u.name}` : u.email ? `@${u.email}` : '@member';
         setText(current => replaceTrailingMention(current, display));
@@ -278,10 +280,12 @@ export default function ChatDrawer() {
                         />
                         {showSuggestions && (
                             <div className="platform-chat-suggest">
-                                <button type="button" className="platform-chat-suggest-item" onClick={pickEveryone}>
-                                    @everyone
-                                    <span className="platform-subtitle">Email all members (admin only)</span>
-                                </button>
+                                {profile?.is_admin ? (
+                                    <button type="button" className="platform-chat-suggest-item" onClick={pickEveryone}>
+                                        @everyone
+                                        <span className="platform-subtitle">Email all members</span>
+                                    </button>
+                                ) : null}
                                 {suggestions.map(u => (
                                     <button
                                         key={u.id}
@@ -293,7 +297,7 @@ export default function ChatDrawer() {
                                         <span className="platform-subtitle">{u.email}</span>
                                     </button>
                                 ))}
-                                {!suggestions.length && getMentionQuery(text)?.length >= 2 && (
+                                {!suggestions.length && getMentionQuery(text)?.length >= 1 && (
                                     <div className="platform-chat-suggest-empty">No matches.</div>
                                 )}
                             </div>
