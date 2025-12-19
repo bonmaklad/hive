@@ -96,11 +96,11 @@ export default function PlatformSettingsPage() {
 
             <div className="platform-card" style={{ marginTop: '1.5rem' }}>
                 <h2>Password</h2>
-                <p className="platform-subtitle">Set a password so you can sign in without a magic link.</p>
+                <p className="platform-subtitle">Set a password so you can sign in without a magic link from now on or to change password.</p>
                 <UpdatePasswordForm />
-                <p className="platform-message info" style={{ marginTop: '1rem' }}>
+                {/* <p className="platform-message info" style={{ marginTop: '1rem' }}>
                     Magic link sign-in still works after you set a password.
-                </p>
+                </p> */}
             </div>
         </main>
     );

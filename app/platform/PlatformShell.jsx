@@ -21,9 +21,30 @@ export default function PlatformShell({ children }) {
     const [ready, setReady] = useState(false);
     const [user, setUser] = useState(null);
     const [loadError, setLoadError] = useState('');
+    const [profile, setProfile] = useState(null);
+    const [tenantRole, setTenantRole] = useState(null);
+    const [tenantRoleError, setTenantRoleError] = useState('');
 
     useEffect(() => {
         let cancelled = false;
+
+        const loadTenantRole = async sessionUser => {
+            setTenantRoleError('');
+            const { data, error } = await supabase.from('tenant_users').select('role').eq('user_id', sessionUser.id);
+            if (error) {
+                const message = error?.message || '';
+                if (message.toLowerCase().includes('infinite recursion')) {
+                    setTenantRoleError('Tenant access is misconfigured (RLS recursion). Ask an admin to fix tenant_users policies.');
+                }
+                return null;
+            }
+
+            const roles = Array.isArray(data) ? data.map(r => r?.role).filter(Boolean) : [];
+            if (!roles.length) return null;
+            if (roles.includes('owner')) return 'owner';
+            if (roles.includes('admin')) return 'admin';
+            return roles[0] || null;
+        };
 
         const load = async () => {
             try {
@@ -42,12 +63,34 @@ export default function PlatformShell({ children }) {
                 }
 
                 setLoadError('');
-                setUser(data?.session?.user ?? null);
+                const sessionUser = data?.session?.user ?? null;
+                setUser(sessionUser);
                 setReady(true);
+
+                if (!sessionUser) {
+                    setProfile(null);
+                    setTenantRole(null);
+                    setTenantRoleError('');
+                    return;
+                }
+
+                const { data: profileData } = await supabase
+                    .from('profiles')
+                    .select('id, email, name, is_admin')
+                    .eq('id', sessionUser.id)
+                    .single();
+                if (cancelled) return;
+                setProfile(profileData ?? null);
+
+                const role = await loadTenantRole(sessionUser);
+                if (!cancelled) setTenantRole(role);
             } catch (err) {
                 if (cancelled) return;
                 setLoadError(err?.message || 'Could not check session.');
                 setUser(null);
+                setProfile(null);
+                setTenantRole(null);
+                setTenantRoleError('');
                 setReady(true);
             }
         };
@@ -56,8 +99,36 @@ export default function PlatformShell({ children }) {
 
         const { data } = supabase.auth.onAuthStateChange((_event, session) => {
             if (cancelled) return;
-            setUser(session?.user ?? null);
+            const sessionUser = session?.user ?? null;
+            setUser(sessionUser);
             setReady(true);
+
+            if (!sessionUser) {
+                setProfile(null);
+                setTenantRole(null);
+                setTenantRoleError('');
+                return;
+            }
+
+            supabase
+                .from('profiles')
+                .select('id, email, name, is_admin')
+                .eq('id', sessionUser.id)
+                .single()
+                .then(({ data: profileData }) => {
+                    if (!cancelled) setProfile(profileData ?? null);
+                })
+                .catch(() => {
+                    // ignore
+                });
+
+            loadTenantRole(sessionUser)
+                .then(role => {
+                    if (!cancelled) setTenantRole(role);
+                })
+                .catch(() => {
+                    // ignore
+                });
         });
 
         return () => {
@@ -108,7 +179,7 @@ export default function PlatformShell({ children }) {
     }
 
     return (
-        <PlatformSessionProvider value={{ user, supabase }}>
+        <PlatformSessionProvider value={{ user, profile, tenantRole, tenantRoleError, supabase }}>
             <div className="platform-shell">
                 <header className="platform-header">
                     <Link href="/platform" className="platform-brand">

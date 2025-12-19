@@ -1,52 +1,64 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { usePlatformSession } from '../PlatformContext';
-
-function getDefaultName(user) {
-    const name = user?.user_metadata?.name || user?.user_metadata?.full_name || '';
-    if (name) return String(name);
-    const email = user?.email || '';
-    if (email.includes('@')) return email.split('@')[0];
-    return 'Member';
-}
-
-function makeId() {
-    return Math.random().toString(16).slice(2) + Date.now().toString(16);
-}
-
-function storageKey() {
-    return 'hive_platform_chat_mock_v1';
-}
+import { getDisplayName, usePlatformSession } from '../PlatformContext';
 
 export default function ChatDrawer() {
-    const { user } = usePlatformSession();
+    const { user, profile, supabase } = usePlatformSession();
     const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState([]);
     const [text, setText] = useState('');
-    const [info, setInfo] = useState('Welcome to Hive HQ Members Chat');
+    const [error, setError] = useState('');
 
     const listRef = useRef(null);
-    const name = useMemo(() => getDefaultName(user), [user]);
+    const name = useMemo(() => getDisplayName({ user, profile }), [profile, user]);
 
     useEffect(() => {
-        try {
-            const raw = window.localStorage.getItem(storageKey());
-            if (!raw) return;
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) setMessages(parsed);
-        } catch {
-            // ignore
-        }
-    }, []);
+        let cancelled = false;
 
-    useEffect(() => {
-        try {
-            window.localStorage.setItem(storageKey(), JSON.stringify(messages.slice(-200)));
-        } catch {
-            // ignore
-        }
-    }, [messages]);
+        const load = async () => {
+            setError('');
+            const { data, error } = await supabase
+                .from('chat_messages')
+                .select('id, user_id, user_name, body, created_at')
+                .eq('channel', 'members')
+                .order('created_at', { ascending: true })
+                .limit(200);
+
+            if (cancelled) return;
+
+            if (error) {
+                setError(error.message);
+                setMessages([]);
+                return;
+            }
+
+            setMessages(data || []);
+        };
+
+        load();
+
+        const channel = supabase
+            .channel('chat:members')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: 'channel=eq.members' },
+                payload => {
+                    if (cancelled) return;
+                    const row = payload.new;
+                    setMessages(current => {
+                        if (current.some(m => m.id === row.id)) return current;
+                        return [...current, row].slice(-200);
+                    });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            cancelled = true;
+            supabase.removeChannel(channel);
+        };
+    }, [supabase]);
 
     useEffect(() => {
         if (!open) return;
@@ -60,16 +72,19 @@ export default function ChatDrawer() {
         const trimmed = text.trim();
         if (!trimmed) return;
 
-        setMessages(current => [
-            ...current,
-            {
-                id: makeId(),
-                author_id: user?.id || 'local',
-                author_name: name,
-                body: trimmed,
-                created_at: new Date().toISOString()
-            }
-        ]);
+        setError('');
+        const { error } = await supabase.from('chat_messages').insert({
+            channel: 'members',
+            user_id: user.id,
+            user_name: name,
+            body: trimmed
+        });
+
+        if (error) {
+            setError(error.message);
+            return;
+        }
+
         setText('');
     };
 
@@ -95,16 +110,22 @@ export default function ChatDrawer() {
                     </button>
                 </div>
 
-                {info && <p className="platform-message info">{info}</p>}
+                {error && <p className="platform-message error">{error}</p>}
 
                 <div className="platform-chat-list" ref={listRef}>
                     {messages.length ? (
                         messages.map(msg => (
-                            <div key={msg.id} className="platform-chat-msg">
+                            <div
+                                key={msg.id}
+                                className={`platform-chat-msg ${msg.user_id === user?.id ? 'own' : ''}`}
+                            >
                                 <div className="platform-chat-meta">
-                                    <span className="platform-chat-author">{msg.author_name}</span>
+                                    <span className="platform-chat-author">{msg.user_name}</span>
                                     <span className="platform-chat-time">
-                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {new Date(msg.created_at).toLocaleTimeString([], {
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        })}
                                     </span>
                                 </div>
                                 <div className="platform-chat-body">{msg.body}</div>
@@ -134,4 +155,3 @@ export default function ChatDrawer() {
         </>
     );
 }
-

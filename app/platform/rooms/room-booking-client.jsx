@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { spaces } from '@/lib/spaces';
+import { useEffect, useMemo, useState } from 'react';
+import { spaces as staticSpaces } from '@/lib/spaces';
+import { usePlatformSession } from '../PlatformContext';
 
 const TOKENS_PER_HOUR = {
     'nikau-room': 1,
@@ -49,10 +50,23 @@ function toCents(value) {
     return Math.round(Number(value || 0) * 100);
 }
 
+function parseTimeToMinutes(value) {
+    const [hh, mm] = String(value || '0:0').split(':').map(v => Number(v));
+    return (Number.isFinite(hh) ? hh : 0) * 60 + (Number.isFinite(mm) ? mm : 0);
+}
+
+function getMonthStart(dateString) {
+    const date = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return null;
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    return `${yyyy}-${mm}-01`;
+}
+
 function getPricing(space, hours) {
-    const perEvent = space?.pricing?.perEvent;
-    const halfDay = space?.pricing?.halfDay;
-    const fullDay = space?.pricing?.fullDay;
+    const perEvent = space?.pricing_per_event_cents;
+    const halfDay = space?.pricing_half_day_cents;
+    const fullDay = space?.pricing_full_day_cents;
 
     if (!hours || hours <= 0) return { label: '', amount: 0 };
 
@@ -64,14 +78,14 @@ function getPricing(space, hours) {
     }
 
     if (fullDay) {
-        return { label: `${hours} hour(s)`, amount: (fullDay / 8) * hours };
+        return { label: `${hours} hour(s)`, amount: Math.round((fullDay / 8) * hours) };
     }
     if (halfDay) {
-        return { label: `${hours} hour(s)`, amount: (halfDay / 4) * hours };
+        return { label: `${hours} hour(s)`, amount: Math.round((halfDay / 4) * hours) };
     }
     if (perEvent) {
         const hoursPerEvent = 5;
-        return { label: `${hours} hour(s)`, amount: (perEvent / hoursPerEvent) * hours };
+        return { label: `${hours} hour(s)`, amount: Math.round((perEvent / hoursPerEvent) * hours) };
     }
 
     return { label: `${hours} hour(s)`, amount: 0 };
@@ -90,37 +104,19 @@ function formatRange(startIndex, endIndex) {
 }
 
 export default function RoomBookingClient() {
-    const rooms = useMemo(() => {
-        const wanted = new Set([
-            'nikau-room',
-            'backhouse-boardroom',
-            'hive-lounge',
-            'hive-training-room',
-            'design-lab',
-            'kauri-room',
-            'manukau-room'
-        ]);
-        return spaces
-            .filter(space => wanted.has(space.slug))
-            .map(space => ({
-                id: space.slug,
-                name: space.title,
-                image: getRoomImage(space),
-                pricing: space.pricing || {},
-                tokensPerHour: TOKENS_PER_HOUR[space.slug] ?? 1
-            }));
-    }, []);
-
-    const [roomId, setRoomId] = useState(rooms[0]?.id || 'nikau-room');
+    const { user, supabase } = usePlatformSession();
+    const [rooms, setRooms] = useState([]);
+    const [loadingRooms, setLoadingRooms] = useState(true);
+    const [roomId, setRoomId] = useState('nikau-room');
     const [date, setDate] = useState(() => formatDateInput(''));
-    const [tokensLeft, setTokensLeft] = useState(3);
+    const [tokensLeft, setTokensLeft] = useState(0);
     const [startIndex, setStartIndex] = useState(null);
     const [endIndex, setEndIndex] = useState(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
 
-    const room = useMemo(() => rooms.find(r => r.id === roomId) || rooms[0], [roomId, rooms]);
+    const room = useMemo(() => rooms.find(r => r.id === roomId) || rooms[0] || null, [roomId, rooms]);
 
     const selection = useMemo(() => {
         if (startIndex == null) return { hours: 0, indices: [] };
@@ -133,18 +129,145 @@ export default function RoomBookingClient() {
         return { hours: indices.length, indices };
     }, [endIndex, startIndex]);
 
-    const requiredTokens = selection.hours * (room?.tokensPerHour || 0);
+    const requiredTokens = selection.hours * (room?.tokens_per_hour || 0);
     const canUseTokens = requiredTokens > 0 && tokensLeft >= requiredTokens;
     const pricing = useMemo(() => getPricing(room, selection.hours), [room, selection.hours]);
-    const priceCents = toCents(pricing.amount);
+    const priceCents = Number(pricing.amount || 0);
 
-    const unavailable = useMemo(() => {
-        const day = Number(String(date || '').slice(-2));
-        if (!Number.isFinite(day)) return new Set();
-        if (day % 2 === 0) return new Set();
-        return new Set(['12:00', '15:00']);
-    }, [date]);
+    const [unavailable, setUnavailable] = useState(new Set());
     const fullDayAvailable = useMemo(() => TIME_SLOTS.every(t => !unavailable.has(t)), [unavailable]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const wanted = new Set([
+            'nikau-room',
+            'backhouse-boardroom',
+            'hive-lounge',
+            'hive-training-room',
+            'design-lab',
+            'kauri-room',
+            'manukau-room'
+        ]);
+
+        const load = async () => {
+            setLoadingRooms(true);
+            const { data, error } = await supabase
+                .from('spaces')
+                .select('slug, title, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, tokens_per_hour, image')
+                .in('slug', Array.from(wanted));
+
+            if (cancelled) return;
+
+            if (error) {
+                setError(error.message);
+                setRooms([]);
+                setLoadingRooms(false);
+                return;
+            }
+
+            const staticBySlug = Object.fromEntries(staticSpaces.map(s => [s.slug, s]));
+            const mapped = (data || [])
+                .map(row => {
+                    const fallback = staticBySlug[row.slug];
+                    return {
+                        id: row.slug,
+                        slug: row.slug,
+                        name: row.title,
+                        title: row.title,
+                        tokens_per_hour: row.tokens_per_hour ?? TOKENS_PER_HOUR[row.slug] ?? 1,
+                        pricing_half_day_cents: row.pricing_half_day_cents,
+                        pricing_full_day_cents: row.pricing_full_day_cents,
+                        pricing_per_event_cents: row.pricing_per_event_cents,
+                        image: row.image || getRoomImage(fallback)
+                    };
+                })
+                .sort((a, b) => a.name.localeCompare(b.name));
+
+            setError('');
+            setRooms(mapped);
+            if (!mapped.some(r => r.id === roomId) && mapped[0]) {
+                setRoomId(mapped[0].id);
+            }
+            setLoadingRooms(false);
+        };
+
+        load();
+        return () => {
+            cancelled = true;
+        };
+    }, [roomId, supabase]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadCredits = async () => {
+            const periodStart = getMonthStart(date);
+            if (!periodStart) return;
+
+            const { data, error } = await supabase
+                .from('room_credits')
+                .select('tokens_total, tokens_used')
+                .eq('owner_id', user.id)
+                .eq('period_start', periodStart)
+                .maybeSingle();
+
+            if (cancelled) return;
+
+            if (error) {
+                setTokensLeft(0);
+                return;
+            }
+
+            const total = data?.tokens_total ?? 0;
+            const used = data?.tokens_used ?? 0;
+            setTokensLeft(Math.max(0, total - used));
+        };
+
+        loadCredits();
+        return () => {
+            cancelled = true;
+        };
+    }, [date, supabase, user.id]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadBookings = async () => {
+            if (!roomId || !date) return;
+            const { data, error } = await supabase
+                .from('room_bookings')
+                .select('start_time, end_time, status')
+                .eq('space_slug', roomId)
+                .eq('booking_date', date)
+                .in('status', ['requested', 'approved']);
+
+            if (cancelled) return;
+
+            if (error) {
+                setUnavailable(new Set());
+                return;
+            }
+
+            const blocked = new Set();
+            for (const booking of data || []) {
+                const startMin = parseTimeToMinutes(booking.start_time);
+                const endMin = parseTimeToMinutes(booking.end_time);
+                TIME_SLOTS.forEach(time => {
+                    const slotStart = parseTimeToMinutes(time);
+                    const slotEnd = slotStart + 60;
+                    const overlaps = slotStart < endMin && slotEnd > startMin;
+                    if (overlaps) blocked.add(time);
+                });
+            }
+            setUnavailable(blocked);
+        };
+
+        loadBookings();
+        return () => {
+            cancelled = true;
+        };
+    }, [date, roomId, supabase]);
 
     const submit = async event => {
         event.preventDefault();
@@ -159,13 +282,29 @@ export default function RoomBookingClient() {
                 if (unavailable.has(TIME_SLOTS[idx])) throw new Error('That time range includes unavailable time.');
             }
 
-            await new Promise(resolve => setTimeout(resolve, 500));
+            const min = Math.min(startIndex, endIndex == null ? startIndex : endIndex);
+            const max = Math.max(startIndex, endIndex == null ? startIndex : endIndex);
+            const startTime = `${TIME_SLOTS[min]}:00`;
+            const endHour = Number(TIME_SLOTS[max].slice(0, 2)) + 1;
+            const endTime = `${String(endHour).padStart(2, '0')}:00:00`;
+
+            const { error: insertError } = await supabase.from('room_bookings').insert({
+                owner_id: user.id,
+                space_slug: roomId,
+                booking_date: date,
+                start_time: startTime,
+                end_time: endTime,
+                hours: selection.hours,
+                tokens_used: canUseTokens ? requiredTokens : 0,
+                price_cents: canUseTokens ? 0 : priceCents,
+                status: 'requested'
+            });
+            if (insertError) throw insertError;
 
             if (canUseTokens) {
-                setTokensLeft(current => current - requiredTokens);
-                setInfo('Booking requested. Tokens will be deducted once approved (demo).');
+                setInfo('Booking requested. Tokens will be deducted once approved.');
             } else {
-                setInfo(`Booking requested. Payment required: ${formatNZD(priceCents / 100)} (${pricing.label}) (demo).`);
+                setInfo(`Booking requested. Payment required: ${formatNZD(priceCents / 100)} (${pricing.label}).`);
             }
         } catch (err) {
             setError(err?.message || 'Could not create booking.');
@@ -227,7 +366,7 @@ export default function RoomBookingClient() {
                                 setError('');
                                 setInfo('');
                             }}
-                            disabled={busy}
+                            disabled={busy || loadingRooms}
                         >
                             {rooms.map(r => (
                                 <option key={r.id} value={r.id}>
@@ -319,19 +458,23 @@ export default function RoomBookingClient() {
                 </form>
 
                 <aside className="platform-room-preview" aria-label="Selected room preview">
-                    <figure className="hex hex-program platform-room-hex" style={{ backgroundImage: `url(${room.image})` }}>
-                        <figcaption>{room.name}</figcaption>
-                    </figure>
+                    {room ? (
+                        <figure className="hex hex-program platform-room-hex" style={{ backgroundImage: `url(${room.image})` }}>
+                            <figcaption>{room.name}</figcaption>
+                        </figure>
+                    ) : (
+                        <div className="platform-card">
+                            <p className="platform-subtitle">Loading room…</p>
+                        </div>
+                    )}
                     <div className="platform-card" style={{ marginTop: '1rem' }}>
                         <h3 style={{ marginTop: 0 }}>Pricing</h3>
-                        {'perEvent' in room.pricing ? (
-                            <p className="platform-subtitle">
-                                {room.pricing.perEvent ? `${formatNZD(room.pricing.perEvent)} per event` : '—'}
-                            </p>
+                        {room?.pricing_per_event_cents ? (
+                            <p className="platform-subtitle">{formatNZD(room.pricing_per_event_cents / 100)} per event</p>
                         ) : (
                             <div className="platform-subtitle">
-                                {room.pricing.halfDay ? <div>{formatNZD(room.pricing.halfDay)} half day</div> : null}
-                                {room.pricing.fullDay ? <div>{formatNZD(room.pricing.fullDay)} full day</div> : null}
+                                {room?.pricing_half_day_cents ? <div>{formatNZD(room.pricing_half_day_cents / 100)} half day</div> : null}
+                                {room?.pricing_full_day_cents ? <div>{formatNZD(room.pricing_full_day_cents / 100)} full day</div> : null}
                             </div>
                         )}
                     </div>

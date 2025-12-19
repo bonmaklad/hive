@@ -16,3 +16,12 @@ export function usePlatformSession() {
     return ctx;
 }
 
+export function getDisplayName({ user, profile }) {
+    const profileName = profile?.name;
+    if (profileName) return String(profileName);
+    const metaName = user?.user_metadata?.name || user?.user_metadata?.full_name;
+    if (metaName) return String(metaName);
+    const email = user?.email || '';
+    if (email.includes('@')) return email.split('@')[0];
+    return 'Member';
+}

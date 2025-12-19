@@ -1,19 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { usePlatformSession } from '../PlatformContext';
-
-function makeId() {
-    return Math.random().toString(16).slice(2) + Date.now().toString(16);
-}
-
-function ticketsStorageKey(userId) {
-    return `hive_platform_tickets_mock_v1:${userId || 'anon'}`;
-}
-
-function getDisplayName(user) {
-    return user?.user_metadata?.name || user?.user_metadata?.full_name || user?.email || 'Member';
-}
+import { getDisplayName, usePlatformSession } from '../PlatformContext';
 
 const COLUMNS = [
     { id: 'backlog', title: 'Backlog' },
@@ -26,11 +14,11 @@ function isAdmin(user) {
 }
 
 export default function TicketsClient() {
-    const { user } = usePlatformSession();
-    const admin = isAdmin(user);
+    const { user, profile, supabase } = usePlatformSession();
+    const admin = Boolean(profile?.is_admin) || isAdmin(user);
 
     const userId = user?.id || 'local';
-    const author = useMemo(() => getDisplayName(user), [user]);
+    const author = useMemo(() => getDisplayName({ user, profile }), [profile, user]);
 
     const [tickets, setTickets] = useState([]);
     const [title, setTitle] = useState('');
@@ -40,23 +28,42 @@ export default function TicketsClient() {
     const [info, setInfo] = useState('');
 
     useEffect(() => {
-        try {
-            const raw = window.localStorage.getItem(ticketsStorageKey(userId));
-            if (!raw) return;
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) setTickets(parsed);
-        } catch {
-            // ignore
-        }
-    }, [userId]);
+        let cancelled = false;
 
-    useEffect(() => {
-        try {
-            window.localStorage.setItem(ticketsStorageKey(userId), JSON.stringify(tickets.slice(-200)));
-        } catch {
-            // ignore
-        }
-    }, [tickets, userId]);
+        const load = async () => {
+            setError('');
+            const query = supabase
+                .from('tickets')
+                .select('id, owner_id, status, title, body, created_by_name, created_at, updated_at')
+                .order('created_at', { ascending: false })
+                .limit(200);
+
+            const { data, error } = admin ? await query : await query.eq('owner_id', user.id);
+            if (cancelled) return;
+
+            if (error) {
+                setError(error.message);
+                setTickets([]);
+                return;
+            }
+
+            setTickets(data || []);
+        };
+
+        load();
+
+        const channel = supabase
+            .channel('tickets')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => {
+                load();
+            })
+            .subscribe();
+
+        return () => {
+            cancelled = true;
+            supabase.removeChannel(channel);
+        };
+    }, [admin, supabase, user.id]);
 
     const submit = async event => {
         event.preventDefault();
@@ -67,20 +74,14 @@ export default function TicketsClient() {
         try {
             const trimmedTitle = title.trim();
             if (!trimmedTitle) throw new Error('Add a title.');
-            await new Promise(resolve => setTimeout(resolve, 350));
-
-            setTickets(current => [
-                {
-                    id: makeId(),
-                    owner_id: userId,
-                    status: 'backlog',
-                    title: trimmedTitle,
-                    body: body.trim(),
-                    created_at: new Date().toISOString(),
-                    created_by: author
-                },
-                ...current
-            ]);
+            const { error } = await supabase.from('tickets').insert({
+                owner_id: user.id,
+                status: 'backlog',
+                title: trimmedTitle,
+                body: body.trim(),
+                created_by_name: author
+            });
+            if (error) throw error;
 
             setTitle('');
             setBody('');
@@ -94,7 +95,10 @@ export default function TicketsClient() {
 
     const adminMove = async (ticketId, nextStatus) => {
         if (!admin) return;
-        setTickets(current => current.map(t => (t.id === ticketId ? { ...t, status: nextStatus } : t)));
+        const { error } = await supabase.from('tickets').update({ status: nextStatus }).eq('id', ticketId);
+        if (error) {
+            setError(error.message);
+        }
     };
 
     const byStatus = useMemo(() => {
@@ -175,7 +179,7 @@ export default function TicketsClient() {
                                                 <span className="platform-mono">
                                                     {new Date(t.created_at).toLocaleDateString()}
                                                 </span>
-                                                <span className="platform-subtitle">{t.created_by}</span>
+                                                <span className="platform-subtitle">{t.created_by_name}</span>
                                             </div>
 
                                             {admin ? (
@@ -226,4 +230,3 @@ export default function TicketsClient() {
         </>
     );
 }
-

@@ -1110,6 +1110,15 @@ main {
     margin-top: 0.6rem;
 }
 
+/* Highlight current user's messages */
+.platform-chat-msg.own {
+    background: rgba(111, 255, 182, 0.10);
+    border-color: rgba(111, 255, 182, 0.35);
+}
+.platform-chat-msg.own .platform-chat-author {
+    color: rgba(111, 255, 182, 0.95);
+}
+
 .platform-chat-meta {
     display: flex;
     align-items: baseline;

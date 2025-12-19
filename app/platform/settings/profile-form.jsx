@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 function getDefaultName(user) {
@@ -14,6 +14,34 @@ export default function ProfileForm({ user, onUpdated }) {
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
 
+    // Load the current profile name from the profiles table so the form reflects saved value
+    useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            if (!user?.id) return;
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('name')
+                    .eq('id', user.id)
+                    .maybeSingle();
+                if (cancelled) return;
+                if (!error && data && typeof data.name === 'string' && data.name.trim()) {
+                    setName(data.name);
+                } else {
+                    // Fall back to auth metadata if no profile name is set
+                    setName(getDefaultName(user));
+                }
+            } catch {
+                // ignore, keep existing value
+            }
+        };
+        load();
+        return () => {
+            cancelled = true;
+        };
+    }, [supabase, user?.id]);
+
     const save = async event => {
         event.preventDefault();
         setBusy(true);
@@ -26,10 +54,14 @@ export default function ProfileForm({ user, onUpdated }) {
                 throw new Error('Name must be at least 2 characters.');
             }
 
-            const { error: updateError } = await supabase.auth.updateUser({
-                data: { name: trimmed }
-            });
-            if (updateError) throw updateError;
+            const { error: updateProfileError } = await supabase
+                .from('profiles')
+                .update({ name: trimmed })
+                .eq('id', user.id);
+            if (updateProfileError) throw updateProfileError;
+
+            const { error: updateAuthError } = await supabase.auth.updateUser({ data: { name: trimmed } });
+            if (updateAuthError) throw updateAuthError;
 
             setInfo('Profile updated.');
             onUpdated?.();
@@ -65,4 +97,3 @@ export default function ProfileForm({ user, onUpdated }) {
         </form>
     );
 }
-

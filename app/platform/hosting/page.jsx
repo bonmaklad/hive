@@ -74,6 +74,7 @@ export default function PlatformHostingPage() {
                         <thead>
                             <tr>
                                 <th>Domain</th>
+                                <th>Internal URL</th>
                                 <th>Repo</th>
                                 <th>Framework</th>
                                 <th>Latest deploy</th>
@@ -89,6 +90,16 @@ export default function PlatformHostingPage() {
                                             <Link className="platform-link" href={`/platform/sites/${site.id}`}>
                                                 {site.domain}
                                             </Link>
+                                        </td>
+                                        <td>
+                                            <a
+                                                className="platform-link"
+                                                href={`https://${site.id}.hivehq.nz`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >
+                                                {site.id}.hivehq.nz
+                                            </a>
                                         </td>
                                         <td>{site.repo}</td>
                                         <td className="platform-mono">{site.framework}</td>
