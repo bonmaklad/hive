@@ -38,6 +38,7 @@ export default function AdminTenantsPage() {
     const authHeader = async () => {
         const { data } = await supabase.auth.getSession();
         const token = data?.session?.access_token;
+        if (!token) throw new Error('No session token. Please sign in again.');
         return { Authorization: `Bearer ${token}` };
     };
 

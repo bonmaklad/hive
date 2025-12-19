@@ -12,7 +12,8 @@ export const metadata = {
 export default function LoginPage() {
     return (
         <main className="platform-shell">
-            <div className="platform-card">
+            <div className="auth-wrap">
+            <div className="platform-card auth-card">
                 <h1>Platform sign in</h1>
                 <p className="platform-subtitle">Sign in to manage your sites and view deployments.</p>
                 <Suspense fallback={<p className="platform-subtitle">Loading…</p>}>
@@ -26,6 +27,7 @@ export default function LoginPage() {
                         Back to site
                     </Link>
                 </p>
+            </div>
             </div>
         </main>
     );

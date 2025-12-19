@@ -39,7 +39,9 @@ export default function AdminBookingsPage() {
 
     const authHeader = async () => {
         const { data } = await supabase.auth.getSession();
-        return { Authorization: `Bearer ${data?.session?.access_token}` };
+        const token = data?.session?.access_token;
+        if (!token) throw new Error('No session token. Please sign in again.');
+        return { Authorization: `Bearer ${token}` };
     };
 
     const load = async () => {
@@ -222,4 +224,3 @@ export default function AdminBookingsPage() {
         </main>
     );
 }
-

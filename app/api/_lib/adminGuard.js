@@ -14,7 +14,15 @@ export async function requireAdmin(request) {
         .maybeSingle();
 
     if (profileError) {
-        return { ok: false, status: 500, error: profileError.message };
+        const msg = profileError.message || 'Failed to load admin profile.';
+        if (msg.includes('Expected 3 parts in JWT') || msg.includes('JWT') || msg.includes('token')) {
+            return {
+                ok: false,
+                status: 500,
+                error: 'Server Supabase admin key is missing/invalid. Set `SUPABASE_SERVICE_KEY` (service_role key) on the Next.js server.'
+            };
+        }
+        return { ok: false, status: 500, error: msg };
     }
 
     if (!profile?.is_admin) {
@@ -23,4 +31,3 @@ export async function requireAdmin(request) {
 
     return { ok: true, user, profile, admin };
 }
-

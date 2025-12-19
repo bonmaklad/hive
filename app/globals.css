@@ -984,6 +984,19 @@ main {
     padding: 2rem 1.5rem;
 }
 
+/* Auth page centering */
+.auth-wrap {
+    min-height: calc(100vh - 4rem);
+    display: grid;
+    place-items: center;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 520px;
+    margin-inline: auto;
+}
+
 .platform-header,
 .platform-main {
     max-width: 1100px;
