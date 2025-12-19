@@ -40,6 +40,14 @@ export default function SiteDetailPage({ params }) {
     const [repoError, setRepoError] = useState('');
     const [loadingRepos, setLoadingRepos] = useState(false);
     const [showRepoModal, setShowRepoModal] = useState(false);
+    const [showInstallIdInput, setShowInstallIdInput] = useState(false);
+
+    const authHeader = async () => {
+        const { data } = await supabase.auth.getSession();
+        const token = data?.session?.access_token;
+        if (!token) throw new Error('No session token. Please sign in again.');
+        return { Authorization: `Bearer ${token}` };
+    };
 
     function toEntries(obj) {
         if (!obj || typeof obj !== 'object') return [];
@@ -206,11 +214,11 @@ export default function SiteDetailPage({ params }) {
                 return;
             }
             const res = await fetch(`/api/github/repos?installation_id=${encodeURIComponent(installationId)}&per_page=100&page=${page}`, {
-                headers: { Accept: 'application/json' }
+                headers: { Accept: 'application/json', ...(await authHeader()) }
             });
             const body = await res.json();
             if (!res.ok) {
-                setRepoError(body?.error || 'Could not load repositories.');
+                setRepoError(body?.detail || body?.error || 'Could not load repositories.');
                 setRepos([]);
                 setLoadingRepos(false);
                 return;
@@ -507,10 +515,13 @@ export default function SiteDetailPage({ params }) {
                         background: 'rgba(0,0,0,0.6)',
                         display: 'grid',
                         placeItems: 'center',
-                        zIndex: 1000
+                        zIndex: 1000,
+                        overflowY: 'auto',
+                        WebkitOverflowScrolling: 'touch',
+                        overscrollBehavior: 'contain'
                     }}
                 >
-                    <div className="platform-card" style={{ width: 'min(680px, 92vw)' }}>
+                    <div className="platform-card" style={{ width: 'min(680px, 92vw)', maxHeight: '90vh', overflow: 'auto' }}>
                         <h2 id="github-modal-title" style={{ marginTop: 0 }}>Connect GitHub</h2>
                         <p className="platform-subtitle">
                             You’ll be redirected to GitHub to install the Hive Deploy app for your account or organization.
@@ -559,27 +570,62 @@ export default function SiteDetailPage({ params }) {
                         background: 'rgba(0,0,0,0.6)',
                         display: 'grid',
                         placeItems: 'center',
-                        zIndex: 1000
+                        zIndex: 1000,
+                        overflowY: 'auto',
+                        WebkitOverflowScrolling: 'touch',
+                        overscrollBehavior: 'contain'
                     }}
                 >
-                    <div className="platform-card" style={{ width: 'min(800px, 95vw)' }}>
+                    <div className="platform-card" style={{ width: 'min(800px, 95vw)', maxHeight: '90vh', overflow: 'auto' }}>
                         <h2 id="repo-modal-title" style={{ marginTop: 0 }}>Choose a repository</h2>
                         <p className="platform-subtitle">Select from repositories the Hive Deploy app can access.</p>
-                        <div className="platform-actions" style={{ gap: '0.5rem' }}>
-                            <input
-                                className="table-input platform-mono"
-                                placeholder="Installation ID"
-                                value={installationId}
-                                onChange={e => setInstallationId(e.target.value)}
-                                style={{ maxWidth: 260 }}
-                            />
-                            <button className="btn secondary" type="button" onClick={() => loadRepos()} disabled={loadingRepos}>
-                                {loadingRepos ? 'Loading…' : 'Load repos'}
-                            </button>
-                            <button className="btn ghost" type="button" onClick={() => setShowRepoModal(false)}>
-                                Close
-                            </button>
-                        </div>
+                        {!installationId ? (
+                            <>
+                                <div className="platform-actions" style={{ gap: '0.5rem' }}>
+                                    <button className="btn secondary" type="button" onClick={connectGitHub}>
+                                        Connect GitHub
+                                    </button>
+                                    <button className="btn ghost" type="button" onClick={() => setShowRepoModal(false)}>
+                                        Close
+                                    </button>
+                                </div>
+                                <p className="platform-subtitle" style={{ marginTop: '0.5rem' }}>
+                                    After installing, return here and click “Choose repo” again to list repositories.
+                                </p>
+                                <div className="platform-actions" style={{ gap: '0.5rem', marginTop: '0.5rem' }}>
+                                    <button
+                                        className="btn ghost"
+                                        type="button"
+                                        onClick={() => setShowInstallIdInput(v => !v)}
+                                    >
+                                        {showInstallIdInput ? 'Hide advanced' : 'Advanced: enter installation ID'}
+                                    </button>
+                                </div>
+                                {showInstallIdInput && (
+                                    <div className="platform-actions" style={{ gap: '0.5rem', marginTop: '0.5rem' }}>
+                                        <input
+                                            className="table-input platform-mono"
+                                            placeholder="Installation ID"
+                                            value={installationId}
+                                            onChange={e => setInstallationId(e.target.value)}
+                                            style={{ maxWidth: 260 }}
+                                        />
+                                        <button className="btn secondary" type="button" onClick={() => loadRepos()} disabled={loadingRepos}>
+                                            {loadingRepos ? 'Loading…' : 'Load repos'}
+                                        </button>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="platform-actions" style={{ gap: '0.5rem' }}>
+                                <button className="btn secondary" type="button" onClick={() => loadRepos()} disabled={loadingRepos}>
+                                    {loadingRepos ? 'Loading…' : 'Load repos'}
+                                </button>
+                                <button className="btn ghost" type="button" onClick={() => setShowRepoModal(false)}>
+                                    Close
+                                </button>
+                            </div>
+                        )}
                         {repoError && <p className="platform-message error" style={{ marginTop: '0.75rem' }}>{repoError}</p>}
 
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '1rem' }}>
@@ -651,9 +697,9 @@ export default function SiteDetailPage({ params }) {
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="dep-modal-title"
-                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', zIndex: 1000 }}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', zIndex: 1000, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
                 >
-                    <div className="platform-card" style={{ width: 'min(800px, 95vw)' }}>
+                    <div className="platform-card" style={{ width: 'min(800px, 95vw)', maxHeight: '90vh', overflow: 'auto' }}>
                         <h2 id="dep-modal-title" style={{ marginTop: 0 }}>Deployment details</h2>
                         {depDetailLoading ? (
                             <p className="platform-subtitle">Loading…</p>

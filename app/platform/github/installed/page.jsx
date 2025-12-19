@@ -3,16 +3,16 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
 export default function GithubInstalledPage() {
     const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-    const router = useRouter();
     const search = useSearchParams();
 
     const [message, setMessage] = useState('Completing GitHub connection…');
+    const [backHref, setBackHref] = useState('/platform/hosting');
 
     useEffect(() => {
         const installationId = search.get('installation_id');
@@ -21,14 +21,27 @@ export default function GithubInstalledPage() {
 
         let returnTo = '/platform/hosting';
         let siteId = null;
+        let storageKey = null;
         try {
             if (rawState) {
                 const parsed = JSON.parse(rawState);
                 if (parsed?.returnTo && typeof parsed.returnTo === 'string') returnTo = parsed.returnTo;
                 if (parsed?.siteId && typeof parsed.siteId === 'string') siteId = parsed.siteId;
+                if (parsed?.storageKey && typeof parsed.storageKey === 'string') storageKey = parsed.storageKey;
             }
         } catch {
             // ignore
+        }
+
+        try {
+            const u = new URL(returnTo, window.location.origin);
+            if (u.origin === window.location.origin) {
+                setBackHref(u.pathname + u.search + u.hash);
+            } else {
+                setBackHref('/platform/hosting');
+            }
+        } catch {
+            setBackHref('/platform/hosting');
         }
 
         if (installationId) {
@@ -44,6 +57,8 @@ export default function GithubInstalledPage() {
                         .eq('id', siteId)
                         .then(() => {})
                         .catch(() => {});
+                } else if (storageKey) {
+                    window.localStorage.setItem(storageKey, installationId);
                 }
             } catch {
                 // ignore storage errors
@@ -54,7 +69,7 @@ export default function GithubInstalledPage() {
         } else {
             setMessage('Could not verify GitHub installation.');
         }
-    }, [router, search]);
+    }, [search, supabase]);
 
     return (
         <main className="platform-main">
@@ -62,7 +77,7 @@ export default function GithubInstalledPage() {
                 <h1>GitHub connection</h1>
                 <p className="platform-subtitle">{message}</p>
                 <p className="platform-footer">
-                    <Link className="btn ghost" href="/platform/hosting">Back to hosting</Link>
+                    <Link className="btn ghost" href={backHref}>Back</Link>
                 </p>
             </div>
         </main>
