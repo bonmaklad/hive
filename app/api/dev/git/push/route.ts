@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseAdminClient, getUserFromRequest } from '../../_lib/supabaseAuth';
+import { createSupabaseAdminClient, getUserFromRequest } from '../../../_lib/supabaseAuth';
 
 export const runtime = 'nodejs';
 
