@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { callHiveServerWithFallback, requireSiteAccess, safeText } from '../_lib/devMode';
+import { callHiveServer, requireSiteAccess, safeText } from '../_lib/devMode';
 
 export const runtime = 'nodejs';
 
@@ -13,9 +13,10 @@ export async function GET(request) {
     const guard = await requireSiteAccess({ request, siteId });
     if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
-    const res = await callHiveServerWithFallback({
-        primary: { path: `/dev/file?siteId=${encodeURIComponent(siteId)}&path=${encodeURIComponent(filePath)}`, payload: null, method: 'GET' },
-        fallback: { path: '/v1/dev-files/read', payload: { site_id: siteId, path: filePath } }
+    const res = await callHiveServer({
+        path: `/dev/file?siteId=${encodeURIComponent(siteId)}&path=${encodeURIComponent(filePath)}`,
+        payload: null,
+        method: 'GET'
     });
 
     if (!res.ok) {
@@ -38,10 +39,7 @@ export async function POST(request) {
     const guard = await requireSiteAccess({ request, siteId });
     if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
-    const res = await callHiveServerWithFallback({
-        primary: { path: '/dev/file', payload: { siteId, path: filePath, content, hash } },
-        fallback: { path: '/v1/dev-files/write', payload: { site_id: siteId, path: filePath, content, hash } }
-    });
+    const res = await callHiveServer({ path: '/dev/file', payload: { siteId, path: filePath, content, hash } });
 
     if (!res.ok) {
         return NextResponse.json(res.body || { error: res.error, detail: res.detail || null }, { status: res.status });

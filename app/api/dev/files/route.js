@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { callHiveServerWithFallback, requireSiteAccess, safeText } from '../_lib/devMode';
+import { callHiveServer, requireSiteAccess, safeText } from '../_lib/devMode';
 
 export const runtime = 'nodejs';
 
@@ -11,10 +11,7 @@ export async function GET(request) {
     const guard = await requireSiteAccess({ request, siteId });
     if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
-    const res = await callHiveServerWithFallback({
-        primary: { path: `/dev/files?siteId=${encodeURIComponent(siteId)}`, payload: null, method: 'GET' },
-        fallback: { path: '/v1/dev-files/list', payload: { site_id: siteId, dir: '', recursive: true } }
-    });
+    const res = await callHiveServer({ path: `/dev/files?siteId=${encodeURIComponent(siteId)}`, payload: null, method: 'GET' });
 
     if (!res.ok) {
         return NextResponse.json(res.body || { error: res.error, detail: res.detail || null }, { status: res.status });

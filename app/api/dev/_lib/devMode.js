@@ -151,14 +151,6 @@ export async function callHiveServer({ path, payload, method = 'POST' }) {
     return { ok: true, status: res.status, data: body };
 }
 
-export async function callHiveServerWithFallback({ primary, fallback }) {
-    const first = await callHiveServer(primary);
-    if (first.ok) return first;
-    if (first.status !== 404) return first;
-    if (!fallback) return first;
-    return callHiveServer(fallback);
-}
-
 export function normalizeHiveDevSessionPayload(data) {
     const payload = data || {};
     return {
@@ -194,10 +186,7 @@ export async function runDevSessionAction({ guard, siteId, action, branch }) {
             patch: { ...requestMeta, status: 'stopping', last_error: null }
         });
 
-        const res = await callHiveServerWithFallback({
-            primary: { path: '/dev/stop', payload: { siteId } },
-            fallback: { path: '/v1/dev-sessions/stop', payload: { site_id: siteId } }
-        });
+        const res = await callHiveServer({ path: '/dev/stop', payload: { siteId } });
 
         if (!res.ok) {
             session = await updateSession({
@@ -223,24 +212,9 @@ export async function runDevSessionAction({ guard, siteId, action, branch }) {
         patch: { ...requestMeta, status: 'starting', last_error: null }
     });
 
-    const res = await callHiveServerWithFallback({
-        primary: {
-            path: normalizedAction === 'restart' ? '/dev/restart' : '/dev/start',
-            payload: {
-                siteId,
-                branch: normalizedBranch
-            }
-        },
-        fallback: {
-            path: normalizedAction === 'restart' ? '/v1/dev-sessions/restart' : '/v1/dev-sessions/start',
-            payload: {
-                site_id: siteId,
-                repo: guard.site.repo,
-                framework: guard.site.framework,
-                branch: normalizedBranch,
-                github_installation_id: guard.site.github_installation_id || null
-            }
-        }
+    const res = await callHiveServer({
+        path: normalizedAction === 'restart' ? '/dev/restart' : '/dev/start',
+        payload: { siteId, branch: normalizedBranch }
     });
 
     if (!res.ok) {

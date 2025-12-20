@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient, getUserFromRequest } from '../../_lib/supabaseAuth';
-import { callHiveServerWithFallback } from '../_lib/devMode';
+import { callHiveServer } from '../_lib/devMode';
 
 export const runtime = 'nodejs';
 
@@ -64,10 +64,7 @@ export async function POST(request: Request) {
         );
     }
 
-    const res = await callHiveServerWithFallback({
-        primary: { path: '/dev/apply-diff', payload: { siteId, path: filePath, diff, hash } },
-        fallback: { path: '/v1/dev-files/apply-diff', payload: { site_id: siteId, path: filePath, diff, hash } }
-    });
+    const res = await callHiveServer({ path: '/dev/apply-diff', payload: { siteId, path: filePath, diff, hash } });
 
     if (!res.ok) return NextResponse.json(res.body || { error: res.error, detail: res.detail || null }, { status: res.status });
 

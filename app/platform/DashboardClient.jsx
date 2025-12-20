@@ -132,6 +132,9 @@ export default function DashboardClient() {
                     <Link className="btn primary" href="/platform/rooms">
                         Book now
                     </Link>
+                    <Link className="btn ghost" href="/platform/bookings">
+                        See bookings
+                    </Link>
                 </div>
             </section>
 
