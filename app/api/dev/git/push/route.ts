@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient, getUserFromRequest } from '../../../_lib/supabaseAuth';
+import { callHiveServerWithFallback } from '../../_lib/devMode';
 
 export const runtime = 'nodejs';
 
@@ -59,17 +60,11 @@ export async function POST(request: Request) {
         );
     }
 
-    const res = await fetch(`${cfg.baseUrl}/v1/dev-git/push`, {
-        method: 'POST',
-        headers: {
-            'content-type': 'application/json',
-            accept: 'application/json',
-            authorization: `Bearer ${cfg.token}`
-        },
-        body: JSON.stringify({ site_id: siteId, message })
+    const res = await callHiveServerWithFallback({
+        primary: { path: '/dev/git/push', payload: { siteId, message } },
+        fallback: { path: '/v1/dev-git/push', payload: { site_id: siteId, message } }
     });
 
-    const body = await res.json().catch(() => null);
-    return NextResponse.json(body || { error: 'Dev server error' }, { status: res.status });
+    if (!res.ok) return NextResponse.json(res.body || { error: res.error, detail: res.detail || null }, { status: res.status });
+    return NextResponse.json(res.data);
 }
-

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient, getUserFromRequest } from '../../_lib/supabaseAuth';
+import { callHiveServerWithFallback } from '../_lib/devMode';
 
 export const runtime = 'nodejs';
 
@@ -63,18 +64,12 @@ export async function POST(request: Request) {
         );
     }
 
-    const res = await fetch(`${cfg.baseUrl}/v1/dev-files/apply-diff`, {
-        method: 'POST',
-        headers: {
-            'content-type': 'application/json',
-            accept: 'application/json',
-            authorization: `Bearer ${cfg.token}`
-        },
-        body: JSON.stringify({ site_id: siteId, path: filePath, diff, hash })
+    const res = await callHiveServerWithFallback({
+        primary: { path: '/dev/apply-diff', payload: { siteId, path: filePath, diff, hash } },
+        fallback: { path: '/v1/dev-files/apply-diff', payload: { site_id: siteId, path: filePath, diff, hash } }
     });
 
-    const body = await res.json().catch(() => null);
-    if (!res.ok) return NextResponse.json(body || { error: 'Dev server error' }, { status: res.status });
+    if (!res.ok) return NextResponse.json(res.body || { error: res.error, detail: res.detail || null }, { status: res.status });
 
-    return NextResponse.json({ ok: true, hash: body?.hash || null });
+    return NextResponse.json({ ok: true, hash: (res.data as any)?.hash || null });
 }

@@ -294,7 +294,8 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
 
     const previewPath = `/__dev/${siteId}`;
     const status = safeText(session?.status, 40) || '—';
-    const canEdit = status === 'running';
+    const devRunning = status === 'running';
+    const canUseWorkspace = Boolean(session);
     const dirty = Boolean(activePath && content !== savedContentRef.current);
 
     const authHeader = useCallback(async () => {
@@ -436,12 +437,13 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
             setSession(body?.session || null);
             setBranch(body?.session?.branch || branch);
             setPreviewKey(x => x + 1);
+            void loadFiles();
         } catch (e: any) {
             setStatusError(e?.message || 'Could not start Dev Mode.');
         } finally {
             setActionBusy(false);
         }
-    }, [authHeader, branch, site, siteId]);
+    }, [authHeader, branch, loadFiles, site, siteId]);
 
     const stopDev = useCallback(async () => {
         setActionBusy(true);
@@ -461,6 +463,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
             setContent('');
             setBaseHash(null);
             savedContentRef.current = '';
+            setFiles([]);
         } catch (e: any) {
             setStatusError(e?.message || 'Could not stop Dev Mode.');
         } finally {
@@ -575,9 +578,8 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
     }, [authHeader, loadStatus, supabase]);
 
     useEffect(() => {
-        if (!canEdit) return;
         void loadFiles();
-    }, [canEdit, loadFiles]);
+    }, [loadFiles]);
 
     useEffect(() => {
         if (status !== 'starting' && status !== 'stopping') return;
@@ -657,7 +659,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
     }, [stopDevBestEffort]);
 
     useEffect(() => {
-        if (!canEdit) return;
+        if (!devRunning) return;
         const t = setInterval(() => {
             const token = tokenRef.current;
             if (!token) return;
@@ -667,7 +669,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
             }).catch(() => {});
         }, 60000);
         return () => clearInterval(t);
-    }, [canEdit, siteId]);
+    }, [devRunning, siteId]);
 
     const treeNodes = useMemo(() => buildTree(files), [files]);
     const matchingFiles = useMemo(() => {
@@ -721,18 +723,18 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                     <button className="btn ghost" type="button" onClick={stopDev} disabled={actionBusy || status !== 'running'}>
                         Stop
                     </button>
-                    <button className="btn secondary" type="button" onClick={() => void saveFile()} disabled={!canEdit || !dirty || saveBusy}>
+                    <button className="btn secondary" type="button" onClick={() => void saveFile()} disabled={!canUseWorkspace || !dirty || saveBusy}>
                         {saveBusy ? 'Saving…' : 'Save'}
                     </button>
                     <button
                         className="btn secondary"
                         type="button"
                         onClick={() => setDeployOpen(true)}
-                        disabled={!canEdit || deployBusy}
+                        disabled={!canUseWorkspace || deployBusy}
                     >
                         Deploy
                     </button>
-                    <button className="btn ghost" type="button" onClick={() => setAiOpen(v => !v)} disabled={!canEdit}>
+                    <button className="btn ghost" type="button" onClick={() => setAiOpen(v => !v)} disabled={!canUseWorkspace}>
                         AI Assist
                     </button>
                     <button className="btn ghost" type="button" onClick={loadStatus} disabled={actionBusy}>
@@ -765,7 +767,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                 <div className="platform-card" style={{ width: leftWidth, margin: 0, padding: 12, overflow: 'hidden' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <strong>Files</strong>
-                        <button className="btn ghost" type="button" onClick={() => void loadFiles()} disabled={!canEdit || filesLoading}>
+                        <button className="btn ghost" type="button" onClick={() => void loadFiles()} disabled={!canUseWorkspace || filesLoading}>
                             {filesLoading ? '…' : 'Reload'}
                         </button>
                     </div>
@@ -775,7 +777,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Search…"
                         style={{ width: '100%', marginTop: 10 }}
-                        disabled={!canEdit || filesLoading}
+                        disabled={!canUseWorkspace || filesLoading}
                     />
                     {filesError ? (
                         <p className="platform-message error" style={{ marginTop: 10 }}>
@@ -783,8 +785,8 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                         </p>
                     ) : null}
                     <div style={{ marginTop: 10, overflow: 'auto', height: 'calc(100% - 86px)' }}>
-                        {!canEdit ? (
-                            <p className="platform-subtitle">Start Dev Mode to load files.</p>
+                        {!canUseWorkspace ? (
+                            <p className="platform-subtitle">Loading session…</p>
                         ) : search.trim() ? (
                             <div>
                                 {matchingFiles.map(f => (
@@ -792,7 +794,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                                         key={f}
                                         className="btn ghost"
                                         type="button"
-                                        disabled={!canEdit || fileLoading}
+                                        disabled={!canUseWorkspace || fileLoading}
                                         onClick={() => void openFile(f)}
                                         style={{
                                             width: '100%',
@@ -812,7 +814,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                                 expanded={expanded}
                                 setExpanded={setExpanded}
                                 onOpenFile={p => void openFile(p)}
-                                disabled={!canEdit || fileLoading}
+                                disabled={!canUseWorkspace || fileLoading}
                             />
                         )}
                     </div>
@@ -854,7 +856,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                             value={content}
                             onChange={value => setContent(value ?? '')}
                             options={{
-                                readOnly: !canEdit || !activePath || fileLoading,
+                                readOnly: !canUseWorkspace || !activePath || fileLoading,
                                 minimap: { enabled: false },
                                 fontSize: 13,
                                 scrollBeyondLastLine: false,
@@ -878,7 +880,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <strong>Preview</strong>
                         <div style={{ display: 'flex', gap: 8 }}>
-                            <button className="btn ghost" type="button" onClick={refreshPreview} disabled={!canEdit}>
+                            <button className="btn ghost" type="button" onClick={refreshPreview} disabled={!devRunning}>
                                 Refresh
                             </button>
                             <a className="btn ghost" href={previewPath} target="_blank" rel="noopener noreferrer">
@@ -893,6 +895,22 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                             src={previewPath}
                             style={{ width: '100%', height: '100%', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }}
                         />
+                        {!devRunning ? (
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    left: 12,
+                                    right: 12,
+                                    top: 56,
+                                    padding: 10,
+                                    borderRadius: 10,
+                                    background: 'rgba(0,0,0,0.55)',
+                                    border: '1px solid rgba(255,255,255,0.08)'
+                                }}
+                            >
+                                <span className="platform-subtitle">Dev Mode is not running; start it to load the preview.</span>
+                            </div>
+                        ) : null}
                     </div>
 
                     {aiOpen ? (
@@ -933,7 +951,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                                     className="btn primary"
                                     type="button"
                                     onClick={() => void runAi()}
-                                    disabled={!activePath || aiBusy || !aiInstruction.trim()}
+                                    disabled={!canUseWorkspace || !activePath || aiBusy || !aiInstruction.trim()}
                                 >
                                     {aiBusy ? 'Thinking…' : 'Generate diff'}
                                 </button>
@@ -941,7 +959,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                                     className="btn secondary"
                                     type="button"
                                     onClick={() => void applyDiff()}
-                                    disabled={!activePath || applyBusy || !aiDiff.trim()}
+                                    disabled={!canUseWorkspace || !activePath || applyBusy || !aiDiff.trim()}
                                 >
                                     {applyBusy ? 'Applying…' : 'Apply'}
                                 </button>
