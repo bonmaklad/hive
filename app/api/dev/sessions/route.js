@@ -106,6 +106,11 @@ function getHiveServerConfig() {
     };
 }
 
+function isServerConfigured() {
+    const cfg = getHiveServerConfig();
+    return Boolean(cfg.baseUrl && cfg.token);
+}
+
 async function callHiveServer({ path, payload }) {
     const cfg = getHiveServerConfig();
     if (!cfg.baseUrl) {
@@ -174,7 +179,18 @@ export async function GET(request) {
         return NextResponse.json({ site: guard.site, session });
     } catch (e) {
         if (isMissingTableError(e)) {
-            return NextResponse.json({ error: 'Dev Mode table missing', detail: hintForMissingTable() }, { status: 500 });
+            // Fallback: no DB table; treat Dev Mode as always-on static preview
+            const preview = `/__dev/${siteId}`;
+            const session = {
+                status: 'running',
+                preview_url: preview,
+                editor_url: null,
+                workspace_path: null,
+                last_error: null,
+                updated_at: new Date().toISOString(),
+                branch: 'main'
+            };
+            return NextResponse.json({ site: guard.site, session });
         }
         return NextResponse.json({ error: e?.message || 'Could not load Dev Mode session.' }, { status: 500 });
     }
@@ -196,12 +212,40 @@ export async function POST(request) {
 
     if (!branch) return NextResponse.json({ error: 'branch is required' }, { status: 400 });
 
+    // If the external dev server is not configured, short-circuit with a synthetic session
+    if (!isServerConfigured()) {
+        const running = action !== 'stop';
+        const preview = `/__dev/${siteId}`;
+        const fallback = {
+            status: running ? 'running' : 'stopped',
+            preview_url: running ? preview : null,
+            editor_url: null,
+            workspace_path: null,
+            last_error: null,
+            updated_at: new Date().toISOString(),
+            branch
+        };
+        return NextResponse.json({ site: guard.site, session: fallback });
+    }
+
     let session = null;
     try {
         session = await getOrCreateSession({ admin: guard.admin, siteId, userId: guard.user.id });
     } catch (e) {
         if (isMissingTableError(e)) {
-            return NextResponse.json({ error: 'Dev Mode table missing', detail: hintForMissingTable() }, { status: 500 });
+            // Fallback behavior without DB: no-op start/stop, return synthetic session
+            const preview = `/__dev/${siteId}`;
+            const running = action !== 'stop';
+            const fallback = {
+                status: running ? 'running' : 'stopped',
+                preview_url: running ? preview : null,
+                editor_url: null,
+                workspace_path: null,
+                last_error: null,
+                updated_at: new Date().toISOString(),
+                branch
+            };
+            return NextResponse.json({ site: guard.site, session: fallback });
         }
         return NextResponse.json({ error: e?.message || 'Could not load Dev Mode session.' }, { status: 500 });
     }
