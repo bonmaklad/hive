@@ -90,7 +90,7 @@ export async function POST(request, { params }) {
         fridgeEnabled
     });
 
-    const payload = {
+    const membershipPayload = {
         owner_id: reqRow.owner_id,
         status: 'live',
         plan: nextPlan,
@@ -109,13 +109,12 @@ export async function POST(request, { params }) {
     if (findError) return NextResponse.json({ error: findError.message }, { status: 500 });
 
     if (existingMembership?.id) {
-        const { error: updateError } = await guard.admin.from('memberships').update(payload).eq('id', existingMembership.id);
+        const { error: updateError } = await guard.admin.from('memberships').update(membershipPayload).eq('id', existingMembership.id);
         if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
     } else {
-        const { error: insertError } = await guard.admin.from('memberships').insert(payload);
+        const { error: insertError } = await guard.admin.from('memberships').insert(membershipPayload);
         if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });
 }
-

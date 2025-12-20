@@ -381,6 +381,9 @@ export default function SiteDetailPage({ params }) {
                                 <button className="btn primary" type="submit" disabled={saving}>
                                     {saving ? 'Saving…' : 'Save changes'}
                                 </button>
+                                <Link className="btn secondary" href={`/platform/sites/${params.id}/dev`}>
+                                    Dev Mode
+                                </Link>
                             </div>
                         </form>
                     </section>

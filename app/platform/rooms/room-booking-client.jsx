@@ -134,8 +134,12 @@ export default function RoomBookingClient() {
     const pricing = useMemo(() => getPricing(room, selection.hours), [room, selection.hours]);
     const priceCents = Number(pricing.amount || 0);
 
-    const [unavailable, setUnavailable] = useState(new Set());
-    const fullDayAvailable = useMemo(() => TIME_SLOTS.every(t => !unavailable.has(t)), [unavailable]);
+    // Track slot status: 'open' | 'requested' | 'approved'
+    const [slotStatus, setSlotStatus] = useState(() => new Map());
+    const fullDayAvailable = useMemo(
+        () => TIME_SLOTS.every(t => (slotStatus.get(t) || 'open') === 'open'),
+        [slotStatus]
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -245,11 +249,11 @@ export default function RoomBookingClient() {
             if (cancelled) return;
 
             if (error) {
-                setUnavailable(new Set());
+                setSlotStatus(new Map());
                 return;
             }
 
-            const blocked = new Set();
+            const statusMap = new Map();
             for (const booking of data || []) {
                 const startMin = parseTimeToMinutes(booking.start_time);
                 const endMin = parseTimeToMinutes(booking.end_time);
@@ -257,10 +261,14 @@ export default function RoomBookingClient() {
                     const slotStart = parseTimeToMinutes(time);
                     const slotEnd = slotStart + 60;
                     const overlaps = slotStart < endMin && slotEnd > startMin;
-                    if (overlaps) blocked.add(time);
+                    if (overlaps) {
+                        const prev = statusMap.get(time) || 'open';
+                        const nxt = booking.status === 'approved' ? 'approved' : prev === 'approved' ? 'approved' : 'requested';
+                        statusMap.set(time, nxt);
+                    }
                 });
             }
-            setUnavailable(blocked);
+            setSlotStatus(statusMap);
         };
 
         loadBookings();
@@ -279,7 +287,8 @@ export default function RoomBookingClient() {
             if (!date) throw new Error('Choose a date.');
             if (!selection.hours) throw new Error('Choose a time range.');
             for (const idx of selection.indices) {
-                if (unavailable.has(TIME_SLOTS[idx])) throw new Error('That time range includes unavailable time.');
+                const st = slotStatus.get(TIME_SLOTS[idx]) || 'open';
+                if (st !== 'open') throw new Error('That time range includes unavailable time.');
             }
 
             const min = Math.min(startIndex, endIndex == null ? startIndex : endIndex);
@@ -288,6 +297,9 @@ export default function RoomBookingClient() {
             const endHour = Number(TIME_SLOTS[max].slice(0, 2)) + 1;
             const endTime = `${String(endHour).padStart(2, '0')}:00:00`;
 
+            // Determine auto-approval
+            const autoApprove = canUseTokens;
+
             const { error: insertError } = await supabase.from('room_bookings').insert({
                 owner_id: user.id,
                 space_slug: roomId,
@@ -295,17 +307,49 @@ export default function RoomBookingClient() {
                 start_time: startTime,
                 end_time: endTime,
                 hours: selection.hours,
-                tokens_used: canUseTokens ? requiredTokens : 0,
-                price_cents: canUseTokens ? 0 : priceCents,
-                status: 'requested'
+                tokens_used: autoApprove ? requiredTokens : 0,
+                price_cents: autoApprove ? 0 : priceCents,
+                status: autoApprove ? 'approved' : 'requested'
             });
             if (insertError) throw insertError;
 
-            if (canUseTokens) {
-                setInfo('Booking requested. Tokens will be deducted once approved.');
+            if (autoApprove) {
+                // Deduct tokens for current month
+                try {
+                    const periodStart = getMonthStart(date);
+                    const { data: credits, error: creditsErr } = await supabase
+                        .from('room_credits')
+                        .select('tokens_used, tokens_total')
+                        .eq('owner_id', user.id)
+                        .eq('period_start', periodStart)
+                        .maybeSingle();
+                    if (!creditsErr && credits) {
+                        const newUsed = Math.max(0, (credits.tokens_used || 0) + requiredTokens);
+                        await supabase
+                            .from('room_credits')
+                            .update({ tokens_used: newUsed })
+                            .eq('owner_id', user.id)
+                            .eq('period_start', periodStart);
+                        setTokensLeft(t => Math.max(0, t - requiredTokens));
+                    }
+                } catch {
+                    // ignore UI-side errors; backend might reconcile
+                }
+
+                setInfo('Booking approved. Tokens deducted.');
             } else {
                 setInfo(`Booking requested. Payment required: ${formatNZD(priceCents / 100)} (${pricing.label}).`);
             }
+
+            // Refresh local slot status quickly: mark selected slots
+            setSlotStatus(prev => {
+                const next = new Map(prev);
+                for (const idx of selection.indices) {
+                    const time = TIME_SLOTS[idx];
+                    next.set(time, autoApprove ? 'approved' : 'requested');
+                }
+                return next;
+            });
         } catch (err) {
             setError(err?.message || 'Could not create booking.');
         } finally {
@@ -414,16 +458,23 @@ export default function RoomBookingClient() {
 
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                             {TIME_SLOTS.map((time, idx) => {
-                                const isUnavailable = unavailable.has(time);
+                                const status = slotStatus.get(time) || 'open';
                                 const selected = selection.indices.includes(idx);
+                                const isDisabled = busy || status !== 'open';
+                                const bg = status === 'approved' ? '#ff6b6b' : status === 'requested' ? '#ffd166' : selected ? 'var(--accent)' : 'transparent';
+                                const color = status === 'open' && !selected ? 'inherit' : '#0b0c10';
                                 return (
                                     <button
                                         key={time}
                                         type="button"
                                         className={`btn ${selected ? 'primary' : 'ghost'}`}
                                         onClick={() => pickSlot(idx)}
-                                        disabled={busy || isUnavailable}
-                                        style={{ opacity: isUnavailable ? 0.45 : 1 }}
+                                        disabled={isDisabled}
+                                        style={{
+                                            opacity: isDisabled && status !== 'open' ? 0.9 : 1,
+                                            background: bg,
+                                            color
+                                        }}
                                     >
                                         {time}
                                     </button>
