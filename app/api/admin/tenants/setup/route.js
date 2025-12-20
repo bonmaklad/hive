@@ -169,21 +169,36 @@ export async function POST(request) {
             monthlyOverrideCents
         });
 
-        const { error: membershipError } = await guard.admin.from('memberships').upsert(
-            {
-                owner_id: primary.userId,
-                status,
-                plan,
-                office_id: plan === 'office' ? officeId : null,
-                donation_cents: Math.max(0, donationCents),
-                fridge_enabled: fridgeEnabled,
-                monthly_amount_cents: monthlyAmountCents,
-                next_invoice_at: null,
-                updated_at: new Date().toISOString()
-            },
-            { onConflict: 'owner_id' }
-        );
-        if (membershipError) throw new Error(membershipError.message);
+        // Create or update membership for the primary owner without requiring a unique constraint
+        const { data: existingMembership, error: findMembershipError } = await guard.admin
+            .from('memberships')
+            .select('id')
+            .eq('owner_id', primary.userId)
+            .maybeSingle();
+        if (findMembershipError) throw new Error(findMembershipError.message);
+
+        const membershipPayload = {
+            owner_id: primary.userId,
+            status,
+            plan,
+            office_id: plan === 'office' ? officeId : null,
+            donation_cents: Math.max(0, donationCents),
+            fridge_enabled: fridgeEnabled,
+            monthly_amount_cents: monthlyAmountCents,
+            next_invoice_at: null,
+            updated_at: new Date().toISOString()
+        };
+
+        if (existingMembership?.id) {
+            const { error: updateMembershipError } = await guard.admin
+                .from('memberships')
+                .update(membershipPayload)
+                .eq('id', existingMembership.id);
+            if (updateMembershipError) throw new Error(updateMembershipError.message);
+        } else {
+            const { error: insertMembershipError } = await guard.admin.from('memberships').insert(membershipPayload);
+            if (insertMembershipError) throw new Error(insertMembershipError.message);
+        }
 
         const { error: creditsError } = await guard.admin.from('room_credits').upsert(
             {

@@ -761,7 +761,7 @@ function UserDetailsModal({ open, tenantId, userRow, authHeader, onClose, onSave
                 throw new Error('Invalid status.');
             }
             if (planId === 'office' && !officeId) throw new Error('Office is required.');
-            if (planId === 'custom' && customBaseCents <= 0) throw new Error('Custom price is required.');
+            if (planId === 'custom' && customBaseCents < 0) throw new Error('Custom price is required.');
 
             const res = await fetch(`/api/admin/tenants/${tenantId}/membership`, {
                 method: 'POST',

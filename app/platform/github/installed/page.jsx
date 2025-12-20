@@ -59,6 +59,9 @@ export default function GithubInstalledPage() {
                         .catch(() => {});
                 } else if (storageKey) {
                     window.localStorage.setItem(storageKey, installationId);
+                    } else {
+                        // Fallback for pages without a siteId (e.g., create new site)
+                        window.localStorage.setItem('github_installation_latest', installationId);
                 }
             } catch {
                 // ignore storage errors

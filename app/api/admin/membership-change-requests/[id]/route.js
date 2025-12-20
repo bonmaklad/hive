@@ -90,21 +90,31 @@ export async function POST(request, { params }) {
         fridgeEnabled
     });
 
-    const { error: upsertError } = await guard.admin.from('memberships').upsert(
-        {
-            owner_id: reqRow.owner_id,
-            status: 'live',
-            plan: nextPlan,
-            office_id: nextPlan === 'office' ? nextOffice : null,
-            donation_cents: donationCents,
-            fridge_enabled: fridgeEnabled,
-            monthly_amount_cents: monthly,
-            updated_at: new Date().toISOString()
-        },
-        { onConflict: 'owner_id' }
-    );
+    const payload = {
+        owner_id: reqRow.owner_id,
+        status: 'live',
+        plan: nextPlan,
+        office_id: nextPlan === 'office' ? nextOffice : null,
+        donation_cents: donationCents,
+        fridge_enabled: fridgeEnabled,
+        monthly_amount_cents: monthly,
+        updated_at: new Date().toISOString()
+    };
 
-    if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 });
+    const { data: existingMembership, error: findError } = await guard.admin
+        .from('memberships')
+        .select('id')
+        .eq('owner_id', reqRow.owner_id)
+        .maybeSingle();
+    if (findError) return NextResponse.json({ error: findError.message }, { status: 500 });
+
+    if (existingMembership?.id) {
+        const { error: updateError } = await guard.admin.from('memberships').update(payload).eq('id', existingMembership.id);
+        if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+    } else {
+        const { error: insertError } = await guard.admin.from('memberships').insert(payload);
+        if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
 
     return NextResponse.json({ ok: true });
 }

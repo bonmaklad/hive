@@ -47,6 +47,14 @@ async function readJsonResponse(response) {
     }
 }
 
+const FRAMEWORK_HELP = {
+    next: 'Next.js handles front end, API routes, and backend functions in one unified framework.',
+    gatsby: 'Gatsby builds fast static sites using React and a data layer, then serves optimised HTML/JS.',
+    static: 'Static serves pre-built HTML/CSS/JS. Great for simple sites and export builds from other tools.',
+    node: 'Node runs your server application and serves responses directly (bring your own framework).',
+    vue: 'Vue is a progressive front-end framework. Use Nuxt or a build tool to generate and serve your app.'
+};
+
 export default function NewSiteForm() {
     const router = useRouter();
     const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -139,8 +147,8 @@ export default function NewSiteForm() {
 
             if (!normalizedRepo) throw new Error('Repo must be in the form owner/repo.');
             if (!normalizedDomain) throw new Error('Domain must be a hostname like example.com.');
-            if (!['next', 'static', 'node'].includes(normalizedFramework)) {
-                throw new Error('Framework must be next, static, or node.');
+            if (!['next', 'gatsby', 'static', 'node', 'vue'].includes(normalizedFramework)) {
+                throw new Error('Framework must be next, gatsby, static, node, or vue.');
             }
 
             const { data: authData, error: authError } = await supabase.auth.getUser();
@@ -178,66 +186,79 @@ export default function NewSiteForm() {
         <>
             <form className="contact-form" onSubmit={submit}>
                 <label>
-                    GitHub repo
+                    Custom domain
                     <input
                         type="text"
-                        name="repo"
-                        placeholder="owner/repo"
+                        name="domain"
+                        placeholder="example.com"
                         autoComplete="off"
                         required
-                        value={repo}
-                        onChange={e => setRepo(e.target.value)}
+                        value={domain}
+                        onChange={e => setDomain(e.target.value)}
                         disabled={busy}
                     />
                 </label>
 
-                <div className="platform-actions" style={{ marginTop: '0.75rem' }}>
-                    <button className="btn ghost" type="button" onClick={() => setShowGithubModal(true)} disabled={busy}>
-                        Connect GitHub
-                    </button>
-                    <button className="btn secondary" type="button" onClick={chooseRepo} disabled={busy}>
-                        Choose repo
-                    </button>
-                    <span className="platform-subtitle">
-                        {installationId ? (
-                            <>
-                                GitHub installed: <span className="platform-mono">{installationId}</span>
-                            </>
-                        ) : (
-                            'Not connected'
-                        )}
-                    </span>
+                <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr', alignItems: 'end' }}>
+                    <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.2fr)' }}>
+                        <div>
+                            <label>
+                                Framework
+                                <select name="framework" value={framework} onChange={e => setFramework(e.target.value)} required disabled={busy}>
+                                    <option value="next">next</option>
+                                    <option value="gatsby">gatsby</option>
+                                    <option value="static">static</option>
+                                    <option value="node">node</option>
+                                    <option value="vue">vue</option>
+                                </select>
+                            </label>
+                            <p className="platform-subtitle" style={{ marginTop: '0.5rem' }}>
+                                All frameworks can be hooked up to your Supabase authentication, data storage and Postgres database.
+                            </p>
+                        </div>
+                        <div>
+                            <p className="platform-message info" style={{ margin: 0 }}>
+                                {FRAMEWORK_HELP[framework] || 'Choose a framework to see how it is handled.'}
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
-            <label>
-                Framework
-                <select name="framework" value={framework} onChange={e => setFramework(e.target.value)} required disabled={busy}>
-                    <option value="next">next</option>
-                    <option value="static">static</option>
-                    <option value="node">node</option>
-                </select>
-            </label>
-            <label>
-                Domain
-                <input
-                    type="text"
-                    name="domain"
-                    placeholder="example.com"
-                    autoComplete="off"
-                    required
-                    value={domain}
-                    onChange={e => setDomain(e.target.value)}
-                    disabled={busy}
-                />
-            </label>
+                <div style={{ display: 'grid', gap: '0.5rem' }}>
+                    <label>
+                        Repo
+                        <input
+                            type="text"
+                            name="repo"
+                            placeholder="owner/repo"
+                            autoComplete="off"
+                            required
+                            value={repo}
+                            onChange={e => setRepo(e.target.value)}
+                            disabled={busy}
+                        />
+                    </label>
 
-            {error && <p className="platform-message error">{error}</p>}
+                    <div className="platform-actions">
+                        <button className="btn ghost" type="button" onClick={() => setShowGithubModal(true)} disabled={busy}>
+                            Connect GitHub
+                        </button>
+                        <button className="btn ghost" type="button" onClick={chooseRepo} disabled={busy}>
+                            Choose repo
+                        </button>
+                        <span className={`badge ${installationId ? 'success' : 'neutral'}`}>
+                            {installationId ? 'GitHub installed' : 'Not connected'}
+                        </span>
+                    </div>
+                </div>
 
-            <div className="platform-actions">
-                <button className="btn primary" type="submit" disabled={busy}>
-                    {busy ? 'Creating…' : 'Create site'}
-                </button>
-            </div>
+                {error && <p className="platform-message error">{error}</p>}
+
+                <div className="platform-actions" style={{ marginTop: '1rem' }}>
+                    <button className="btn primary" type="submit" disabled={busy}>
+                        {busy ? 'Creating…' : 'Create site'}
+                    </button>
+                </div>
             </form>
 
             {showGithubModal ? (
@@ -246,7 +267,9 @@ export default function NewSiteForm() {
                         <div className="platform-modal-header">
                             <div>
                                 <h2 style={{ margin: 0 }}>Connect GitHub</h2>
-                                <p className="platform-subtitle">Install the Hive Deploy GitHub App to browse repositories.</p>
+                                <p className="platform-subtitle">
+                                    You’ll be redirected to GitHub to install the Hive Deploy app for your account or organization.
+                                </p>
                             </div>
                             <button className="btn ghost" type="button" onClick={() => setShowGithubModal(false)}>
                                 Close
@@ -254,12 +277,16 @@ export default function NewSiteForm() {
                         </div>
 
                         <ul className="platform-subtitle" style={{ marginTop: '1rem' }}>
-                            <li>We’ll open GitHub in a new tab. Complete installation there, then return here.</li>
                             <li>
                                 Choose access: <span className="platform-mono">All repositories</span> (recommended) or{' '}
-                                <span className="platform-mono">Only select repositories</span>.
+                                <span className="platform-mono">Only select repositories</span>. You can change this later in GitHub → Settings →
+                                Installed GitHub Apps.
                             </li>
+                            <li>We’ll open GitHub in a new tab. Complete installation there, then return here and click “I’ve installed it”.</li>
                         </ul>
+                        <p className="platform-message info" style={{ marginTop: '0.75rem' }}>
+                            Tip: If you plan to add more sites later, choose “All repositories” so you won’t need to reinstall.
+                        </p>
 
                         <div className="platform-card-actions">
                             <button className="btn primary" type="button" onClick={connectGitHub}>
