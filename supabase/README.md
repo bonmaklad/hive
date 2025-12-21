@@ -27,3 +27,11 @@ RLS rules:
 
 - Authenticated users can view units/tags and vacancy status.
 - Only platform admins (`profiles.is_admin = true`) can change inventory or allocations.
+
+## Stripe room booking top-ups
+
+Apply `supabase/migrations/20251221040000_stripe_room_bookings.sql` to create:
+
+- `tenants.stripe_customer_id` (tenant-scoped Stripe customer)
+- `room_booking_payments` (Stripe checkout session + invoice linkage per booking)
+- `stripe_events` (webhook idempotency)

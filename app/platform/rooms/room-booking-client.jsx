@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { spaces as staticSpaces } from '@/lib/spaces';
 import { usePlatformSession } from '../PlatformContext';
 
@@ -103,6 +103,26 @@ function formatRange(startIndex, endIndex) {
     return `${start}–${end} (${hours} hour${hours === 1 ? '' : 's'})`;
 }
 
+async function readJsonResponse(response) {
+    const text = await response.text();
+    if (!text) return {};
+    try {
+        return JSON.parse(text);
+    } catch {
+        return { _raw: text };
+    }
+}
+
+function errorFromResponse(response, payload) {
+    if (payload?.error) return new Error(payload.error);
+    if (payload?.message) return new Error(payload.message);
+    if (typeof payload?._raw === 'string') {
+        const snippet = payload._raw.slice(0, 200);
+        return new Error(`Request failed (${response.status}). ${snippet}`);
+    }
+    return new Error(`Request failed (${response.status}).`);
+}
+
 export default function RoomBookingClient() {
     const { user, supabase } = usePlatformSession();
     const [rooms, setRooms] = useState([]);
@@ -115,6 +135,10 @@ export default function RoomBookingClient() {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
+    const [couponCode, setCouponCode] = useState('');
+    const [quote, setQuote] = useState(null);
+    const [quoteBusy, setQuoteBusy] = useState(false);
+    const [couponInfo, setCouponInfo] = useState('');
 
     const room = useMemo(() => rooms.find(r => r.id === roomId) || rooms[0] || null, [roomId, rooms]);
 
@@ -130,9 +154,13 @@ export default function RoomBookingClient() {
     }, [endIndex, startIndex]);
 
     const requiredTokens = selection.hours * (room?.tokens_per_hour || 0);
-    const canUseTokens = requiredTokens > 0 && tokensLeft >= requiredTokens;
     const pricing = useMemo(() => getPricing(room, selection.hours), [room, selection.hours]);
     const priceCents = Number(pricing.amount || 0);
+    const tokensApplied = Math.min(tokensLeft, requiredTokens);
+    const cashDueCents =
+        requiredTokens > 0 ? Math.round((priceCents * Math.max(0, requiredTokens - tokensApplied)) / requiredTokens) : priceCents;
+    const cashDueFinalCents = Math.max(0, cashDueCents - Number(quote?.pricing?.discount_cents || 0));
+    const requiresPayment = selection.hours > 0 && cashDueFinalCents > 0;
 
     // Track slot status: 'open' | 'requested' | 'approved'
     const [slotStatus, setSlotStatus] = useState(() => new Map());
@@ -140,6 +168,13 @@ export default function RoomBookingClient() {
         () => TIME_SLOTS.every(t => (slotStatus.get(t) || 'open') === 'open'),
         [slotStatus]
     );
+
+    const authHeader = useCallback(async () => {
+        const { data } = await supabase.auth.getSession();
+        const token = data?.session?.access_token;
+        if (!token) throw new Error('No session token. Please sign in again.');
+        return { Authorization: `Bearer ${token}` };
+    }, [supabase]);
 
     useEffect(() => {
         let cancelled = false;
@@ -206,33 +241,24 @@ export default function RoomBookingClient() {
         let cancelled = false;
 
         const loadCredits = async () => {
-            const periodStart = getMonthStart(date);
-            if (!periodStart) return;
-
-            const { data, error } = await supabase
-                .from('room_credits')
-                .select('tokens_total, tokens_used')
-                .eq('owner_id', user.id)
-                .eq('period_start', periodStart)
-                .maybeSingle();
-
-            if (cancelled) return;
-
-            if (error) {
-                setTokensLeft(0);
-                return;
+            try {
+                const res = await fetch(`/api/rooms/tokens?date=${encodeURIComponent(date)}`, {
+                    headers: await authHeader()
+                });
+                const json = await readJsonResponse(res);
+                if (cancelled) return;
+                if (!res.ok) throw errorFromResponse(res, json);
+                setTokensLeft(Math.max(0, Number(json?.tokens_left || 0)));
+            } catch {
+                if (!cancelled) setTokensLeft(0);
             }
-
-            const total = data?.tokens_total ?? 0;
-            const used = data?.tokens_used ?? 0;
-            setTokensLeft(Math.max(0, total - used));
         };
 
         loadCredits();
         return () => {
             cancelled = true;
         };
-    }, [date, supabase, user.id]);
+    }, [authHeader, date]);
 
     useEffect(() => {
         let cancelled = false;
@@ -277,6 +303,53 @@ export default function RoomBookingClient() {
         };
     }, [date, roomId, supabase]);
 
+    useEffect(() => {
+        setQuote(null);
+        setCouponInfo('');
+    }, [couponCode, date, roomId, startIndex, endIndex]);
+
+    const applyCoupon = async () => {
+        setCouponInfo('');
+        setQuote(null);
+        if (!selection.hours) return;
+        if (!couponCode.trim()) return;
+
+        const min = Math.min(startIndex, endIndex == null ? startIndex : endIndex);
+        const max = Math.max(startIndex, endIndex == null ? startIndex : endIndex);
+        const startTime = TIME_SLOTS[min];
+        const endHour = Number(TIME_SLOTS[max].slice(0, 2)) + 1;
+        const endTime = `${String(endHour).padStart(2, '0')}:00`;
+
+        setQuoteBusy(true);
+        try {
+            const res = await fetch('/api/rooms/quote', {
+                method: 'POST',
+                headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    space_slug: roomId,
+                    booking_date: date,
+                    start_time: startTime,
+                    end_time: endTime,
+                    coupon_code: couponCode.trim()
+                })
+            });
+            const json = await readJsonResponse(res);
+            if (!res.ok) throw errorFromResponse(res, json);
+            setQuote(json);
+            if (json?.coupon?.valid) {
+                setCouponInfo('Coupon applied.');
+            } else if (json?.coupon?.error) {
+                setCouponInfo(json.coupon.error);
+            } else {
+                setCouponInfo('Coupon could not be applied.');
+            }
+        } catch (err) {
+            setCouponInfo(err?.message || 'Failed to validate coupon.');
+        } finally {
+            setQuoteBusy(false);
+        }
+    };
+
     const submit = async event => {
         event.preventDefault();
         setBusy(true);
@@ -293,52 +366,40 @@ export default function RoomBookingClient() {
 
             const min = Math.min(startIndex, endIndex == null ? startIndex : endIndex);
             const max = Math.max(startIndex, endIndex == null ? startIndex : endIndex);
-            const startTime = `${TIME_SLOTS[min]}:00`;
+            const startTime = TIME_SLOTS[min];
             const endHour = Number(TIME_SLOTS[max].slice(0, 2)) + 1;
-            const endTime = `${String(endHour).padStart(2, '0')}:00:00`;
+            const endTime = `${String(endHour).padStart(2, '0')}:00`;
 
-            // Determine auto-approval
-            const autoApprove = canUseTokens;
-
-            const { error: insertError } = await supabase.from('room_bookings').insert({
-                owner_id: user.id,
-                space_slug: roomId,
-                booking_date: date,
-                start_time: startTime,
-                end_time: endTime,
-                hours: selection.hours,
-                tokens_used: autoApprove ? requiredTokens : 0,
-                price_cents: autoApprove ? 0 : priceCents,
-                status: autoApprove ? 'approved' : 'requested'
+            const res = await fetch('/api/rooms/book', {
+                method: 'POST',
+                headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    space_slug: roomId,
+                    booking_date: date,
+                    start_time: startTime,
+                    end_time: endTime,
+                    coupon_code: couponCode.trim() ? couponCode.trim() : null
+                })
             });
-            if (insertError) throw insertError;
+            const json = await readJsonResponse(res);
+            if (!res.ok) throw errorFromResponse(res, json);
 
-            if (autoApprove) {
-                // Deduct tokens for current month
-                try {
-                    const periodStart = getMonthStart(date);
-                    const { data: credits, error: creditsErr } = await supabase
-                        .from('room_credits')
-                        .select('tokens_used, tokens_total')
-                        .eq('owner_id', user.id)
-                        .eq('period_start', periodStart)
-                        .maybeSingle();
-                    if (!creditsErr && credits) {
-                        const newUsed = Math.max(0, (credits.tokens_used || 0) + requiredTokens);
-                        await supabase
-                            .from('room_credits')
-                            .update({ tokens_used: newUsed })
-                            .eq('owner_id', user.id)
-                            .eq('period_start', periodStart);
-                        setTokensLeft(t => Math.max(0, t - requiredTokens));
-                    }
-                } catch {
-                    // ignore UI-side errors; backend might reconcile
-                }
+            const booking = json?.booking || null;
+            const payment = json?.payment || null;
 
-                setInfo('Booking approved. Tokens deducted.');
-            } else {
-                setInfo(`Booking requested. Payment required: ${formatNZD(priceCents / 100)} (${pricing.label}).`);
+            if (payment?.required && payment?.checkout_url) {
+                setInfo(`Redirecting to payment (${formatNZD(Number(payment.amount_cents || 0) / 100)})…`);
+                window.location.href = payment.checkout_url;
+                return;
+            }
+
+            setInfo('Booking approved. Tokens deducted.');
+            try {
+                const tokensRes = await fetch(`/api/rooms/tokens?date=${encodeURIComponent(date)}`, { headers: await authHeader() });
+                const tokensJson = await readJsonResponse(tokensRes);
+                if (tokensRes.ok) setTokensLeft(Math.max(0, Number(tokensJson?.tokens_left || 0)));
+            } catch {
+                // ignore
             }
 
             // Refresh local slot status quickly: mark selected slots
@@ -346,7 +407,7 @@ export default function RoomBookingClient() {
                 const next = new Map(prev);
                 for (const idx of selection.indices) {
                     const time = TIME_SLOTS[idx];
-                    next.set(time, autoApprove ? 'approved' : 'requested');
+                    next.set(time, booking?.status === 'approved' ? 'approved' : 'requested');
                 }
                 return next;
             });
@@ -485,17 +546,48 @@ export default function RoomBookingClient() {
 
                     {selection.hours ? (
                         <p className="platform-message info" style={{ marginTop: '1rem' }}>
-                            {canUseTokens ? (
+                            <span className="platform-mono">{requiredTokens}</span> token(s) required •{' '}
+                            <span className="platform-mono">{tokensApplied}</span> token(s) applied •{' '}
+                            {requiresPayment ? (
                                 <>
-                                    Uses <span className="platform-mono">{requiredTokens}</span> token(s) for {room.name}.
+                                    Pay now: <span className="platform-mono">{formatNZD(cashDueFinalCents / 100)}</span>
+                                    {quote?.pricing?.discount_cents ? (
+                                        <>
+                                            {' '}
+                                            (includes {formatNZD(Number(quote.pricing.discount_cents || 0) / 100)} discount)
+                                        </>
+                                    ) : null}
                                 </>
                             ) : (
-                                <>
-                                    Not enough tokens. Price:{' '}
-                                    <span className="platform-mono">{formatNZD(priceCents / 100)}</span> ({pricing.label}).
-                                </>
+                                <>No payment required.</>
                             )}
                         </p>
+                    ) : null}
+
+                    {selection.hours && requiresPayment ? (
+                        <div className="platform-card" style={{ marginTop: '1rem' }}>
+                            <h3 style={{ marginTop: 0 }}>Pay-as-you-go</h3>
+                            <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                                Tokens are applied first. Any remainder is charged via Stripe and an invoice is issued automatically.
+                            </p>
+                            <label className="platform-subtitle">Coupon (optional)</label>
+                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <input
+                                    value={couponCode}
+                                    onChange={e => setCouponCode(e.target.value)}
+                                    disabled={busy || quoteBusy}
+                                    placeholder="Enter coupon code"
+                                    style={{ flex: 1, minWidth: '12rem' }}
+                                />
+                                <button className="btn ghost" type="button" onClick={applyCoupon} disabled={busy || quoteBusy || !couponCode.trim()}>
+                                    {quoteBusy ? 'Checking…' : 'Apply'}
+                                </button>
+                            </div>
+                            {couponInfo ? <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>{couponInfo}</p> : null}
+                            <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
+                                Charge today: <span className="platform-mono">{formatNZD(cashDueFinalCents / 100)}</span>
+                            </p>
+                        </div>
                     ) : null}
 
                     {error && <p className="platform-message error">{error}</p>}
@@ -503,7 +595,7 @@ export default function RoomBookingClient() {
 
                     <div className="platform-actions" style={{ marginTop: '1rem' }}>
                         <button className="btn primary" type="submit" disabled={busy}>
-                            {busy ? 'Submitting…' : 'Request booking'}
+                            {busy ? 'Submitting…' : requiresPayment ? 'Pay & request booking' : 'Book with tokens'}
                         </button>
                     </div>
                 </form>
