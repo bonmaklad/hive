@@ -67,7 +67,17 @@ export async function GET(request) {
         }
         return NextResponse.json({ ok: true, url: externalUrl });
     } catch (err) {
-        return NextResponse.json({ error: err?.message || 'Failed to load Stripe invoice.' }, { status: 500 });
+        const hint =
+            err?.status === 404 || err?.code === 'resource_missing'
+                ? 'Stripe could not find this invoice in the current environment; double-check your production STRIPE_SECRET_KEY (test vs live) matches the stored Stripe IDs.'
+                : null;
+        return NextResponse.json(
+            {
+                error: err?.message || 'Failed to load Stripe invoice.',
+                hint,
+                stripe_request_id: err?.requestId || null
+            },
+            { status: 500 }
+        );
     }
 }
-

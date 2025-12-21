@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 export default function SiteNav({
     hashPrefix = '',
@@ -14,6 +15,24 @@ export default function SiteNav({
     bookingsLabel = 'Bookings'
 }) {
     const [navOpen, setNavOpen] = useState(false);
+    const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        const checkSession = async () => {
+            const { data } = await supabase.auth.getSession();
+            if (!cancelled) setIsLoggedIn(!!data?.session);
+        };
+        checkSession();
+        const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (!cancelled) setIsLoggedIn(!!session);
+        });
+        return () => {
+            cancelled = true;
+            sub?.subscription?.unsubscribe?.();
+        };
+    }, [supabase]);
 
     const links = [
         { label: 'Mission', href: `${hashPrefix}#why` },
@@ -53,8 +72,8 @@ export default function SiteNav({
                         {bookingsLabel}
                     </Link>
                 )}
-                <Link className="btn ghost" href={ctaHref}>
-                    {ctaLabel}
+                <Link className="btn ghost" href="/platform">
+                    {isLoggedIn ? 'Platform' : 'Login'}
                 </Link>
             </div>
             <button

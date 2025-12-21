@@ -29,11 +29,14 @@ function computeDiscountCents({ coupon, amountCents }) {
     return 0;
 }
 
-function getSiteUrl() {
-    return (process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(
-        /\/$/,
-        ''
-    );
+function getSiteUrl(request) {
+    const configured = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL;
+    if (configured) return configured.replace(/\/$/, '');
+    try {
+        return new URL(request.url).origin.replace(/\/$/, '');
+    } catch {
+        return 'http://localhost:3000';
+    }
 }
 
 async function createPublicStripeCustomer({ email, name, phone, bookingId }) {
@@ -162,7 +165,7 @@ export async function POST(request) {
         const customerId = await createPublicStripeCustomer({ email: customerEmail, name: customerName, phone: customerPhone, bookingId });
         if (!customerId) return NextResponse.json({ error: 'Could not create Stripe customer.' }, { status: 500 });
 
-        const siteUrl = getSiteUrl();
+        const siteUrl = getSiteUrl(request);
         const successUrl = `${siteUrl}/bookings/room?stripe=success&booking=${bookingId}`;
         const cancelUrl = `${siteUrl}/bookings/room?stripe=cancel&booking=${bookingId}`;
         const returnUrl = `${siteUrl}/bookings/room?stripe=return&booking=${bookingId}&session_id={CHECKOUT_SESSION_ID}`;

@@ -6,6 +6,13 @@ function getStripeSecretKey() {
     return key;
 }
 
+function getStripeMode() {
+    const key = getStripeSecretKey();
+    if (key.startsWith('sk_live_')) return 'live';
+    if (key.startsWith('sk_test_')) return 'test';
+    return 'unknown';
+}
+
 export function getStripeWebhookSecret() {
     const secret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!secret) throw new Error('Missing STRIPE_WEBHOOK_SECRET on the Next.js server.');
@@ -58,6 +65,7 @@ export async function stripeRequest(method, path, params, { idempotencyKey } = {
         err.code = code;
         err.status = res.status;
         err.raw = json;
+        err.requestId = res.headers.get('request-id') || res.headers.get('stripe-request-id') || null;
         throw err;
     }
 
@@ -68,31 +76,42 @@ export async function ensureStripeCustomer({ tenant, tenantId, email }) {
     const existing = typeof tenant?.stripe_customer_id === 'string' ? tenant.stripe_customer_id.trim() : '';
     const cleanEmail = typeof email === 'string' ? email.trim() : '';
     if (existing) {
-        if (cleanEmail) {
-            try {
-                await stripeRequest(
-                    'POST',
-                    `/v1/customers/${encodeURIComponent(existing)}`,
-                    { email: cleanEmail },
-                    { idempotencyKey: `tenant-customer-email-${tenantId}` }
-                );
-            } catch {
-                // ignore best-effort updates
+        // Validate the existing customer id to avoid test/live key mismatches causing downstream failures.
+        try {
+            await stripeRequest('GET', `/v1/customers/${encodeURIComponent(existing)}`);
+            if (cleanEmail) {
+                try {
+                    await stripeRequest(
+                        'POST',
+                        `/v1/customers/${encodeURIComponent(existing)}`,
+                        { email: cleanEmail },
+                        { idempotencyKey: `tenant-customer-email-${tenantId}` }
+                    );
+                } catch {
+                    // ignore best-effort updates
+                }
+            }
+            return existing;
+        } catch (err) {
+            // If the customer does not exist in this Stripe mode/account, create a new one.
+            if (err?.status !== 404 && err?.code !== 'resource_missing') {
+                throw err;
             }
         }
-        return existing;
     }
 
     const name = typeof tenant?.name === 'string' ? tenant.name : `Tenant ${tenantId}`;
     const idempotencyKey = `tenant-customer-${tenantId}`;
 
+    const stripeMode = getStripeMode();
     const customer = await stripeRequest(
         'POST',
         '/v1/customers',
         {
             name,
             email: cleanEmail || undefined,
-            'metadata[tenant_id]': tenantId
+            'metadata[tenant_id]': tenantId,
+            'metadata[stripe_mode]': stripeMode
         },
         { idempotencyKey }
     );

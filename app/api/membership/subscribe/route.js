@@ -44,11 +44,14 @@ function safeText(value, limit = 120) {
     return v.slice(0, limit);
 }
 
-function getSiteUrl() {
-    return (process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(
-        /\/$/,
-        ''
-    );
+function getSiteUrl(request) {
+    const configured = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL;
+    if (configured) return configured.replace(/\/$/, '');
+    try {
+        return new URL(request.url).origin.replace(/\/$/, '');
+    } catch {
+        return 'http://localhost:3000';
+    }
 }
 
 async function getTenantOwnerTenantId(admin, userId) {
@@ -97,11 +100,11 @@ export async function POST(request) {
         const ownerEmail = ownerProfile?.email || null;
 
         const customerId = await ensureStripeCustomer({ tenant, tenantId, email: ownerEmail });
-        if (!tenant?.stripe_customer_id) {
+        if (tenant?.stripe_customer_id !== customerId) {
             await admin.from('tenants').update({ stripe_customer_id: customerId }).eq('id', tenantId);
         }
 
-        const siteUrl = getSiteUrl();
+        const siteUrl = getSiteUrl(request);
         const returnUrl = `${siteUrl}/platform/membership?stripe=return`;
 
         const planName = safeText(membership.plan || 'membership', 50);
@@ -164,7 +167,8 @@ export async function POST(request) {
             {
                 error: 'Failed to start subscription setup.',
                 detail: message,
-                code: err?.code || null
+                code: err?.code || null,
+                stripe_request_id: err?.requestId || null
             },
             { status: status >= 400 && status < 600 ? status : 500 }
         );

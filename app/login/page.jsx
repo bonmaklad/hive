@@ -20,7 +20,7 @@ export default function LoginPage() {
                     <LoginForm />
                 </Suspense>
                 <p className="platform-message info" style={{ marginTop: '1rem' }}>
-                    First time here? Use the invite email you received to sign in and set your password.
+                    First time here? Use the invite email you received to sign in and set your password in settings.
                 </p>
                 <p className="platform-footer">
                     <Link href="/" className="btn ghost">

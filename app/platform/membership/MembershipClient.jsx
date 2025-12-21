@@ -414,7 +414,7 @@ export default function MembershipClient() {
                 }
             });
             const json = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(json?.error || 'Failed to load invoice URL.');
+            if (!res.ok) throw new Error(json?.hint || json?.detail || json?.error || 'Failed to load invoice URL.');
 
             const url = typeof json?.url === 'string' ? json.url : '';
             if (!url) throw new Error('Invoice URL missing.');
@@ -440,7 +440,7 @@ export default function MembershipClient() {
                 }
             });
             const json = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(json?.error || 'Failed to open billing portal.');
+            if (!res.ok) throw new Error(json?.hint || json?.detail || json?.error || 'Failed to open billing portal.');
 
             const url = typeof json?.url === 'string' ? json.url : '';
             if (!url) throw new Error('Stripe portal URL missing.');

@@ -28,11 +28,14 @@ function computeDiscountCents({ coupon, amountCents }) {
     return 0;
 }
 
-function getSiteUrl() {
-    return (process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(
-        /\/$/,
-        ''
-    );
+function getSiteUrl(request) {
+    const configured = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL;
+    if (configured) return configured.replace(/\/$/, '');
+    try {
+        return new URL(request.url).origin.replace(/\/$/, '');
+    } catch {
+        return 'http://localhost:3000';
+    }
 }
 
 function timeToMinutes(value) {
@@ -233,12 +236,12 @@ export async function POST(request) {
         // Payment required: create/ensure Stripe customer, create Checkout session, track payment row.
         const tenantCustomerId = await ensureStripeCustomer({ tenant: ctx.tenant, tenantId: ctx.tenantId, email: ctx.tokenOwnerEmail });
 
-        // Persist customer id if missing (best-effort).
-        if (!ctx.tenant?.stripe_customer_id) {
+        // Persist customer id if missing/different (best-effort).
+        if (ctx.tenant?.stripe_customer_id !== tenantCustomerId) {
             await ctx.admin.from('tenants').update({ stripe_customer_id: tenantCustomerId }).eq('id', ctx.tenantId);
         }
 
-        const siteUrl = getSiteUrl();
+        const siteUrl = getSiteUrl(request);
         const successUrl = `${siteUrl}/platform/rooms?stripe=success&booking=${booking.id}`;
         const cancelUrl = `${siteUrl}/platform/rooms?stripe=cancel&booking=${booking.id}`;
         const returnUrl = `${siteUrl}/platform/rooms?stripe=return&booking=${booking.id}&session_id={CHECKOUT_SESSION_ID}`;
