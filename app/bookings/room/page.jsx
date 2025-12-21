@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import SiteNav from '../../components/SiteNav';
 import RoomBookingClient from './room-booking-client';
 
@@ -24,7 +25,9 @@ export default function RoomBookingsPage() {
             <main>
                 <section className="section">
                     <div className="container">
-                        <RoomBookingClient />
+                        <Suspense fallback={<p>Loading booking…</p>}>
+                            <RoomBookingClient />
+                        </Suspense>
                     </div>
                 </section>
             </main>
@@ -36,4 +39,3 @@ export default function RoomBookingsPage() {
         </>
     );
 }
-
