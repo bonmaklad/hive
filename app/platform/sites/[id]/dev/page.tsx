@@ -83,7 +83,7 @@ function buildTree(files: string[]) {
     const root: TreeNode = { name: '', path: '', type: 'dir', children: [] };
 
     for (const raw of files) {
-        const filePath = raw.replace(/\\/g, '/').replace(/^\/+/, '');
+        const filePath = String(raw || '').replace(/\\/g, '/').replace(/^\/+/, '');
         if (!filePath) continue;
 
         const parts = filePath.split('/').filter(Boolean);
@@ -347,7 +347,20 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
             });
             const body = await readJsonResponse(res);
             if (!res.ok) throw new Error(body?.detail || body?.error || 'Could not load files.');
-            setFiles(Array.isArray(body) ? body : []);
+            const raw = Array.isArray(body) ? body : [];
+            const normalized = raw
+                .map((f: any) => {
+                    if (typeof f === 'string') return f;
+                    if (f && typeof f === 'object') {
+                        if (typeof f.path === 'string') return f.path;
+                        if (typeof f.file === 'string') return f.file;
+                        if (typeof f.name === 'string') return f.name;
+                    }
+                    return '';
+                })
+                .map(s => String(s).replace(/\\/g, '/').replace(/^\/+/, '').trim())
+                .filter(Boolean);
+            setFiles(normalized);
         } catch (e: any) {
             setFilesError(e?.message || 'Could not load files.');
         } finally {
@@ -892,7 +905,7 @@ export default function SiteDevModePage({ params }: { params: { id: string } }) 
                         <iframe
                             key={previewKey}
                             title="Dev preview"
-                            src={previewPath}
+                            src={devRunning ? previewPath : 'about:blank'}
                             style={{ width: '100%', height: '100%', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }}
                         />
                         {!devRunning ? (

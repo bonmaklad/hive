@@ -142,6 +142,7 @@ export default function DashboardClient() {
                 <div className="platform-kpi-row">
                     <h2 style={{ margin: 0 }}>Website hosting</h2>
                     <span className="badge neutral">{loading ? '…' : `${siteCount} site${siteCount === 1 ? '' : 's'}`}</span>
+                    <span className="badge pending">Coming soon</span>
                 </div>
                 <p className="platform-subtitle">View sites, create new ones, and track deployment status.</p>
                 <div className="platform-card-actions">
