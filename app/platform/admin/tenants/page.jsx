@@ -78,6 +78,19 @@ function toCentsOrZero(value) {
     return Math.max(0, Math.round(parsed * 100));
 }
 
+function formatBytes(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n <= 0) return '—';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let idx = 0;
+    let v = n;
+    while (v >= 1024 && idx < units.length - 1) {
+        v /= 1024;
+        idx += 1;
+    }
+    return `${v.toFixed(v < 10 ? 1 : 0)} ${units[idx]}`;
+}
+
 async function readJsonResponse(response) {
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
@@ -129,6 +142,125 @@ function Modal({ open, title, subtitle, onClose, children, footer }) {
                 </div>
                 <div style={{ marginTop: '1rem' }}>{children}</div>
                 {footer ? <div className="platform-card-actions">{footer}</div> : null}
+            </div>
+        </div>
+    );
+}
+
+function TenantDocumentsSection({ tenantId, authHeader }) {
+    const [docs, setDocs] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const [pendingFiles, setPendingFiles] = useState([]);
+
+    const loadDocs = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const res = await fetch(`/api/admin/tenants/${tenantId}/docs`, { headers: await authHeader() });
+            const json = await readJsonResponse(res);
+            if (!res.ok) throw new Error(json?.error || 'Failed to load documents.');
+            setDocs(Array.isArray(json?.files) ? json.files : []);
+        } catch (e) {
+            setError(e?.message || 'Failed to load documents.');
+            setDocs([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!tenantId) return;
+        loadDocs();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tenantId]);
+
+    const onUpload = async () => {
+        if (!pendingFiles?.length) return;
+        setUploading(true);
+        setError('');
+        try {
+            const form = new FormData();
+            for (const f of pendingFiles) form.append('files', f);
+            const res = await fetch(`/api/admin/tenants/${tenantId}/docs`, {
+                method: 'POST',
+                headers: await authHeader(),
+                body: form
+            });
+            const json = await readJsonResponse(res);
+            if (!res.ok) throw new Error(json?.error || 'Failed to upload document(s).');
+            setPendingFiles([]);
+            await loadDocs();
+        } catch (e) {
+            setError(e?.message || 'Failed to upload document(s).');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <div style={{ marginTop: '1.25rem' }}>
+            <h3 style={{ margin: 0 }}>Documents</h3>
+            <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                Tenant documents in storage. Upload files to <span className="platform-mono">{tenantId}/</span>.
+            </p>
+            {error && <p className="platform-message error">{error}</p>}
+            {loading ? <p className="platform-subtitle">Loading documents…</p> : null}
+            {!loading && (
+                <div className="platform-table-wrap" style={{ marginTop: '0.75rem' }}>
+                    <table className="platform-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Updated</th>
+                                <th>Size</th>
+                                <th>Open</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {docs.length ? (
+                                docs.map(doc => (
+                                    <tr key={doc.name}>
+                                        <td className="platform-mono">{doc.name}</td>
+                                        <td className="platform-mono">{doc.updated_at ? new Date(doc.updated_at).toLocaleString() : '—'}</td>
+                                        <td className="platform-mono">{formatBytes(doc.size)}</td>
+                                        <td>
+                                            {doc.url ? (
+                                                <a className="btn ghost" href={doc.url} target="_blank" rel="noopener noreferrer">
+                                                    View
+                                                </a>
+                                            ) : (
+                                                '—'
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={4} className="platform-subtitle">
+                                        No documents yet.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            <div className="platform-card-actions">
+                <input
+                    type="file"
+                    multiple
+                    onChange={e => setPendingFiles(Array.from(e.target.files || []))}
+                    disabled={uploading}
+                />
+                <button className="btn primary" type="button" onClick={onUpload} disabled={uploading || !pendingFiles.length}>
+                    {uploading ? 'Uploading…' : 'Upload'}
+                </button>
+                <button className="btn ghost" type="button" onClick={loadDocs} disabled={uploading}>
+                    Refresh
+                </button>
             </div>
         </div>
     );
@@ -1349,6 +1481,8 @@ export default function AdminTenantsPage() {
                                                 </table>
                                             </div>
                                         </div>
+
+                                        <TenantDocumentsSection tenantId={t.id} authHeader={authHeader} />
 
                                         <TenantInlineActions
                                             tenant={t}

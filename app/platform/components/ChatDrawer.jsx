@@ -13,6 +13,22 @@ function getMentionQuery(text) {
 function replaceTrailingMention(text, replacement) {
     return String(text || '').replace(/(^|\\s)@[\\w.+-]{0,64}$/, `$1${replacement} `);
 }
+function formatRelativeTime(value, nowTs = Date.now()) {
+    const ts = typeof value === 'number' ? value : new Date(value).getTime();
+    if (!Number.isFinite(ts)) return '';
+    let diff = Math.max(0, Math.floor((nowTs - ts) / 1000)); // seconds
+    if (diff < 5) return 'just now';
+    if (diff < 60) return `${diff}s ago`;
+    const mins = Math.floor(diff / 60);
+    if (mins < 60) return mins === 1 ? '1 min ago' : `${mins} mins ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs === 1 ? '1 hr ago' : `${hrs} hrs ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return days === 1 ? '1 day ago' : `${days} days ago`;
+    // Fallback to date for older messages
+    const d = new Date(ts);
+    return d.toLocaleDateString();
+}
 
 export default function ChatDrawer() {
     const { user, profile, supabase } = usePlatformSession();
@@ -29,6 +45,12 @@ export default function ChatDrawer() {
     const listRef = useRef(null);
     const name = useMemo(() => getDisplayName({ user, profile }), [profile, user]);
 
+    const [now, setNow] = useState(Date.now());
+
+    useEffect(() => {
+        const id = setInterval(() => setNow(Date.now()), 60 * 1000);
+        return () => clearInterval(id);
+    }, []);
     useEffect(() => {
         let cancelled = false;
 
@@ -241,8 +263,10 @@ export default function ChatDrawer() {
                     </button>
                 </div>
 
-                {error && <p className="platform-message error">{error}</p>}
-                {mentionError && <p className="platform-message error">{mentionError}</p>}
+                <div>
+                    {error && <p className="platform-message error">{error}</p>}
+                    {mentionError && <p className="platform-message error">{mentionError}</p>}
+                </div>
 
                 <div className="platform-chat-list" ref={listRef}>
                     {messages.length ? (
@@ -253,11 +277,8 @@ export default function ChatDrawer() {
                             >
                                 <div className="platform-chat-meta">
                                     <span className="platform-chat-author">{msg.user_name}</span>
-                                    <span className="platform-chat-time">
-                                        {new Date(msg.created_at).toLocaleTimeString([], {
-                                            hour: '2-digit',
-                                            minute: '2-digit'
-                                        })}
+                                    <span className="platform-chat-time" title={new Date(msg.created_at).toLocaleString()}>
+                                        {formatRelativeTime(msg.created_at, now)}
                                     </span>
                                 </div>
                                 <div className="platform-chat-body">{msg.body}</div>

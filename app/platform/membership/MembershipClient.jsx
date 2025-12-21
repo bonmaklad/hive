@@ -196,46 +196,18 @@ export default function MembershipClient() {
         const loadDocs = async () => {
             setDocsLoading(true);
             setDocsError('');
-            const BUCKET = 'tenant-docs';
             try {
-                // Resolve a tenant id for this user (prefer owner role)
-                const { data: tuRows, error: tuError } = await supabase
-                    .from('tenant_users')
-                    .select('tenant_id, role, created_at')
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: true });
-                if (tuError) throw tuError;
-                const rows = Array.isArray(tuRows) ? tuRows : [];
-                const owner = rows.find(r => r.role === 'owner');
-                const tenantId = owner?.tenant_id || rows[0]?.tenant_id || null;
-                if (!tenantId) {
-                    if (!cancelled) setDocs([]);
-                    return;
-                }
-
-                const folder = tenantId;
-                const { data: list, error: listError } = await supabase.storage
-                    .from(BUCKET)
-                    .list(folder, { limit: 200, sortBy: { column: 'name', order: 'asc' } });
-                if (listError) throw listError;
-
-                const files = Array.isArray(list) ? list.filter(it => it && it.name && !it.id) || list : list;
-                const out = [];
-                for (const item of list || []) {
-                    if (!item?.name) continue;
-                    // Skip subfolders for now
-                    if (item?.metadata && item.metadata?.mimetype === 'vnd.folder') continue;
-                    const path = `${folder}/${item.name}`;
-                    const { data: signed, error: signError } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
-                    if (signError) continue;
-                    out.push({
-                        name: item.name,
-                        size: item?.metadata?.size ?? null,
-                        updated_at: item?.updated_at || item?.created_at || null,
-                        url: signed?.signedUrl || signed?.signed_url || null
-                    });
-                }
-                if (!cancelled) setDocs(out);
+                const { data } = await supabase.auth.getSession();
+                const token = data?.session?.access_token || '';
+                const res = await fetch('/api/tenant/docs', {
+                    headers: {
+                        accept: 'application/json',
+                        authorization: token ? `Bearer ${token}` : ''
+                    }
+                });
+                const json = await res.json();
+                if (!res.ok) throw new Error(json?.error || 'Failed to load documents');
+                if (!cancelled) setDocs(Array.isArray(json?.files) ? json.files : []);
             } catch (e) {
                 if (!cancelled) setDocsError(e?.message || 'Failed to load documents');
             } finally {
@@ -547,7 +519,7 @@ export default function MembershipClient() {
 
             <section className="platform-card" style={{ marginTop: '1.25rem' }} aria-label="Documentation">
                 <h2 style={{ marginTop: 0 }}>Documentation</h2>
-                <p className="platform-subtitle">Tenant documents (private to your tenant)</p>
+                <p className="platform-subtitle">Tenant documents</p>
                 {docsLoading ? <p className="platform-subtitle">Loading documents…</p> : null}
                 {docsError ? <p className="platform-message error">{docsError}</p> : null}
                 {!docsLoading && !docsError && (
