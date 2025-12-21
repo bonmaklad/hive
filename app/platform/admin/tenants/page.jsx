@@ -40,9 +40,7 @@ const OFFICE_MONTHLY_CENTS = {
     'office-c': 149900
 };
 
-const FRIDGE_WEEKLY_CENTS = 2500;
-const WEEKS_PER_MONTH = 4.333;
-const FRIDGE_MONTHLY_CENTS = Math.round(FRIDGE_WEEKLY_CENTS * WEEKS_PER_MONTH);
+const FRIDGE_MONTHLY_CENTS = 2500;
 
 function computeMonthlyCents({ plan, officeId, donationCents, fridgeEnabled, monthlyOverrideCents }) {
     const hasOverride = monthlyOverrideCents !== null && monthlyOverrideCents !== undefined && monthlyOverrideCents !== '';
@@ -55,7 +53,7 @@ function computeMonthlyCents({ plan, officeId, donationCents, fridgeEnabled, mon
         plan === 'office'
             ? OFFICE_MONTHLY_CENTS[officeId] || PLAN_MONTHLY_CENTS.office
             : PLAN_MONTHLY_CENTS[plan] ?? 0;
-    const fridge = fridgeEnabled ? Math.round(FRIDGE_WEEKLY_CENTS * WEEKS_PER_MONTH) : 0;
+    const fridge = fridgeEnabled ? FRIDGE_MONTHLY_CENTS : 0;
     return Math.max(0, base + (donationCents || 0) + fridge);
 }
 

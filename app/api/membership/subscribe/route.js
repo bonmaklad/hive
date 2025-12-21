@@ -59,94 +59,114 @@ async function getTenantOwnerTenantId(admin, userId) {
 }
 
 export async function POST(request) {
-    const { user, error } = await getUserFromRequest(request);
-    if (!user) return NextResponse.json({ error }, { status: 401 });
+    try {
+        const { user, error } = await getUserFromRequest(request);
+        if (!user) return NextResponse.json({ error }, { status: 401 });
 
-    const admin = createSupabaseAdminClient();
+        const admin = createSupabaseAdminClient();
 
-    const tenantId = await getTenantOwnerTenantId(admin, user.id);
-    if (!tenantId) return NextResponse.json({ error: 'Only tenant owners can enable automatic payments.' }, { status: 403 });
+        const tenantId = await getTenantOwnerTenantId(admin, user.id);
+        if (!tenantId) return NextResponse.json({ error: 'Only tenant owners can enable automatic payments.' }, { status: 403 });
 
-    const { data: tenant, error: tenantError } = await admin.from('tenants').select('*').eq('id', tenantId).maybeSingle();
-    if (tenantError) return NextResponse.json({ error: tenantError.message }, { status: 500 });
-    if (!tenant) return NextResponse.json({ error: 'Tenant not found.' }, { status: 404 });
+        const { data: tenant, error: tenantError } = await admin.from('tenants').select('*').eq('id', tenantId).maybeSingle();
+        if (tenantError) return NextResponse.json({ error: tenantError.message }, { status: 500 });
+        if (!tenant) return NextResponse.json({ error: 'Tenant not found.' }, { status: 404 });
 
-    const { data: membership, error: membershipError } = await admin
-        .from('memberships')
-        .select('*')
-        .eq('owner_id', user.id)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        const { data: membership, error: membershipError } = await admin
+            .from('memberships')
+            .select('*')
+            .eq('owner_id', user.id)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-    if (membershipError) return NextResponse.json({ error: membershipError.message }, { status: 500 });
-    if (!membership) return NextResponse.json({ error: 'Membership not found.' }, { status: 404 });
+        if (membershipError) return NextResponse.json({ error: membershipError.message }, { status: 500 });
+        if (!membership) return NextResponse.json({ error: 'Membership not found.' }, { status: 404 });
 
-    const monthlyAmountCents = Math.max(0, toInt(membership.monthly_amount_cents, 0));
-    if (monthlyAmountCents <= 0) {
-        return NextResponse.json({ error: 'Automatic card payment requires a monthly amount greater than $0.00.' }, { status: 400 });
+        const monthlyAmountCents = Math.max(0, toInt(membership.monthly_amount_cents, 0));
+        if (monthlyAmountCents <= 0) {
+            return NextResponse.json({ error: 'Automatic card payment requires a monthly amount greater than $0.00.' }, { status: 400 });
+        }
+
+        const currency = safeText(membership.currency || 'NZD', 10).toLowerCase() || 'nzd';
+        const invoiceDay = clampInvoiceDay(membership?.next_invoice_at, new Date().getUTCDate());
+        const billingAnchor = nextBillingAnchorUtc(invoiceDay);
+
+        // Best-effort email to reduce Stripe prompting.
+        const { data: ownerProfile } = await admin.from('profiles').select('email').eq('id', user.id).maybeSingle();
+        const ownerEmail = ownerProfile?.email || null;
+
+        const customerId = await ensureStripeCustomer({ tenant, tenantId, email: ownerEmail });
+        if (!tenant?.stripe_customer_id) {
+            await admin.from('tenants').update({ stripe_customer_id: customerId }).eq('id', tenantId);
+        }
+
+        const siteUrl = getSiteUrl();
+        const returnUrl = `${siteUrl}/platform/membership?stripe=return`;
+
+        const planName = safeText(membership.plan || 'membership', 50);
+        const productName = `HiveHQ Membership (${planName})`;
+
+        const membershipVersion = Number.isFinite(Date.parse(membership?.updated_at)) ? Date.parse(membership.updated_at) : 0;
+        const idempotencyKey = `sub-checkout-v4-${membership.id}-${membershipVersion}-${monthlyAmountCents}-${billingAnchor}`;
+
+        const session = await stripeRequest(
+            'POST',
+            '/v1/checkout/sessions',
+            {
+                mode: 'subscription',
+                ui_mode: 'embedded',
+                customer: customerId,
+                return_url: returnUrl,
+                allow_promotion_codes: 'true',
+                // Enable Stripe Tax (GST/VAT) calculation and treat our prices as tax-inclusive.
+                'automatic_tax[enabled]': 'true',
+                billing_address_collection: 'required',
+                'customer_update[address]': 'auto',
+
+                'line_items[0][quantity]': '1',
+                'line_items[0][price_data][currency]': currency,
+                'line_items[0][price_data][unit_amount]': String(monthlyAmountCents),
+                'line_items[0][price_data][tax_behavior]': 'inclusive',
+                'line_items[0][price_data][recurring][interval]': 'month',
+                'line_items[0][price_data][product_data][name]': productName,
+
+                // Session metadata (easy to read in webhook).
+                'metadata[membership_id]': membership.id,
+                'metadata[tenant_id]': tenantId,
+                'metadata[owner_id]': user.id,
+
+                // Subscription metadata (persists on Stripe subscription).
+                'subscription_data[metadata][membership_id]': membership.id,
+                'subscription_data[metadata][tenant_id]': tenantId,
+                'subscription_data[metadata][owner_id]': user.id,
+
+                // Align the first charge to the configured billing day-of-month.
+                // NOTE: Stripe does not allow sending both billing_cycle_anchor and trial_end in the same request.
+                // Using trial_end defers the first invoice to the anchor and Stripe will bill monthly from there.
+                'subscription_data[trial_end]': String(billingAnchor)
+            },
+            { idempotencyKey }
+        );
+
+        const clientSecret = typeof session?.client_secret === 'string' ? session.client_secret : '';
+        if (!clientSecret) return NextResponse.json({ error: 'Stripe did not return an embedded client_secret.' }, { status: 500 });
+
+        return NextResponse.json({
+            ok: true,
+            stripe_checkout_session_id: session.id,
+            stripe_checkout_client_secret: clientSecret
+        });
+    } catch (err) {
+        const message = err?.message || 'Failed to start subscription setup.';
+        const status = Number.isFinite(err?.status) ? err.status : 500;
+        return NextResponse.json(
+            {
+                error: 'Failed to start subscription setup.',
+                detail: message,
+                code: err?.code || null
+            },
+            { status: status >= 400 && status < 600 ? status : 500 }
+        );
     }
-
-    const currency = safeText(membership.currency || 'NZD', 10).toLowerCase() || 'nzd';
-    const invoiceDay = clampInvoiceDay(membership?.next_invoice_at, new Date().getUTCDate());
-    const billingAnchor = nextBillingAnchorUtc(invoiceDay);
-
-    // Best-effort email to reduce Stripe prompting.
-    const { data: ownerProfile } = await admin.from('profiles').select('email').eq('id', user.id).maybeSingle();
-    const ownerEmail = ownerProfile?.email || null;
-
-    const customerId = await ensureStripeCustomer({ tenant, tenantId, email: ownerEmail });
-    if (!tenant?.stripe_customer_id) {
-        await admin.from('tenants').update({ stripe_customer_id: customerId }).eq('id', tenantId);
-    }
-
-    const siteUrl = getSiteUrl();
-    const returnUrl = `${siteUrl}/platform/membership?stripe=return`;
-
-    const planName = safeText(membership.plan || 'membership', 50);
-    const productName = `HiveHQ Membership (${planName})`;
-
-    const session = await stripeRequest(
-        'POST',
-        '/v1/checkout/sessions',
-        {
-            mode: 'subscription',
-            ui_mode: 'embedded',
-            customer: customerId,
-            return_url: returnUrl,
-            allow_promotion_codes: 'true',
-
-            'line_items[0][quantity]': '1',
-            'line_items[0][price_data][currency]': currency,
-            'line_items[0][price_data][unit_amount]': String(monthlyAmountCents),
-            'line_items[0][price_data][recurring][interval]': 'month',
-            'line_items[0][price_data][product_data][name]': productName,
-
-            // Session metadata (easy to read in webhook).
-            'metadata[membership_id]': membership.id,
-            'metadata[tenant_id]': tenantId,
-            'metadata[owner_id]': user.id,
-
-            // Subscription metadata (persists on Stripe subscription).
-            'subscription_data[metadata][membership_id]': membership.id,
-            'subscription_data[metadata][tenant_id]': tenantId,
-            'subscription_data[metadata][owner_id]': user.id,
-
-            // Align monthly renewal to the configured billing day-of-month.
-            'subscription_data[billing_cycle_anchor]': String(billingAnchor),
-            'subscription_data[proration_behavior]': 'none',
-            // Start charging on the anchor (no immediate charge).
-            'subscription_data[trial_end]': String(billingAnchor)
-        },
-        { idempotencyKey: `sub-checkout-${membership.id}-${monthlyAmountCents}` }
-    );
-
-    const clientSecret = typeof session?.client_secret === 'string' ? session.client_secret : '';
-    if (!clientSecret) return NextResponse.json({ error: 'Stripe did not return an embedded client_secret.' }, { status: 500 });
-
-    return NextResponse.json({
-        ok: true,
-        stripe_checkout_session_id: session.id,
-        stripe_checkout_client_secret: clientSecret
-    });
 }

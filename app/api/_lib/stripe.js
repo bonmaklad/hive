@@ -137,10 +137,18 @@ export async function createCheckoutSession({
     const params = {
         mode: 'payment',
         customer: customerId,
+        // Enable Stripe Tax (GST/VAT) calculation.
+        'automatic_tax[enabled]': 'true',
+        // Collect address so Stripe can calculate the correct tax rate and show the tax breakdown on invoices.
+        billing_address_collection: 'required',
+        // Persist address back to the customer.
+        'customer_update[address]': 'auto',
         'invoice_creation[enabled]': 'true',
         'line_items[0][quantity]': '1',
         'line_items[0][price_data][currency]': currency.toLowerCase(),
         'line_items[0][price_data][unit_amount]': String(amountCents),
+        // We treat the provided amount as tax-inclusive (NZD) so Stripe backs out GST.
+        'line_items[0][price_data][tax_behavior]': 'inclusive',
         'line_items[0][price_data][product_data][name]': description,
         'line_items[0][price_data][product_data][metadata][tenant_id]': metadata?.tenant_id || '',
         'line_items[0][price_data][product_data][metadata][booking_id]': metadata?.booking_id || ''

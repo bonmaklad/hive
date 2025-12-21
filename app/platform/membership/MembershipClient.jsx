@@ -19,8 +19,7 @@ const OFFICES = [
     { id: 'office-c', label: 'Office C (6 desks)', monthlyCents: 149900 }
 ];
 
-const FRIDGE_WEEKLY_CENTS = 2500;
-const WEEKS_PER_MONTH = 4.333;
+const FRIDGE_MONTHLY_CENTS = 2500;
 
 function formatNZD(cents) {
     const value = Number(cents || 0) / 100;
@@ -202,7 +201,7 @@ export default function MembershipClient() {
             ? (membership?.monthly_amount_cents ?? 0)
             : plan.monthlyCents;
     const donationCents = toCentsOrZero(donationText);
-    const fridgeMonthlyCents = fridge ? Math.round(FRIDGE_WEEKLY_CENTS * WEEKS_PER_MONTH) : 0;
+    const fridgeMonthlyCents = fridge ? FRIDGE_MONTHLY_CENTS : 0;
     const computedMonthlyCents = baseMonthlyCents + donationCents + fridgeMonthlyCents;
     // Always show the backend's current membership price when present, even if it's 0.
     // Fall back to computed estimate only when monthly_amount_cents is undefined/null.
@@ -542,7 +541,7 @@ export default function MembershipClient() {
                 }
             });
             const json = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(json?.error || 'Failed to start subscription setup.');
+            if (!res.ok) throw new Error(json?.detail || json?.error || 'Failed to start subscription setup.');
 
             const clientSecret = typeof json?.stripe_checkout_client_secret === 'string' ? json.stripe_checkout_client_secret : '';
             const sessionId = typeof json?.stripe_checkout_session_id === 'string' ? json.stripe_checkout_session_id : '';
@@ -996,7 +995,7 @@ export default function MembershipClient() {
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <input type="checkbox" checked={fridge} onChange={e => setFridge(e.target.checked)} disabled={busy} />
                         <span>
-                            Mini <span className="platform-subtitle">({formatNZD(FRIDGE_WEEKLY_CENTS)} / week)</span>
+                            Mini Fridge<span className="platform-subtitle">({formatNZD(FRIDGE_MONTHLY_CENTS)} / month)</span>
                         </span>
                     </label>
                     <p className="platform-message info" style={{ marginTop: '1rem' }}>
