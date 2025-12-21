@@ -43,6 +43,19 @@ function formatDate(value) {
     return date.toLocaleDateString();
 }
 
+function formatBytes(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n <= 0) return '—';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let idx = 0;
+    let v = n;
+    while (v >= 1024 && idx < units.length - 1) {
+        v /= 1024;
+        idx += 1;
+    }
+    return `${v.toFixed(v < 10 ? 1 : 0)} ${units[idx]}`;
+}
+
 export default function MembershipClient() {
     const { user, profile, tenantRole, supabase } = usePlatformSession();
     const canView = Boolean(profile?.is_admin) || tenantRole === 'owner';
@@ -59,6 +72,15 @@ export default function MembershipClient() {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
+
+    const [units, setUnits] = useState([]);
+    const [unitsLoading, setUnitsLoading] = useState(false);
+    const [unitsError, setUnitsError] = useState('');
+    const [selectedUnitCode, setSelectedUnitCode] = useState('');
+
+    const [docs, setDocs] = useState([]);
+    const [docsLoading, setDocsLoading] = useState(false);
+    const [docsError, setDocsError] = useState('');
 
     const plan = useMemo(() => PLANS.find(p => p.id === planId) || PLANS[0], [planId]);
     const office = useMemo(() => OFFICES.find(o => o.id === officeId) || OFFICES[0], [officeId]);
@@ -138,6 +160,94 @@ export default function MembershipClient() {
         };
     }, [canView, supabase, user.id]);
 
+    useEffect(() => {
+        let cancelled = false;
+        if (!canView) return;
+        const loadUnits = async () => {
+            setUnitsLoading(true);
+            setUnitsError('');
+            try {
+                const { data } = await supabase.auth.getSession();
+                const token = data?.session?.access_token || '';
+                const res = await fetch('/api/work-units?includeOccupant=1', {
+                    headers: {
+                        accept: 'application/json',
+                        authorization: token ? `Bearer ${token}` : ''
+                    }
+                });
+                const json = await res.json();
+                if (!res.ok) throw new Error(json?.error || 'Failed to load workspaces');
+                if (!cancelled) setUnits(Array.isArray(json?.units) ? json.units : []);
+            } catch (e) {
+                if (!cancelled) setUnitsError(e?.message || 'Failed to load workspaces');
+            } finally {
+                if (!cancelled) setUnitsLoading(false);
+            }
+        };
+        loadUnits();
+        return () => {
+            cancelled = true;
+        };
+    }, [canView, supabase]);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!canView) return;
+        const loadDocs = async () => {
+            setDocsLoading(true);
+            setDocsError('');
+            const BUCKET = 'tenant-docs';
+            try {
+                // Resolve a tenant id for this user (prefer owner role)
+                const { data: tuRows, error: tuError } = await supabase
+                    .from('tenant_users')
+                    .select('tenant_id, role, created_at')
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: true });
+                if (tuError) throw tuError;
+                const rows = Array.isArray(tuRows) ? tuRows : [];
+                const owner = rows.find(r => r.role === 'owner');
+                const tenantId = owner?.tenant_id || rows[0]?.tenant_id || null;
+                if (!tenantId) {
+                    if (!cancelled) setDocs([]);
+                    return;
+                }
+
+                const folder = tenantId;
+                const { data: list, error: listError } = await supabase.storage
+                    .from(BUCKET)
+                    .list(folder, { limit: 200, sortBy: { column: 'name', order: 'asc' } });
+                if (listError) throw listError;
+
+                const files = Array.isArray(list) ? list.filter(it => it && it.name && !it.id) || list : list;
+                const out = [];
+                for (const item of list || []) {
+                    if (!item?.name) continue;
+                    // Skip subfolders for now
+                    if (item?.metadata && item.metadata?.mimetype === 'vnd.folder') continue;
+                    const path = `${folder}/${item.name}`;
+                    const { data: signed, error: signError } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
+                    if (signError) continue;
+                    out.push({
+                        name: item.name,
+                        size: item?.metadata?.size ?? null,
+                        updated_at: item?.updated_at || item?.created_at || null,
+                        url: signed?.signedUrl || signed?.signed_url || null
+                    });
+                }
+                if (!cancelled) setDocs(out);
+            } catch (e) {
+                if (!cancelled) setDocsError(e?.message || 'Failed to load documents');
+            } finally {
+                if (!cancelled) setDocsLoading(false);
+            }
+        };
+        loadDocs();
+        return () => {
+            cancelled = true;
+        };
+    }, [canView, supabase, user.id]);
+
     const submit = async event => {
         event.preventDefault();
         setBusy(true);
@@ -149,7 +259,7 @@ export default function MembershipClient() {
                 owner_id: user.id,
                 membership_id: membership?.id ?? null,
                 requested_plan: planId,
-                requested_office_id: planId === 'office' ? officeId : null,
+                requested_office_id: ['desk', 'pod', 'office'].includes(planId) ? (selectedUnitCode || null) : null,
                 requested_donation_cents: donationCents,
                 requested_fridge_enabled: fridge,
                 note: null
@@ -267,18 +377,88 @@ export default function MembershipClient() {
                         </div>
                     </fieldset>
 
-                    {planId === 'office' && (
-                        <label style={{ marginTop: '1rem', display: 'block' }}>
-                            Choose an available office
-                            <select value={officeId} onChange={e => setOfficeId(e.target.value)} disabled={busy}>
-                                {OFFICES.map(o => (
-                                    <option key={o.id} value={o.id}>
-                                        {o.label} — {formatNZD(o.monthlyCents)} / month
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-                    )}
+                    <div style={{ marginTop: '1rem' }}>
+                        <h3 style={{ margin: 0 }}>Workspace</h3>
+                        <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                            Choose a {planId} workspace. For different types or multiple offices, raise a support ticket and we’ll create a custom plan for you.
+                        </p>
+                        {unitsLoading ? <p className="platform-subtitle">Loading workspaces…</p> : null}
+                        {unitsError ? <p className="platform-message error">{unitsError}</p> : null}
+                        {(() => {
+                            const typeByPlan = {
+                                member: null,
+                                desk: 'desk',
+                                pod: 'desk_pod',
+                                office: 'private_office',
+                                premium: 'premium_office',
+                                custom: null
+                            };
+                            const targetType = typeByPlan[planId] ?? null;
+                            // Always show your own; exclude taken (occupied by others)
+                            const filtered = (units || []).filter(u => {
+                                if (u.mine) return true;
+                                if (!targetType) return false;
+                                return u.unit_type === targetType && (!u.is_occupied);
+                            });
+                            if (!filtered.length) {
+                                // For member/custom we intentionally show nothing
+                                if (!targetType) return null;
+                                return <p className="platform-subtitle">No available workspaces for this plan.</p>;
+                            }
+                            return (
+                            <div className="platform-table-wrap" style={{ marginTop: '0.5rem' }}>
+                                <table className="platform-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Select</th>
+                                            <th>Building</th>
+                                            <th>Unit</th>
+                                            <th>Label</th>
+                                         
+                                            <th>Capacity</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filtered
+                                            .sort((a, b) => {
+                                                const ab = String(a?.building || '').localeCompare(String(b?.building || ''));
+                                                if (ab !== 0) return ab;
+                                                const an = Number(a?.unit_number);
+                                                const bn = Number(b?.unit_number);
+                                                const aIsNum = Number.isFinite(an);
+                                                const bIsNum = Number.isFinite(bn);
+                                                if (aIsNum && bIsNum) return an - bn;
+                                                return String(a?.unit_number || '').localeCompare(String(b?.unit_number || ''));
+                                            })
+                                            .map(u => {
+                                                const disabled = (u.is_occupied && !u.mine);
+                                                const checked = selectedUnitCode === u.code;
+                                                return (
+                                                    <tr key={u.code} className={disabled ? 'row-disabled' : ''}>
+                                                        <td>
+                                                            <input
+                                                                type="radio"
+                                                                name="workspace"
+                                                                disabled={busy || disabled}
+                                                                checked={checked}
+                                                                onChange={() => setSelectedUnitCode(u.code)}
+                                                            />
+                                                        </td>
+                                                        <td className="platform-mono">{u.building || '—'}</td>
+                                                        <td className="platform-mono">{u.unit_number ?? u.code}</td>
+                                                        <td>{u.label || '—'}</td>
+                                                        <td className="platform-mono">{Number.isFinite(Number(u.capacity)) ? Number(u.capacity) : '—'}</td>
+                                                        <td>{u.mine ? <span className="badge success">yours</span> : u.is_occupied ? <span className="badge pending">taken</span> : <span className="badge neutral">available</span>}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        );
+                        })()}
+                    </div>
 
                     <div style={{ marginTop: '1rem' }}>
                         <h3 style={{ margin: 0 }}>Extras</h3>
@@ -300,10 +480,9 @@ export default function MembershipClient() {
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <input type="checkbox" checked={fridge} onChange={e => setFridge(e.target.checked)} disabled={busy} />
                         <span>
-                            Fridge access <span className="platform-subtitle">({formatNZD(FRIDGE_WEEKLY_CENTS)} / week)</span>
+                            Mini <span className="platform-subtitle">({formatNZD(FRIDGE_WEEKLY_CENTS)} / week)</span>
                         </span>
                     </label>
-
                     <p className="platform-message info" style={{ marginTop: '1rem' }}>
                         Estimated total: <span className="platform-mono">{formatNZD(computedMonthlyCents)} / month</span>
                     </p>
@@ -364,6 +543,53 @@ export default function MembershipClient() {
                         </tbody>
                     </table>
                 </div>
+            </section>
+
+            <section className="platform-card" style={{ marginTop: '1.25rem' }} aria-label="Documentation">
+                <h2 style={{ marginTop: 0 }}>Documentation</h2>
+                <p className="platform-subtitle">Tenant documents (private to your tenant)</p>
+                {docsLoading ? <p className="platform-subtitle">Loading documents…</p> : null}
+                {docsError ? <p className="platform-message error">{docsError}</p> : null}
+                {!docsLoading && !docsError && (
+                    <div className="platform-table-wrap" style={{ marginTop: '1rem' }}>
+                        <table className="platform-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Updated</th>
+                                    <th>Size</th>
+                                    <th>Open</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {docs.length ? (
+                                    docs.map(doc => (
+                                        <tr key={doc.name}>
+                                            <td className="platform-mono">{doc.name}</td>
+                                            <td className="platform-mono">{doc.updated_at ? new Date(doc.updated_at).toLocaleString() : '—'}</td>
+                                            <td className="platform-mono">{formatBytes(doc.size)}</td>
+                                            <td>
+                                                {doc.url ? (
+                                                    <a className="btn ghost" href={doc.url} target="_blank" rel="noopener noreferrer">
+                                                        View
+                                                    </a>
+                                                ) : (
+                                                    '—'
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={4} className="platform-subtitle">
+                                            No documents yet.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </section>
         </>
     );

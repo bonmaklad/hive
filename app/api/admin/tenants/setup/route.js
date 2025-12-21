@@ -238,12 +238,31 @@ export async function POST(request) {
             }
         }
 
-        return NextResponse.json({
-            ok: true,
-            tenant,
-            users: createdUsers,
-            magic_links_sent: sendMagicLinks
-        });
+        // Ensure tenant storage folder exists (bucket: tenant-docs / folder: <tenantId>/)
+        try {
+            const BUCKET = 'tenant-docs';
+            // Best-effort create bucket (ignore conflict errors)
+            try {
+                await guard.admin.storage.createBucket(BUCKET, { public: false });
+            } catch (_) {
+                // ignore
+            }
+            // Upload a placeholder file to create the folder
+            const keepPath = `${tenant.id}/.keep`;
+            const data = Buffer.from('');
+            try {
+                await guard.admin.storage.from(BUCKET).upload(keepPath, data, {
+                    contentType: 'text/plain',
+                    upsert: false
+                });
+            } catch (_) {
+                // ignore (already exists)
+            }
+        } catch (_) {
+            // ignore storage provisioning failures
+        }
+
+        return NextResponse.json({ ok: true, tenant, users: createdUsers, magic_links_sent: sendMagicLinks });
     } catch (err) {
         return NextResponse.json(
             {
