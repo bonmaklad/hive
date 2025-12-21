@@ -99,7 +99,6 @@ main {
 
 .hero > :not(.hero-bg) {
     position: relative;
-    z-index: 2;
 }
 
 .nav {
