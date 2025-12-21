@@ -2,7 +2,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import ContactForm from '../../components/ContactForm';
 import SiteNav from '../../components/SiteNav';
 import { bookingInclusions, getSpaceBySlug } from '../../../lib/spaces';
 
@@ -28,6 +27,8 @@ export default function BookingVenuePage({ params }) {
     const space = getSpaceBySlug(params.slug);
     if (!space) notFound();
 
+    const bookHref = `/bookings/room?room=${encodeURIComponent(space.slug)}`;
+
     return (
         <>
             <div className="hex-overlay" aria-hidden="true" />
@@ -41,7 +42,7 @@ export default function BookingVenuePage({ params }) {
                     backgroundPosition: 'center'
                 }}
             >
-                <SiteNav hashPrefix="/" logoHref="/" ctaHref="#request" ctaLabel="Request availability" />
+                <SiteNav hashPrefix="/" logoHref="/" ctaHref={bookHref} ctaLabel="Book now" />
                 <div className="hero-content">
                     <div className="hero-copy">
                         <p className="eyebrow">Venue</p>
@@ -51,8 +52,8 @@ export default function BookingVenuePage({ params }) {
                             <a className="btn primary" href="#photos">
                                 View photos
                             </a>
-                            <a className="btn secondary" href="#request">
-                                Request availability
+                            <a className="btn secondary" href={bookHref}>
+                                Book now
                             </a>
                         </div>
                     </div>
@@ -154,22 +155,19 @@ export default function BookingVenuePage({ params }) {
                     </div>
                 </section>
 
-                <section id="request" className="section contact">
+                <section id="book" className="section contact">
                     <div className="container">
-                        <div className="section-tag">Request availability</div>
-                        <h2>Tell us your date and timeframe.</h2>
+                        <div className="section-tag">Book</div>
+                        <h2>Book online</h2>
                         <div className="card" style={{ maxWidth: 720 }}>
                             <p>
-                                Send the details and we will confirm availability, pricing, and any catering or setup requests.
+                                Choose a date and time, pay securely, and we will email your confirmation and invoice.
                             </p>
-                            <ContactForm
-                                mode="booking"
-                                eventName={space.title}
-                                subject={`Venue booking request: ${space.title}`}
-                                submitLabel="Request"
-                                minHour={space.slug === 'hive-lounge' ? 17 : 8}
-                                maxHour={22}
-                            />
+                            <p>
+                                <Link className="btn primary" href={bookHref}>
+                                    Book {space.title}
+                                </Link>
+                            </p>
                             <div className="contact-meta">
                                 <p>
                                     <strong>General:</strong> info@hivehq.nz

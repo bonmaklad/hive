@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseAdminClient, getUserFromRequest } from '../../_lib/supabaseAuth';
+import { createSupabaseAdminClient } from '../../../_lib/supabaseAuth';
 
 export const runtime = 'nodejs';
 
@@ -9,9 +9,6 @@ function safeText(value, limit = 64) {
 }
 
 export async function GET(request) {
-    const { user, error } = await getUserFromRequest(request);
-    if (!user) return NextResponse.json({ error }, { status: 401 });
-
     const url = new URL(request.url);
     const spaceSlug = safeText(url.searchParams.get('space_slug'), 64);
     const date = safeText(url.searchParams.get('date'), 20);
@@ -24,7 +21,7 @@ export async function GET(request) {
     const [{ data: memberBookings, error: memberError }, publicResult] = await Promise.all([
         admin
             .from('room_bookings')
-            .select('start_time, end_time, status, owner_id')
+            .select('start_time, end_time, status')
             .eq('space_slug', spaceSlug)
             .eq('booking_date', date)
             .in('status', ['requested', 'approved']),
@@ -41,24 +38,10 @@ export async function GET(request) {
     const publicBookings = publicError?.code === '42P01' ? [] : (publicResult?.data || []);
     if (publicError && publicError.code !== '42P01') return NextResponse.json({ error: publicError.message }, { status: 500 });
 
-    return NextResponse.json({
-        ok: true,
-        space_slug: spaceSlug,
-        date,
-        bookings: [
-            ...(memberBookings || []).map(b => ({
-                start_time: b.start_time,
-                end_time: b.end_time,
-                status: b.status,
-                is_self: b.owner_id === user.id
-            })),
-            ...(publicBookings || []).map(b => ({
-                start_time: b.start_time,
-                end_time: b.end_time,
-                // Map public states into the same UI vocabulary.
-                status: b.status === 'confirmed' ? 'approved' : 'requested',
-                is_self: false
-            }))
-        ]
-    });
+    const bookings = [
+        ...(memberBookings || []).map(b => ({ start_time: b.start_time, end_time: b.end_time, status: b.status, source: 'member' })),
+        ...(publicBookings || []).map(b => ({ start_time: b.start_time, end_time: b.end_time, status: b.status, source: 'public' }))
+    ];
+
+    return NextResponse.json({ ok: true, space_slug: spaceSlug, date, bookings });
 }

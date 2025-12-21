@@ -72,22 +72,27 @@ function getPricing(space, hours) {
 
     if (!hours || hours <= 0) return { label: '', amount: 0 };
 
+    if (perEvent) {
+        return { label: 'per event', amount: perEvent };
+    }
+
     if (fullDay && hours >= 8) {
         return { label: 'full day', amount: fullDay };
     }
     if (halfDay && hours >= 4) {
+        if (fullDay && fullDay > halfDay && hours > 4) {
+            const extraHours = Math.min(4, hours - 4);
+            const extraPerHour = (fullDay - halfDay) / 4;
+            return { label: `${hours} hour(s)`, amount: Math.round(halfDay + extraPerHour * extraHours) };
+        }
         return { label: 'half day', amount: halfDay };
     }
 
-    if (fullDay) {
-        return { label: `${hours} hour(s)`, amount: Math.round((fullDay / 8) * hours) };
-    }
     if (halfDay) {
         return { label: `${hours} hour(s)`, amount: Math.round((halfDay / 4) * hours) };
     }
-    if (perEvent) {
-        const hoursPerEvent = 5;
-        return { label: `${hours} hour(s)`, amount: Math.round((perEvent / hoursPerEvent) * hours) };
+    if (fullDay) {
+        return { label: `${hours} hour(s)`, amount: Math.round((fullDay / 8) * hours) };
     }
 
     return { label: `${hours} hour(s)`, amount: 0 };

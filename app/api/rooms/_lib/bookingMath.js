@@ -18,22 +18,30 @@ export function getPricingCents(spaceRow, hours) {
 
     if (!hours || hours <= 0) return { label: '', amount: 0 };
 
+    // Per-event spaces (e.g. Hive Lounge) are a flat rate.
+    if (perEvent > 0) {
+        return { label: 'per event', amount: perEvent };
+    }
+
     if (fullDay && hours >= 8) {
         return { label: 'full day', amount: fullDay };
     }
     if (halfDay && hours >= 4) {
+        // Scale 4–7 hours between half-day and full-day, so the first 4 hours are effectively more expensive per hour.
+        if (fullDay && fullDay > halfDay && hours > 4) {
+            const extraHours = Math.min(4, hours - 4);
+            const extraPerHour = (fullDay - halfDay) / 4;
+            return { label: `${hours} hour(s)`, amount: Math.round(halfDay + extraPerHour * extraHours) };
+        }
         return { label: 'half day', amount: halfDay };
     }
 
-    if (fullDay) {
-        return { label: `${hours} hour(s)`, amount: Math.round((fullDay / 8) * hours) };
-    }
+    // Hourly pricing: use half-day as the 0–4 hour rate when available, otherwise full-day as 0–8.
     if (halfDay) {
         return { label: `${hours} hour(s)`, amount: Math.round((halfDay / 4) * hours) };
     }
-    if (perEvent) {
-        const hoursPerEvent = 5;
-        return { label: `${hours} hour(s)`, amount: Math.round((perEvent / hoursPerEvent) * hours) };
+    if (fullDay) {
+        return { label: `${hours} hour(s)`, amount: Math.round((fullDay / 8) * hours) };
     }
 
     return { label: `${hours} hour(s)`, amount: 0 };
@@ -65,4 +73,3 @@ export function monthStart(dateString) {
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     return `${yyyy}-${mm}-01`;
 }
-

@@ -35,6 +35,46 @@ function getSiteUrl() {
     );
 }
 
+function timeToMinutes(value) {
+    const v = typeof value === 'string' ? value : '';
+    const [hh, mm] = v.split(':');
+    return Number(hh) * 60 + Number(mm);
+}
+
+function isWeekdayDate(dateString) {
+    const d = new Date(`${dateString}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return false;
+    const day = d.getUTCDay();
+    return day >= 1 && day <= 5;
+}
+
+function validateBusinessHours({ spaceSlug, bookingDate, startTime, endTime }) {
+    // Hive Lounge is after-hours fixed slot (5pm–10pm).
+    if (spaceSlug === 'hive-lounge') {
+        if (startTime !== '17:00' || endTime !== '22:00') {
+            return { ok: false, error: 'Hive Lounge can only be booked for 5:00pm–10:00pm.' };
+        }
+        return { ok: true };
+    }
+
+    // Meeting rooms: Monday–Friday, 9am–5pm.
+    if (!isWeekdayDate(bookingDate)) {
+        return { ok: false, error: 'Meeting rooms can only be booked Monday to Friday.' };
+    }
+
+    const startMin = timeToMinutes(startTime);
+    const endMin = timeToMinutes(endTime);
+    if (!(endMin > startMin)) return { ok: false, error: 'Invalid time range.' };
+
+    const minStart = 9 * 60;
+    const maxEnd = 17 * 60;
+    if (startMin < minStart || endMin > maxEnd) {
+        return { ok: false, error: 'Bookings must be within 9:00am–5:00pm.' };
+    }
+
+    return { ok: true };
+}
+
 export async function POST(request) {
     let bookingId = null;
     let ctx = null;
@@ -55,6 +95,9 @@ export async function POST(request) {
         }
         if (!startTime || !endTime) return NextResponse.json({ error: 'start_time and end_time required.' }, { status: 400 });
 
+        const hoursCheck = validateBusinessHours({ spaceSlug, bookingDate, startTime, endTime });
+        if (!hoursCheck.ok) return NextResponse.json({ error: hoursCheck.error }, { status: 400 });
+
         const hours = computeHours({ startTime, endTime });
         if (!hours) return NextResponse.json({ error: 'Invalid time range.' }, { status: 400 });
 
@@ -69,16 +112,34 @@ export async function POST(request) {
         if (!space) return NextResponse.json({ error: 'Room not found.' }, { status: 404 });
 
         // Prevent overlap (server-side).
-        const { data: existing, error: existingError } = await ctx.admin
-            .from('room_bookings')
-            .select('start_time, end_time, status')
-            .eq('space_slug', spaceSlug)
-            .eq('booking_date', bookingDate)
-            .in('status', ['requested', 'approved']);
+        const [{ data: existing, error: existingError }, publicExistingResult] = await Promise.all([
+            ctx.admin
+                .from('room_bookings')
+                .select('start_time, end_time, status')
+                .eq('space_slug', spaceSlug)
+                .eq('booking_date', bookingDate)
+                .in('status', ['requested', 'approved']),
+            ctx.admin
+                .from('public_room_bookings')
+                .select('start_time, end_time, status')
+                .eq('space_slug', spaceSlug)
+                .eq('booking_date', bookingDate)
+                .in('status', ['pending_payment', 'confirmed'])
+        ]);
 
         if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
+        const publicExistingError = publicExistingResult?.error || null;
+        const publicExisting = publicExistingError?.code === '42P01' ? [] : (publicExistingResult?.data || []);
+        if (publicExistingError && publicExistingError.code !== '42P01') {
+            return NextResponse.json({ error: publicExistingError.message }, { status: 500 });
+        }
 
         for (const b of existing || []) {
+            if (overlaps({ aStart: startTime, aEnd: endTime, bStart: b.start_time, bEnd: b.end_time })) {
+                return NextResponse.json({ error: 'That time range includes unavailable time.' }, { status: 409 });
+            }
+        }
+        for (const b of publicExisting || []) {
             if (overlaps({ aStart: startTime, aEnd: endTime, bStart: b.start_time, bEnd: b.end_time })) {
                 return NextResponse.json({ error: 'That time range includes unavailable time.' }, { status: 409 });
             }
@@ -180,7 +241,7 @@ export async function POST(request) {
         const siteUrl = getSiteUrl();
         const successUrl = `${siteUrl}/platform/rooms?stripe=success&booking=${booking.id}`;
         const cancelUrl = `${siteUrl}/platform/rooms?stripe=cancel&booking=${booking.id}`;
-        const returnUrl = `${siteUrl}/platform/rooms?stripe=return&booking=${booking.id}`;
+        const returnUrl = `${siteUrl}/platform/rooms?stripe=return&booking=${booking.id}&session_id={CHECKOUT_SESSION_ID}`;
 
         const session = await createCheckoutSession({
             customerId: tenantCustomerId,

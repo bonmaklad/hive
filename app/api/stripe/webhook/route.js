@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '../../_lib/supabaseAuth';
+import { sendPublicRoomBookingConfirmationEmail } from '../../_lib/email';
 import { getStripeWebhookSecret, stripeRequest, verifyStripeWebhookSignature } from '../../_lib/stripe';
 import { monthStart } from '../../rooms/_lib/bookingMath';
 
@@ -110,11 +111,102 @@ async function approveBookingFromSession({ admin, session }) {
     }
 }
 
+async function confirmPublicRoomBookingFromSession({ admin, session }) {
+    const bookingId = session?.metadata?.public_room_booking_id;
+    if (!bookingId) return;
+
+    const { data: booking, error: bookingError } = await admin
+        .from('public_room_bookings')
+        .select('id, status, booking_date, start_time, end_time, space_slug, customer_email, customer_name')
+        .eq('id', bookingId)
+        .maybeSingle();
+
+    if (bookingError || !booking) return;
+    if (booking.status === 'confirmed') return;
+
+    const { data: payment, error: paymentError } = await admin
+        .from('public_room_booking_payments')
+        .select('id, amount_cents, currency, status')
+        .eq('stripe_checkout_session_id', session.id)
+        .maybeSingle();
+
+    if (paymentError || !payment) return;
+    if (payment.status === 'paid') return;
+
+    const invoiceId = session?.invoice || null;
+    const paymentIntentId = session?.payment_intent || null;
+    const amountTotal = typeof session?.amount_total === 'number' ? session.amount_total : null;
+    const currency = typeof session?.currency === 'string' ? session.currency.toUpperCase() : null;
+    const amountDiscount =
+        typeof session?.total_details?.amount_discount === 'number' ? session.total_details.amount_discount : null;
+
+    await admin
+        .from('public_room_booking_payments')
+        .update({
+            status: 'paid',
+            stripe_invoice_id: typeof invoiceId === 'string' ? invoiceId : null,
+            stripe_payment_intent_id: typeof paymentIntentId === 'string' ? paymentIntentId : null,
+            amount_cents: amountTotal !== null ? amountTotal : undefined,
+            currency: currency || undefined,
+            discount_cents: amountDiscount !== null ? amountDiscount : undefined,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', payment.id);
+
+    await admin.from('public_room_bookings').update({ status: 'confirmed' }).eq('id', bookingId);
+
+    // Email confirmation with invoice link (best-effort).
+    const to = booking.customer_email || session?.customer_details?.email || session?.metadata?.customer_email || null;
+    if (!to) return;
+
+    let invoiceUrl = null;
+    try {
+        const stripeInvoiceId = typeof invoiceId === 'string' ? invoiceId : null;
+        if (stripeInvoiceId) {
+            const inv = await stripeRequest('GET', `/v1/invoices/${encodeURIComponent(stripeInvoiceId)}`);
+            invoiceUrl = inv?.hosted_invoice_url || inv?.invoice_pdf || null;
+        }
+    } catch {
+        invoiceUrl = null;
+    }
+
+    let spaceTitle = booking.space_slug;
+    try {
+        const { data: space } = await admin.from('spaces').select('title').eq('slug', booking.space_slug).maybeSingle();
+        if (space?.title) spaceTitle = space.title;
+    } catch {
+        // ignore
+    }
+
+    try {
+        await sendPublicRoomBookingConfirmationEmail({
+            to,
+            customerName: booking.customer_name,
+            spaceTitle,
+            bookingDate: booking.booking_date,
+            startTime: String(booking.start_time).slice(0, 5),
+            endTime: String(booking.end_time).slice(0, 5),
+            invoiceUrl,
+            manageUrl: null
+        });
+    } catch {
+        // ignore
+    }
+}
+
 async function cancelBookingFromSession({ admin, session }) {
     const bookingId = session?.metadata?.booking_id;
     if (!bookingId) return;
     await admin.from('room_bookings').update({ status: 'cancelled' }).eq('id', bookingId);
     await admin.from('room_booking_payments').update({ status: 'failed' }).eq('stripe_checkout_session_id', session.id);
+}
+
+async function cancelPublicRoomBookingFromSession({ admin, session, status }) {
+    const bookingId = session?.metadata?.public_room_booking_id;
+    if (!bookingId) return;
+    const nextStatus = status || 'expired';
+    await admin.from('public_room_bookings').update({ status: nextStatus }).eq('id', bookingId);
+    await admin.from('public_room_booking_payments').update({ status: 'cancelled' }).eq('stripe_checkout_session_id', session.id);
 }
 
 function toIsoDate(tsSeconds) {
@@ -236,11 +328,13 @@ export async function POST(request) {
 
     if (type === 'checkout.session.completed') {
         await approveBookingFromSession({ admin, session: obj });
+        await confirmPublicRoomBookingFromSession({ admin, session: obj });
         await activateMembershipFromSession({ admin, session: obj });
     }
 
     if (type === 'checkout.session.async_payment_failed' || type === 'checkout.session.expired') {
         await cancelBookingFromSession({ admin, session: obj });
+        await cancelPublicRoomBookingFromSession({ admin, session: obj, status: 'expired' });
     }
 
     if (type === 'customer.subscription.deleted') {

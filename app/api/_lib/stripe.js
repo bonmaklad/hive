@@ -132,7 +132,8 @@ export async function createCheckoutSession({
     metadata,
     promotionCodeId
 }) {
-    const idempotencyKey = `checkout-${metadata?.booking_id || crypto.randomUUID()}`;
+    const bookingKey = metadata?.booking_id || metadata?.public_room_booking_id || crypto.randomUUID();
+    const idempotencyKey = `checkout-${bookingKey}`;
 
     const params = {
         mode: 'payment',

@@ -139,11 +139,11 @@ export default function BookingsPage() {
                         <div className="section-tag">Next step</div>
                         <h2>Ready to book?</h2>
                         <p>
-                            Pick a venue to see photos, layouts, pricing, and to request availability for a date and time.
+                            Book online in minutes — pick a venue, choose a time, and pay securely.
                         </p>
                         <p>
-                            <Link className="btn bookings" href="#venues">
-                                View venues
+                            <Link className="btn bookings" href="/bookings/room">
+                                Book now
                             </Link>
                         </p>
                     </div>

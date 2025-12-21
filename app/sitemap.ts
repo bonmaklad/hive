@@ -14,6 +14,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     const staticRoutes = [
         '/',
         '/bookings',
+        '/bookings/room',
         '/rsvp'
     ];
 
@@ -27,4 +28,3 @@ export default function sitemap(): MetadataRoute.Sitemap {
         lastModified: now
     }));
 }
-
