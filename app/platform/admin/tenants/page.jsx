@@ -20,6 +20,11 @@ function formatNZD(cents) {
     }
 }
 
+function formatNZDOptional(cents) {
+    if (cents === null || cents === undefined) return '—';
+    return formatNZD(cents);
+}
+
 const PLAN_MONTHLY_CENTS = {
     member: 9900,
     desk: 24900,
@@ -52,6 +57,10 @@ function computeMonthlyCents({ plan, officeId, donationCents, fridgeEnabled, mon
             : PLAN_MONTHLY_CENTS[plan] ?? 0;
     const fridge = fridgeEnabled ? Math.round(FRIDGE_WEEKLY_CENTS * WEEKS_PER_MONTH) : 0;
     return Math.max(0, base + (donationCents || 0) + fridge);
+}
+
+function computeMonthlyBaseCents({ plan, officeId, donationCents, fridgeEnabled }) {
+    return computeMonthlyCents({ plan, officeId, donationCents, fridgeEnabled, monthlyOverrideCents: null });
 }
 
 function parseEmail(value) {
@@ -187,6 +196,12 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
         donationCents,
         fridgeEnabled: membershipFridgeEnabled,
         monthlyOverrideCents
+    });
+    const baseMonthlyCents = computeMonthlyBaseCents({
+        plan: membershipPlan,
+        officeId: membershipPlan === 'office' ? membershipOfficeId : null,
+        donationCents,
+        fridgeEnabled: membershipFridgeEnabled
     });
 
     const canNext = useMemo(() => {
@@ -335,8 +350,11 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
                             disabled={busy}
                             inputMode="decimal"
                         />
-                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
-                            Monthly override (NZD, optional)
+                        <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
+                            Calculated amount (plan + donation + fridge): <span className="platform-mono">{formatNZD(baseMonthlyCents)}</span>
+                        </p>
+                        <label className="platform-subtitle" style={{ marginTop: '0.5rem', display: 'block' }}>
+                            Monthly price override (NZD, optional)
                         </label>
                         <input
                             value={membershipMonthlyOverrideNZD}
@@ -355,8 +373,8 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
                             />
                             Fridge access
                         </label>
-                        <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
-                            Monthly amount: <span className="platform-mono">{formatNZD(computedMonthlyCents)}</span>
+                        <p className="platform-subtitle" style={{ marginTop: '0.5rem' }}>
+                            Final monthly amount: <span className="platform-mono">{formatNZD(computedMonthlyCents)}</span>
                         </p>
                     </div>
                 </div>
@@ -478,6 +496,9 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
     const [fridgeEnabled, setFridgeEnabled] = useState(false);
     const [monthlyOverrideNZD, setMonthlyOverrideNZD] = useState('');
     const [tokensTotal, setTokensTotal] = useState('0');
+    const [workUnits, setWorkUnits] = useState([]);
+    const [workUnitCodes, setWorkUnitCodes] = useState([]);
+    const [workUnitsLoading, setWorkUnitsLoading] = useState(false);
 
     useEffect(() => {
         if (!open) return;
@@ -489,9 +510,49 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
         setStatus(tenant?.membership?.status || 'live');
         setDonationNZD(String(Number(tenant?.membership?.donation_cents || 0) / 100));
         setFridgeEnabled(Boolean(tenant?.membership?.fridge_enabled));
-        setMonthlyOverrideNZD('');
+        {
+            const cents = tenant?.membership?.monthly_amount_cents;
+            if (Number.isFinite(cents)) {
+                setMonthlyOverrideNZD(String((Number(cents) || 0) / 100));
+            } else {
+                setMonthlyOverrideNZD('');
+            }
+        }
         setTokensTotal(String(primary?.room_credits?.tokens_total ?? 0));
+        setWorkUnitCodes(Array.isArray(tenant?.work_unit_codes) ? tenant.work_unit_codes.filter(v => typeof v === 'string') : []);
+        setWorkUnits([]);
+        setWorkUnitsLoading(false);
     }, [open, tenant, primary]);
+
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+
+        const load = async () => {
+            setWorkUnitsLoading(true);
+            try {
+                const res = await fetch('/api/admin/work-units?includeOccupant=1', {
+                    headers: await authHeader()
+                });
+                const json = await readJsonResponse(res);
+                if (!res.ok) {
+                    if (json?._raw) throw errorFromNonJson(res, json);
+                    throw new Error(json?.error || 'Failed to load workspaces.');
+                }
+                if (cancelled) return;
+                setWorkUnits(Array.isArray(json?.units) ? json.units : []);
+            } catch (err) {
+                if (!cancelled) setError(err?.message || 'Failed to load workspaces.');
+            } finally {
+                if (!cancelled) setWorkUnitsLoading(false);
+            }
+        };
+
+        load();
+        return () => {
+            cancelled = true;
+        };
+    }, [authHeader, open]);
 
     const donationCents = Math.max(0, Math.round(Number(donationNZD || 0) * 100));
     const monthlyOverrideCents = monthlyOverrideNZD.trim() ? Math.max(0, Math.round(Number(monthlyOverrideNZD || 0) * 100)) : null;
@@ -501,6 +562,12 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
         donationCents,
         fridgeEnabled,
         monthlyOverrideCents
+    });
+    const baseMonthlyCents = computeMonthlyBaseCents({
+        plan,
+        officeId: plan === 'office' ? officeId : null,
+        donationCents,
+        fridgeEnabled
     });
 
     const save = async () => {
@@ -550,6 +617,14 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
             });
             const jsonCredits = await readJsonResponse(resCredits);
             if (!resCredits.ok) throw new Error(jsonCredits?.error || 'Failed to update token pool.');
+
+            const resWorkUnits = await fetch(`/api/admin/tenants/${tenant.id}/work-units`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ codes: workUnitCodes })
+            });
+            const jsonWorkUnits = await readJsonResponse(resWorkUnits);
+            if (!resWorkUnits.ok) throw new Error(jsonWorkUnits?.error || 'Failed to update workspaces.');
 
             onSaved?.();
             onClose();
@@ -607,6 +682,19 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                         <option value="premium">premium</option>
                         <option value="custom">custom</option>
                     </select>
+                    <p className="platform-subtitle" style={{ marginTop: '0.5rem' }}>
+                        Current price: <span className="platform-mono">{formatNZDOptional(tenant?.membership?.monthly_amount_cents)}</span> / month
+                    </p>
+                    <label className="platform-subtitle" style={{ marginTop: '0.5rem', display: 'block' }}>
+                        Set price override (NZD)
+                    </label>
+                    <input
+                        value={monthlyOverrideNZD}
+                        onChange={e => setMonthlyOverrideNZD(e.target.value)}
+                        disabled={busy}
+                        inputMode="decimal"
+                        placeholder="Leave blank to auto-calc"
+                    />
                     {plan === 'office' ? (
                         <>
                             <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
@@ -633,8 +721,11 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                     <h3 style={{ marginTop: 0 }}>Extras</h3>
                     <label className="platform-subtitle">Donation (NZD / month)</label>
                     <input value={donationNZD} onChange={e => setDonationNZD(e.target.value)} disabled={busy} inputMode="decimal" />
-                    <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
-                        Monthly override (NZD, optional)
+                    <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
+                        Calculated amount (plan + donation + fridge): <span className="platform-mono">{formatNZD(baseMonthlyCents)}</span>
+                    </p>
+                    <label className="platform-subtitle" style={{ marginTop: '0.5rem', display: 'block' }}>
+                        Monthly price override (NZD, optional)
                     </label>
                     <input
                         value={monthlyOverrideNZD}
@@ -653,8 +744,85 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                         />
                         Fridge access
                     </label>
+                    <p className="platform-subtitle" style={{ marginTop: '0.5rem' }}>
+                        Final monthly amount: <span className="platform-mono">{formatNZD(computedMonthlyCents)}</span>
+                    </p>
+                </div>
+
+                <div className="platform-card span-12">
+                    <h3 style={{ marginTop: 0 }}>Workspaces</h3>
+                    <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                        Assign one or more workspaces to this tenant. Taken workspaces are disabled.
+                    </p>
+                    {workUnitsLoading ? <p className="platform-subtitle">Loading workspaces…</p> : null}
+                    <label className="platform-subtitle">Allocated workspaces</label>
+                    <div className="platform-table-wrap" style={{ marginTop: '0.5rem' }}>
+                        <table className="platform-table">
+                            <thead>
+                                <tr>
+                                    <th>Select</th>
+                                    <th>Building</th>
+                                    <th>Unit</th>
+                                    <th>Label</th>
+                                    <th>Type</th>
+                                    <th>Capacity</th>
+                                    <th>Price</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {([...(workUnits || [])]
+                                    .sort((a, b) => {
+                                        const ab = String(a?.building || '').localeCompare(String(b?.building || ''));
+                                        if (ab !== 0) return ab;
+                                        const an = Number(a?.unit_number);
+                                        const bn = Number(b?.unit_number);
+                                        const aIsNum = Number.isFinite(an);
+                                        const bIsNum = Number.isFinite(bn);
+                                        if (aIsNum && bIsNum) return an - bn;
+                                        return String(a?.unit_number || '').localeCompare(String(b?.unit_number || ''));
+                                    }))
+                                    .map(unit => {
+                                        const code = unit?.code;
+                                        if (!code) return null;
+                                        const occupiedBy = unit?.occupied_by_tenant_id || null;
+                                        const occupiedByOther = Boolean(occupiedBy && occupiedBy !== tenant?.id);
+                                        const checked = workUnitCodes.includes(code);
+                                        const basePrice = unit?.price_cents ?? unit?.display_price_cents;
+                                        return (
+                                            <tr key={code} className={occupiedByOther ? 'row-disabled' : ''}>
+                                                <td>
+                                                    <input
+                                                        type="checkbox"
+                                                        disabled={busy || occupiedByOther}
+                                                        checked={checked}
+                                                        onChange={e => {
+                                                            setWorkUnitCodes(list => {
+                                                                const has = list.includes(code);
+                                                                if (e.target.checked && !has) return [...list, code];
+                                                                if (!e.target.checked && has) return list.filter(c => c !== code);
+                                                                return list;
+                                                            });
+                                                        }}
+                                                    />
+                                                </td>
+                                                <td className="platform-mono">{unit?.building || '—'}</td>
+                                                <td className="platform-mono">{unit?.unit_number ?? unit?.code}</td>
+                                                <td>{unit?.label || '—'}</td>
+                                                <td className="platform-mono">{unit?.unit_type || unit?.type || '—'}</td>
+                                                <td className="platform-mono">{Number.isFinite(Number(unit?.capacity)) ? Number(unit?.capacity) : '—'}</td>
+                                                <td className="platform-mono">{formatNZDOptional(basePrice)}</td>
+                                                <td>
+                                                    {occupiedByOther ? <span className="badge pending">taken</span> : <span className="badge success">available</span>}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                            </tbody>
+                        </table>
+                    </div>
                     <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
-                        Monthly amount: <span className="platform-mono">{formatNZD(computedMonthlyCents)}</span>
+                        Selected: <span className="platform-mono">{workUnitCodes.length ? workUnitCodes.join(', ') : 'none'}</span>
                     </p>
                 </div>
             </div>

@@ -32,6 +32,32 @@ export async function GET(request) {
     const tenantIds = (tenants || []).map(t => t.id).filter(Boolean);
     if (!tenantIds.length) return NextResponse.json({ tenants: [] });
 
+    const today = new Date().toISOString().slice(0, 10);
+    const workUnitCodesByTenant = {};
+
+    const { data: allocations, error: allocationsError } = await guard.admin
+        .from('work_unit_allocations')
+        .select('tenant_id, work_unit:work_units(building, unit_number)')
+        .in('tenant_id', tenantIds)
+        .lte('start_date', today)
+        .or(`end_date.is.null,end_date.gt.${today}`);
+
+    if (allocationsError && allocationsError.code !== '42P01') {
+        return NextResponse.json({ error: allocationsError.message }, { status: 500 });
+    }
+
+    for (const row of allocations || []) {
+        const tenantId = row?.tenant_id;
+        const workUnit = row?.work_unit;
+        if (!tenantId || !workUnit?.building || workUnit?.unit_number === null || workUnit?.unit_number === undefined) continue;
+        const code = `${String(workUnit.building).trim()}.${String(workUnit.unit_number).trim()}`;
+        (workUnitCodesByTenant[tenantId] ||= []).push(code);
+    }
+
+    for (const tenantId of Object.keys(workUnitCodesByTenant)) {
+        workUnitCodesByTenant[tenantId] = Array.from(new Set(workUnitCodesByTenant[tenantId])).sort((a, b) => a.localeCompare(b));
+    }
+
     const { data: tenantUsers, error: tuError } = await guard.admin
         .from('tenant_users')
         .select('tenant_id, user_id, role, created_at')
@@ -134,7 +160,8 @@ export async function GET(request) {
             owner,
             primary_user: primary,
             membership: membershipOwnerUserId ? membershipsByOwner[membershipOwnerUserId] || null : null,
-            invoices: membershipOwnerUserId ? invoicesByOwner?.[membershipOwnerUserId] || [] : []
+            invoices: membershipOwnerUserId ? invoicesByOwner?.[membershipOwnerUserId] || [] : [],
+            work_unit_codes: workUnitCodesByTenant?.[t.id] || []
         };
     });
 

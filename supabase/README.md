@@ -13,3 +13,17 @@ If your `tenant_users` policies are throwing `42P17: infinite recursion detected
 apply `supabase/migrations/20251219170000_fix_tenant_users_rls.sql`.
 
 This keeps `tenant_users` readable only by the logged-in user (for role gating in the UI) and relies on admin/service-role tooling for writes.
+
+## Work units (offices/desks/pods)
+
+Apply `supabase/migrations/20251221013000_work_units.sql` to create:
+
+- `work_units` (inventory)
+- `work_unit_tags` (metadata tags like `premium`, `private`, `pod`)
+- `work_unit_allocations` (admin-managed occupancy, enforces 1 active allocation per unit)
+- `work_units_availability` view (vacant/occupied + price for tenants)
+
+RLS rules:
+
+- Authenticated users can view units/tags and vacancy status.
+- Only platform admins (`profiles.is_admin = true`) can change inventory or allocations.
