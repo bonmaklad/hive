@@ -1101,12 +1101,63 @@ main {
     right: 0.75rem;
     bottom: 5.25rem;
     z-index: 200;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.18);
     background: rgba(13, 17, 22, 0.85);
     color: var(--text);
     padding: 0.6rem 0.9rem;
     font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.platform-chat-toggle:hover {
+    transform: translateY(-1px);
+    border-color: rgba(76, 201, 240, 0.6);
+    background: rgba(13, 17, 22, 0.95);
+    box-shadow: 0 12px 26px rgba(0, 0, 0, 0.42), 0 0 0 3px rgba(76, 201, 240, 0.15);
+}
+
+.platform-chat-toggle-label {
+    letter-spacing: 0.02em;
+}
+
+.platform-chat-toggle-arrow {
+    display: inline-block;
+    color: rgba(255, 255, 255, 0.75);
+    transition: transform 0.18s ease, color 0.18s ease, text-shadow 0.18s ease;
+}
+
+.platform-chat-toggle:hover .platform-chat-toggle-arrow {
+    color: var(--accent);
+    text-shadow: 0 0 18px rgba(76, 201, 240, 0.55);
+}
+
+.platform-chat-toggle:hover .platform-chat-toggle-arrow:last-child {
+    transform: translateX(-4px);
+}
+
+.platform-chat-toggle.pulse {
+    animation: platformChatPulse 1.8s ease-in-out infinite;
+}
+
+.platform-chat-toggle.pulse:hover {
+    animation: none;
+}
+
+@keyframes platformChatPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(76, 201, 240, 0);
+    }
+    50% {
+        box-shadow: 0 0 0 6px rgba(76, 201, 240, 0.14);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(76, 201, 240, 0);
+    }
 }
 
 .platform-chat-drawer {
@@ -1594,6 +1645,30 @@ main {
     padding: 0.9rem 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     vertical-align: middle;
+}
+
+.platform-table tbody tr {
+    transition: background 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.platform-table tbody tr:hover {
+    background: rgba(76, 201, 240, 0.08);
+}
+
+.platform-table tbody tr:focus-within {
+    background: rgba(76, 201, 240, 0.1);
+}
+
+.platform-table tbody tr.row-disabled {
+    opacity: 0.55;
+}
+
+.platform-table tbody tr.row-self {
+    background: rgba(6, 214, 160, 0.1);
+}
+
+.platform-table tbody tr.row-self:hover {
+    background: rgba(6, 214, 160, 0.16);
 }
 
 .platform-table th {

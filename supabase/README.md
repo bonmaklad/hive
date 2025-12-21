@@ -35,3 +35,9 @@ Apply `supabase/migrations/20251221040000_stripe_room_bookings.sql` to create:
 - `tenants.stripe_customer_id` (tenant-scoped Stripe customer)
 - `room_booking_payments` (Stripe checkout session + invoice linkage per booking)
 - `stripe_events` (webhook idempotency)
+
+Env vars (Next.js):
+
+- `STRIPE_SECRET_KEY` (server)
+- `STRIPE_WEBHOOK_SECRET` (server)
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (client)

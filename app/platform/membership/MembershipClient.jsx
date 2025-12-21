@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePlatformSession } from '../PlatformContext';
+import { loadStripe } from '@stripe/stripe-js';
+import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js';
 
 const PLANS = [
     { id: 'member', label: 'Member', monthlyCents: 9900 },
@@ -43,6 +45,54 @@ function formatDate(value) {
     return date.toLocaleDateString();
 }
 
+function daysInMonth(year, monthIndex) {
+    return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+function computeNextMonthlyDate(createdAt) {
+    const anchor = new Date(createdAt);
+    if (Number.isNaN(anchor.getTime())) return null;
+
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const anchorDay = anchor.getDate();
+
+    const year = todayStart.getFullYear();
+    const month = todayStart.getMonth();
+    const dayThisMonth = Math.min(anchorDay, daysInMonth(year, month));
+    let candidate = new Date(year, month, dayThisMonth);
+
+    if (candidate < todayStart) {
+        const nextMonth = new Date(year, month + 1, 1);
+        const dayNextMonth = Math.min(anchorDay, daysInMonth(nextMonth.getFullYear(), nextMonth.getMonth()));
+        candidate = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), dayNextMonth);
+    }
+
+    return candidate;
+}
+
+function computeNextInvoiceDateFromDay(dayOfMonth) {
+    const raw = Number.isFinite(dayOfMonth) ? dayOfMonth : Number(dayOfMonth);
+    if (!Number.isFinite(raw)) return null;
+    const safeDay = Math.min(31, Math.max(1, Math.floor(raw)));
+
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const year = todayStart.getFullYear();
+    const month = todayStart.getMonth();
+
+    const dimThisMonth = new Date(year, month + 1, 0).getDate();
+    let candidate = new Date(year, month, Math.min(safeDay, dimThisMonth));
+
+    if (candidate < todayStart) {
+        const nextMonth = new Date(year, month + 1, 1);
+        const dimNextMonth = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
+        candidate = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), Math.min(safeDay, dimNextMonth));
+    }
+
+    return candidate;
+}
+
 function formatBytes(bytes) {
     const n = Number(bytes);
     if (!Number.isFinite(n) || n <= 0) return '—';
@@ -54,6 +104,51 @@ function formatBytes(bytes) {
         idx += 1;
     }
     return `${v.toFixed(v < 10 ? 1 : 0)} ${units[idx]}`;
+}
+
+function ConfirmModal({ open, title, message, confirmLabel = 'Confirm', busy, onClose, onConfirm }) {
+    useEffect(() => {
+        if (!open) return;
+        const onKeyDown = event => {
+            if (event.key === 'Escape') onClose?.();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [onClose, open]);
+
+    if (!open) return null;
+
+    return (
+        <div className="platform-modal-overlay" role="presentation" onMouseDown={onClose}>
+            <div
+                className="platform-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label={title}
+                onMouseDown={event => event.stopPropagation()}
+            >
+                <div className="platform-modal-header">
+                    <h2 style={{ margin: 0 }}>{title}</h2>
+                    <button className="btn ghost" type="button" onClick={onClose} disabled={busy}>
+                        Close
+                    </button>
+                </div>
+                <div style={{ marginTop: '1rem' }}>
+                    <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                        {message}
+                    </p>
+                    <div className="platform-card-actions" style={{ marginTop: '1rem' }}>
+                        <button className="btn secondary" type="button" onClick={onClose} disabled={busy}>
+                            Cancel
+                        </button>
+                        <button className="btn primary" type="button" onClick={onConfirm} disabled={busy}>
+                            {busy ? 'Working…' : confirmLabel}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 export default function MembershipClient() {
@@ -69,9 +164,16 @@ export default function MembershipClient() {
     const [officeId, setOfficeId] = useState('office-a');
     const [donationText, setDonationText] = useState('');
     const [fridge, setFridge] = useState(false);
+    const [paymentTerms, setPaymentTerms] = useState('invoice');
+    const [paymentTermsDraft, setPaymentTermsDraft] = useState('invoice');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
+    const [setupBusy, setSetupBusy] = useState(false);
+    const [checkoutClientSecret, setCheckoutClientSecret] = useState('');
+    const [checkoutError, setCheckoutError] = useState('');
+    const [checkoutSessionId, setCheckoutSessionId] = useState('');
+    const [setupIntervalId, setSetupIntervalId] = useState(null);
 
     const [units, setUnits] = useState([]);
     const [unitsLoading, setUnitsLoading] = useState(false);
@@ -81,6 +183,14 @@ export default function MembershipClient() {
     const [docs, setDocs] = useState([]);
     const [docsLoading, setDocsLoading] = useState(false);
     const [docsError, setDocsError] = useState('');
+    const [invoiceOpenError, setInvoiceOpenError] = useState('');
+    const [portalBusy, setPortalBusy] = useState(false);
+    const [portalError, setPortalError] = useState('');
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmTitle, setConfirmTitle] = useState('');
+    const [confirmMessage, setConfirmMessage] = useState('');
+    const [confirmLabel, setConfirmLabel] = useState('Confirm');
+    const confirmActionRef = useRef(null);
 
     const plan = useMemo(() => PLANS.find(p => p.id === planId) || PLANS[0], [planId]);
     const office = useMemo(() => OFFICES.find(o => o.id === officeId) || OFFICES[0], [officeId]);
@@ -99,6 +209,49 @@ export default function MembershipClient() {
     const hasMembershipAmount =
         membership && typeof membership.monthly_amount_cents === 'number' && Number.isFinite(membership.monthly_amount_cents);
     const displayMonthlyCents = hasMembershipAmount ? membership.monthly_amount_cents : computedMonthlyCents;
+    const hasStripeSubscription = Boolean(typeof membership?.stripe_subscription_id === 'string' && membership.stripe_subscription_id.trim());
+    const autoPaymentsEnabled = paymentTerms === 'auto_card' && hasStripeSubscription;
+
+    const nextInvoiceDisplay = useMemo(() => {
+        const invoiceDay = Number(membership?.next_invoice_at);
+        if (Number.isFinite(invoiceDay) && invoiceDay >= 1 && invoiceDay <= 31) {
+            return computeNextInvoiceDateFromDay(invoiceDay);
+        }
+        if (membership?.created_at) {
+            return computeNextInvoiceDateFromDay(new Date(membership.created_at).getDate());
+        }
+        return null;
+    }, [membership?.created_at, membership?.next_invoice_at]);
+
+    const stripePromise = useMemo(() => {
+        const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+        if (!key) return null;
+        return loadStripe(key);
+    }, []);
+
+    const reloadMembership = async () => {
+        const { data: membershipRow, error: membershipError } = await supabase
+            .from('memberships')
+            .select('*')
+            .eq('owner_id', user.id)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (membershipError) throw new Error(membershipError.message);
+        setMembership(membershipRow ?? null);
+        if (membershipRow) {
+            setStatus(membershipRow.status || 'live');
+            setPlanId(membershipRow.plan || 'premium');
+            setOfficeId(membershipRow.office_id || 'office-a');
+            setDonationText(membershipRow.donation_cents ? String(membershipRow.donation_cents / 100) : '');
+            setFridge(Boolean(membershipRow.fridge_enabled));
+            const terms = membershipRow.payment_terms || 'invoice';
+            setPaymentTerms(terms);
+            setPaymentTermsDraft(terms);
+        }
+        return membershipRow ?? null;
+    };
 
     useEffect(() => {
         let cancelled = false;
@@ -136,6 +289,9 @@ export default function MembershipClient() {
                     setOfficeId(membershipRow.office_id || 'office-a');
                     setDonationText(membershipRow.donation_cents ? String(membershipRow.donation_cents / 100) : '');
                     setFridge(Boolean(membershipRow.fridge_enabled));
+                    const terms = membershipRow.payment_terms || 'invoice';
+                    setPaymentTerms(terms);
+                    setPaymentTermsDraft(terms);
                 } else {
                     setStatus('expired');
                 }
@@ -245,6 +401,66 @@ export default function MembershipClient() {
         }
     };
 
+    const openInvoice = async inv => {
+        setInvoiceOpenError('');
+        try {
+            const { data } = await supabase.auth.getSession();
+            const token = data?.session?.access_token || '';
+            if (!token) throw new Error('Please sign in again.');
+
+            const res = await fetch(`/api/invoices/url?invoice_id=${encodeURIComponent(inv.id)}`, {
+                headers: {
+                    accept: 'application/json',
+                    authorization: `Bearer ${token}`
+                }
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || 'Failed to load invoice URL.');
+
+            const url = typeof json?.url === 'string' ? json.url : '';
+            if (!url) throw new Error('Invoice URL missing.');
+            window.open(url, '_blank', 'noopener,noreferrer');
+        } catch (e) {
+            setInvoiceOpenError(e?.message || 'Failed to open invoice.');
+        }
+    };
+
+    const openBillingPortal = async () => {
+        setPortalBusy(true);
+        setPortalError('');
+        try {
+            const { data } = await supabase.auth.getSession();
+            const token = data?.session?.access_token || '';
+            if (!token) throw new Error('Please sign in again.');
+
+            const res = await fetch('/api/membership/portal', {
+                method: 'POST',
+                headers: {
+                    accept: 'application/json',
+                    authorization: `Bearer ${token}`
+                }
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || 'Failed to open billing portal.');
+
+            const url = typeof json?.url === 'string' ? json.url : '';
+            if (!url) throw new Error('Stripe portal URL missing.');
+            window.open(url, '_blank', 'noopener,noreferrer');
+        } catch (e) {
+            setPortalError(e?.message || 'Failed to open billing portal.');
+        } finally {
+            setPortalBusy(false);
+        }
+    };
+
+    const openConfirm = ({ title, message, label, onConfirm }) => {
+        confirmActionRef.current = onConfirm;
+        setConfirmTitle(title || 'Confirm');
+        setConfirmMessage(message || '');
+        setConfirmLabel(label || 'Confirm');
+        setConfirmOpen(true);
+    };
+
     const cancelMembership = async () => {
         setBusy(true);
         setError('');
@@ -275,6 +491,202 @@ export default function MembershipClient() {
         }
     };
 
+    const savePaymentTerms = async nextTerms => {
+        setBusy(true);
+        setError('');
+        setInfo('');
+        try {
+            const { data } = await supabase.auth.getSession();
+            const token = data?.session?.access_token || '';
+            if (!token) throw new Error('Please sign in again.');
+
+            const res = await fetch('/api/membership/payment-terms', {
+                method: 'POST',
+                headers: {
+                    accept: 'application/json',
+                    'content-type': 'application/json',
+                    authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ payment_terms: nextTerms })
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || 'Failed to update payment terms.');
+
+            setMembership(json?.membership || membership);
+            setPaymentTerms(json?.membership?.payment_terms || nextTerms);
+            setPaymentTermsDraft(json?.membership?.payment_terms || nextTerms);
+            setInfo(nextTerms === 'auto_card' ? 'Saved. Automatic payments require a card on file.' : 'Saved.');
+        } catch (e) {
+            setError(e?.message || 'Failed to update payment terms.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const beginAutoCardSetup = async () => {
+        setSetupBusy(true);
+        setCheckoutError('');
+        setCheckoutClientSecret('');
+        setCheckoutSessionId('');
+        setInfo('');
+        try {
+            const { data } = await supabase.auth.getSession();
+            const token = data?.session?.access_token || '';
+            if (!token) throw new Error('Please sign in again.');
+
+            const res = await fetch('/api/membership/subscribe', {
+                method: 'POST',
+                headers: {
+                    accept: 'application/json',
+                    authorization: `Bearer ${token}`
+                }
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || 'Failed to start subscription setup.');
+
+            const clientSecret = typeof json?.stripe_checkout_client_secret === 'string' ? json.stripe_checkout_client_secret : '';
+            const sessionId = typeof json?.stripe_checkout_session_id === 'string' ? json.stripe_checkout_session_id : '';
+            if (!clientSecret) throw new Error('Stripe client secret missing.');
+            if (!stripePromise) throw new Error('Missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.');
+
+            setCheckoutClientSecret(clientSecret);
+            setCheckoutSessionId(sessionId);
+            setInfo('Enter your card to enable automatic monthly payments.');
+        } catch (e) {
+            setCheckoutError(e?.message || 'Failed to start subscription setup.');
+        } finally {
+            setSetupBusy(false);
+        }
+    };
+
+    const confirmAutoCardSubscription = async sessionId => {
+        const sid = typeof sessionId === 'string' ? sessionId : '';
+        if (!sid) return null;
+
+        const { data } = await supabase.auth.getSession();
+        const token = data?.session?.access_token || '';
+        if (!token) throw new Error('Please sign in again.');
+
+        const res = await fetch('/api/membership/subscribe/confirm', {
+            method: 'POST',
+            headers: {
+                accept: 'application/json',
+                'content-type': 'application/json',
+                authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ stripe_checkout_session_id: sid })
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error || 'Failed to confirm subscription.');
+        return json?.membership || null;
+    };
+
+    const savePaymentTermsSelection = async () => {
+        if (busy || setupBusy) return;
+        setError('');
+        setInfo('');
+        setCheckoutError('');
+
+        if (paymentTermsDraft === paymentTerms) {
+            // Allow re-running setup if auto_card is selected but we don't have a subscription id yet.
+            if (!(paymentTermsDraft === 'auto_card' && !hasStripeSubscription)) {
+                setInfo('No changes to save.');
+                return;
+            }
+        }
+
+        if (paymentTermsDraft === 'invoice') {
+            if (paymentTerms === 'auto_card') {
+                openConfirm({
+                    title: 'Switch to invoice terms?',
+                    message: 'This will cancel your current automatic subscription immediately and switch your payment terms to invoice.',
+                    label: 'Switch & cancel subscription',
+                    onConfirm: async () => {
+                        setConfirmOpen(false);
+                        setBusy(true);
+                        setError('');
+                        setInfo('');
+                        try {
+                            const { data } = await supabase.auth.getSession();
+                            const token = data?.session?.access_token || '';
+                            if (!token) throw new Error('Please sign in again.');
+
+                            const res = await fetch('/api/membership/cancel-subscription', {
+                                method: 'POST',
+                                headers: {
+                                    accept: 'application/json',
+                                    authorization: `Bearer ${token}`
+                                }
+                            });
+                            const json = await res.json().catch(() => ({}));
+                            if (!res.ok) throw new Error(json?.error || 'Failed to cancel subscription.');
+                            setMembership(json?.membership || membership);
+                            setPaymentTerms('invoice');
+                            setPaymentTermsDraft('invoice');
+                            setInfo('Switched to invoice terms.');
+                        } catch (e) {
+                            setError(e?.message || 'Failed to cancel subscription.');
+                            setPaymentTermsDraft('auto_card');
+                        } finally {
+                            setBusy(false);
+                        }
+                    }
+                });
+            } else {
+                await savePaymentTerms('invoice');
+            }
+            setCheckoutClientSecret('');
+            setCheckoutError('');
+            return;
+        }
+
+        await beginAutoCardSetup();
+    };
+
+    const cancelAutoCardSubscription = async () => {
+        if (portalBusy || busy || setupBusy) return;
+        openConfirm({
+            title: 'Cancel subscription?',
+            message: 'This will cancel your automatic card subscription immediately. Your payment terms will switch back to invoice.',
+            label: 'Cancel subscription',
+            onConfirm: async () => {
+                setConfirmOpen(false);
+                setBusy(true);
+                setError('');
+                setInfo('');
+                try {
+                    const { data } = await supabase.auth.getSession();
+                    const token = data?.session?.access_token || '';
+                    if (!token) throw new Error('Please sign in again.');
+
+                    const res = await fetch('/api/membership/cancel-subscription', {
+                        method: 'POST',
+                        headers: {
+                            accept: 'application/json',
+                            authorization: `Bearer ${token}`
+                        }
+                    });
+                    const json = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(json?.error || 'Failed to cancel subscription.');
+                    setMembership(json?.membership || membership);
+                    setPaymentTerms('invoice');
+                    setPaymentTermsDraft('invoice');
+                    setInfo('Subscription cancelled. Payment terms set to invoice.');
+                } catch (e) {
+                    setError(e?.message || 'Failed to cancel subscription.');
+                } finally {
+                    setBusy(false);
+                }
+            }
+        });
+    };
+
+    useEffect(() => {
+        return () => {
+            if (setupIntervalId) clearInterval(setupIntervalId);
+        };
+    }, [setupIntervalId]);
+
     if (!canView) {
         return (
             <section className="platform-card">
@@ -289,6 +701,15 @@ export default function MembershipClient() {
 
     return (
         <>
+            <ConfirmModal
+                open={confirmOpen}
+                title={confirmTitle}
+                message={confirmMessage}
+                confirmLabel={confirmLabel}
+                busy={busy}
+                onClose={() => (busy ? null : setConfirmOpen(false))}
+                onConfirm={() => confirmActionRef.current?.()}
+            />
             <section className="platform-card" aria-label="Membership summary">
                 <div className="platform-kpi-row">
                     <div>
@@ -308,7 +729,130 @@ export default function MembershipClient() {
                             {formatNZD(displayMonthlyCents)} <span className="platform-subtitle">/ month</span>
                         </p>
                         <p className="platform-subtitle">Plan: {planId === 'office' ? `Office • ${office.label}` : plan.label}</p>
-                        <p className="platform-subtitle">Next invoice: {formatDate(membership?.next_invoice_at)}</p>
+                        <p className="platform-subtitle">Next invoice: {formatDate(nextInvoiceDisplay)}</p>
+                        <div style={{ marginTop: '0.75rem' }}>
+                            <label className="platform-subtitle">Payment terms</label>
+                            <select
+                                value={paymentTermsDraft}
+                                disabled={busy || loading || setupBusy}
+                                onChange={e => {
+                                    setPaymentTermsDraft(e.target.value);
+                                    setCheckoutClientSecret('');
+                                    setCheckoutError('');
+                                }}
+                            >
+                                <option value="invoice">Invoice</option>
+                                <option value="auto_card">Automatic card payment</option>
+                            </select>
+
+                            <div className="platform-card-actions" style={{ marginTop: '0.75rem' }}>
+                                <button
+                                    className="btn primary"
+                                    type="button"
+                                    onClick={savePaymentTermsSelection}
+                                    disabled={busy || loading || setupBusy || (paymentTermsDraft === 'auto_card' && autoPaymentsEnabled)}
+                                >
+                                    {setupBusy || busy
+                                        ? 'Saving…'
+                                        : paymentTermsDraft === 'auto_card'
+                                          ? autoPaymentsEnabled
+                                                ? 'Automatic payments enabled'
+                                                : 'Set up automatic payments'
+                                          : 'Save'}
+                                </button>
+
+                                {paymentTerms === 'auto_card' ? (
+                                    <>
+                                        <button className="btn ghost" type="button" onClick={openBillingPortal} disabled={portalBusy}>
+                                            {portalBusy ? 'Opening…' : 'Manage billing'}
+                                        </button>
+                                        {/* <button
+                                            className="btn secondary"
+                                            type="button"
+                                            onClick={cancelAutoCardSubscription}
+                                            disabled={portalBusy || busy || setupBusy}
+                                            title="Cancel your subscription"
+                                        >
+                                            Cancel subscription
+                                        </button> */}
+                                    </>
+                                ) : null}
+                            </div>
+
+                            {paymentTermsDraft === 'auto_card' && checkoutClientSecret ? (
+                                <div className="platform-card" style={{ marginTop: '0.75rem' }}>
+                                    {checkoutError ? <p className="platform-message error">{checkoutError}</p> : null}
+                                    {!stripePromise ? (
+                                        <p className="platform-message error">Missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.</p>
+                                    ) : (
+                                        <EmbeddedCheckoutProvider
+                                            stripe={stripePromise}
+                                            options={{
+                                                clientSecret: checkoutClientSecret,
+                                                onComplete: () => {
+                                                    setInfo('Subscription created. Syncing membership…');
+                                                    setCheckoutClientSecret('');
+                                                    const sessionId = checkoutSessionId;
+                                                    setCheckoutSessionId('');
+
+                                                    (async () => {
+                                                        try {
+                                                            if (sessionId) {
+                                                                const updated = await confirmAutoCardSubscription(sessionId);
+                                                                if (updated) {
+                                                                    setMembership(updated);
+                                                                    setPaymentTerms(updated.payment_terms || 'auto_card');
+                                                                    setPaymentTermsDraft(updated.payment_terms || 'auto_card');
+                                                                    setInfo('Automatic payments enabled.');
+                                                                    return;
+                                                                }
+                                                            }
+                                                        } catch (e) {
+                                                            setCheckoutError(e?.message || 'Failed to confirm subscription.');
+                                                        }
+
+                                                        // Fallback: poll DB for webhook updates.
+                                                        let tries = 0;
+                                                        if (setupIntervalId) clearInterval(setupIntervalId);
+                                                        const interval = setInterval(async () => {
+                                                            tries += 1;
+                                                            try {
+                                                                const row = await reloadMembership();
+                                                                if (row?.payment_terms === 'auto_card' && row?.stripe_subscription_id) {
+                                                                    clearInterval(interval);
+                                                                    setSetupIntervalId(null);
+                                                                    setInfo('Automatic payments enabled.');
+                                                                    return;
+                                                                }
+                                                            } catch {
+                                                                // ignore
+                                                            }
+                                                            if (tries >= 10) {
+                                                                clearInterval(interval);
+                                                                setSetupIntervalId(null);
+                                                            }
+                                                        }, 1500);
+                                                        setSetupIntervalId(interval);
+                                                    })();
+                                                }
+                                            }}
+                                        >
+                                            <div style={{ minHeight: '560px' }}>
+                                                <EmbeddedCheckout />
+                                            </div>
+                                        </EmbeddedCheckoutProvider>
+                                    )}
+                                </div>
+                            ) : null}
+
+                            {paymentTermsDraft === 'auto_card' && checkoutError && !checkoutClientSecret ? (
+                                <p className="platform-message error" style={{ marginTop: '0.75rem' }}>
+                                    {checkoutError}
+                                </p>
+                            ) : null}
+
+                            {portalError ? <p className="platform-message error">{portalError}</p> : null}
+                        </div>
                         {!membership && <p className="platform-message info">No membership record found yet.</p>}
                     </>
                 )}
@@ -476,6 +1020,7 @@ export default function MembershipClient() {
             <section className="platform-card" style={{ marginTop: '1.25rem' }} aria-label="Invoices">
                 <h2 style={{ marginTop: 0 }}>Invoices</h2>
                 <p className="platform-subtitle">Your billing history</p>
+                {invoiceOpenError ? <p className="platform-message error">{invoiceOpenError}</p> : null}
 
                 <div className="platform-table-wrap" style={{ marginTop: '1rem' }}>
                     <table className="platform-table">
@@ -491,7 +1036,15 @@ export default function MembershipClient() {
                             {invoices.length ? (
                                 invoices.map(inv => (
                                     <tr key={inv.id}>
-                                        <td className="platform-mono">{inv.invoice_number || inv.id.slice(0, 8).toUpperCase()}</td>
+                                        <td className="platform-mono">
+                                            {inv.invoice_number?.startsWith?.('stripe:') || inv.invoice_number?.startsWith?.('stripe_session:') ? (
+                                                <button className="btn ghost" type="button" onClick={() => openInvoice(inv)}>
+                                                    {inv.invoice_number}
+                                                </button>
+                                            ) : (
+                                                inv.invoice_number || inv.id.slice(0, 8).toUpperCase()
+                                            )}
+                                        </td>
                                         <td className="platform-mono">{formatDate(inv.issued_on || inv.created_at)}</td>
                                         <td className="platform-mono">{formatNZD(inv.amount_cents)}</td>
                                         <td>

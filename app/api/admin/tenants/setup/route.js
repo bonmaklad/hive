@@ -68,6 +68,13 @@ function computeMonthlyCents({ plan, officeId, donationCents, fridgeEnabled, mon
     return Math.max(0, base + (donationCents || 0) + fridge);
 }
 
+function clampInvoiceDay(value, fallbackDay) {
+    const n = Number.isFinite(value) ? value : Number(value);
+    const day = Number.isFinite(n) ? Math.floor(n) : fallbackDay;
+    if (!Number.isFinite(day)) return 1;
+    return Math.min(31, Math.max(1, day));
+}
+
 async function ensureUser({ guard, email }) {
     const { data: existingProfile, error: profileError } = await guard.admin
         .from('profiles')
@@ -121,6 +128,7 @@ export async function POST(request) {
     const donationCents = parseIntSafe(payload?.membership?.donation_cents, 0);
     const fridgeEnabled = Boolean(payload?.membership?.fridge_enabled);
     const monthlyOverrideCents = payload?.membership?.monthly_amount_cents;
+    const invoiceDayRaw = payload?.membership?.next_invoice_at ?? payload?.membership?.next_invoice_day ?? null;
 
     const tokensTotal = parseIntSafe(payload?.tokens_total, NaN);
     const periodStart = typeof payload?.period_start === 'string' ? payload.period_start : getMonthStart();
@@ -169,6 +177,8 @@ export async function POST(request) {
             monthlyOverrideCents
         });
 
+        const invoiceDay = clampInvoiceDay(invoiceDayRaw, new Date().getDate());
+
         // Create or update membership for the primary owner without requiring a unique constraint
         const { data: existingMembership, error: findMembershipError } = await guard.admin
             .from('memberships')
@@ -185,7 +195,7 @@ export async function POST(request) {
             donation_cents: Math.max(0, donationCents),
             fridge_enabled: fridgeEnabled,
             monthly_amount_cents: monthlyAmountCents,
-            next_invoice_at: null,
+            next_invoice_at: invoiceDay,
             updated_at: new Date().toISOString()
         };
 

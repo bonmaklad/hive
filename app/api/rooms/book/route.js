@@ -133,7 +133,8 @@ export async function POST(request) {
                 start_time: startTime,
                 end_time: endTime,
                 hours,
-                tokens_used: bookingStatus === 'approved' ? requiredTokens : tokensApplied,
+                // Always record the tokens actually applied (can be partial if a coupon covers the remainder).
+                tokens_used: tokensApplied,
                 price_cents: bookingStatus === 'approved' ? 0 : finalCashDueCents,
                 status: bookingStatus
             })
@@ -145,8 +146,8 @@ export async function POST(request) {
 
         if (bookingStatus === 'approved') {
             // Deduct tokens immediately (tenant token owner).
-            if (requiredTokens > 0) {
-                const newUsed = Math.max(0, tokensUsed + requiredTokens);
+            if (tokensApplied > 0) {
+                const newUsed = Math.max(0, tokensUsed + tokensApplied);
                 const { error: updateCreditsError } = await ctx.admin
                     .from('room_credits')
                     .update({ tokens_used: newUsed })
@@ -169,7 +170,7 @@ export async function POST(request) {
         }
 
         // Payment required: create/ensure Stripe customer, create Checkout session, track payment row.
-        const tenantCustomerId = await ensureStripeCustomer({ tenant: ctx.tenant, tenantId: ctx.tenantId });
+        const tenantCustomerId = await ensureStripeCustomer({ tenant: ctx.tenant, tenantId: ctx.tenantId, email: ctx.tokenOwnerEmail });
 
         // Persist customer id if missing (best-effort).
         if (!ctx.tenant?.stripe_customer_id) {
@@ -177,16 +178,21 @@ export async function POST(request) {
         }
 
         const siteUrl = getSiteUrl();
-        const successUrl = `${siteUrl}/platform/bookings?stripe=success&booking=${booking.id}`;
+        const successUrl = `${siteUrl}/platform/rooms?stripe=success&booking=${booking.id}`;
         const cancelUrl = `${siteUrl}/platform/rooms?stripe=cancel&booking=${booking.id}`;
+        const returnUrl = `${siteUrl}/platform/rooms?stripe=return&booking=${booking.id}`;
 
         const session = await createCheckoutSession({
             customerId: tenantCustomerId,
-            amountCents: finalCashDueCents,
+            // IMPORTANT: pass the pre-discount amount and let Stripe apply the promotion code.
+            // Otherwise we'd double-discount (once here and again in Stripe).
+            amountCents: cashDueBeforeDiscountCents,
             currency: 'NZD',
             description: `Room booking: ${space.title || space.slug} (${bookingDate} ${startTime}–${endTime})`,
             successUrl,
             cancelUrl,
+            returnUrl,
+            uiMode: 'embedded',
             metadata: {
                 booking_id: booking.id,
                 tenant_id: ctx.tenantId,
@@ -231,7 +237,9 @@ export async function POST(request) {
                 discount_cents: discountCents,
                 currency: 'NZD',
                 checkout_url: session.url,
-                stripe_checkout_session_id: session.id
+                stripe_checkout_session_id: session.id,
+                stripe_checkout_client_secret: session.client_secret || null,
+                ui_mode: 'embedded'
             }
         });
     } catch (err) {

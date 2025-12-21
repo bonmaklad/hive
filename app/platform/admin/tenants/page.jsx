@@ -294,6 +294,7 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
     const [membershipDonationNZD, setMembershipDonationNZD] = useState('0');
     const [membershipFridgeEnabled, setMembershipFridgeEnabled] = useState(false);
     const [membershipMonthlyOverrideNZD, setMembershipMonthlyOverrideNZD] = useState('');
+    const [membershipInvoiceDay, setMembershipInvoiceDay] = useState(String(new Date().getDate()));
 
     const [tokensTotal, setTokensTotal] = useState('10');
     const [additionalUsers, setAdditionalUsers] = useState([{ email: '', role: 'member' }]);
@@ -313,6 +314,7 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
         setMembershipDonationNZD('0');
         setMembershipFridgeEnabled(false);
         setMembershipMonthlyOverrideNZD('');
+        setMembershipInvoiceDay(String(new Date().getDate()));
         setTokensTotal('10');
         setAdditionalUsers([{ email: '', role: 'member' }]);
         setSendMagicLinks(true);
@@ -358,7 +360,8 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
                     status: membershipStatus,
                     donation_cents: donationCents,
                     fridge_enabled: membershipFridgeEnabled,
-                    monthly_amount_cents: monthlyOverrideCents
+                    monthly_amount_cents: monthlyOverrideCents,
+                    next_invoice_day: Math.min(31, Math.max(1, Math.floor(Number(membershipInvoiceDay || new Date().getDate()))))
                 },
                 period_start: monthStart,
                 tokens_total: Math.max(0, Math.floor(Number(tokensTotal || 0))),
@@ -496,6 +499,16 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
                             placeholder="Leave blank to auto-calc"
                         />
                         <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                            Billing day (1–31)
+                        </label>
+                        <input
+                            value={membershipInvoiceDay}
+                            onChange={e => setMembershipInvoiceDay(e.target.value)}
+                            disabled={busy}
+                            inputMode="numeric"
+                            placeholder="e.g. 15"
+                        />
+                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
                             <input
                                 type="checkbox"
                                 checked={membershipFridgeEnabled}
@@ -628,6 +641,7 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
     const [fridgeEnabled, setFridgeEnabled] = useState(false);
     const [monthlyOverrideNZD, setMonthlyOverrideNZD] = useState('');
     const [tokensTotal, setTokensTotal] = useState('0');
+    const [invoiceDay, setInvoiceDay] = useState(String(new Date().getDate()));
     const [workUnits, setWorkUnits] = useState([]);
     const [workUnitCodes, setWorkUnitCodes] = useState([]);
     const [workUnitsLoading, setWorkUnitsLoading] = useState(false);
@@ -651,6 +665,15 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
             }
         }
         setTokensTotal(String(primary?.room_credits?.tokens_total ?? 0));
+        {
+            const day = tenant?.membership?.next_invoice_at;
+            if (Number.isFinite(Number(day))) {
+                setInvoiceDay(String(Math.min(31, Math.max(1, Math.floor(Number(day))))));
+            } else {
+                const fallback = tenant?.membership?.created_at ? new Date(tenant.membership.created_at).getDate() : new Date().getDate();
+                setInvoiceDay(String(fallback));
+            }
+        }
         setWorkUnitCodes(Array.isArray(tenant?.work_unit_codes) ? tenant.work_unit_codes.filter(v => typeof v === 'string') : []);
         setWorkUnits([]);
         setWorkUnitsLoading(false);
@@ -731,7 +754,8 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                     status,
                     donation_cents: donationCents,
                     fridge_enabled: fridgeEnabled,
-                    monthly_amount_cents: monthlyOverrideCents
+                    monthly_amount_cents: monthlyOverrideCents,
+                    next_invoice_day: Math.min(31, Math.max(1, Math.floor(Number(invoiceDay || new Date().getDate()))))
                 })
             });
             const jsonMembership = await readJsonResponse(resMembership);
@@ -827,6 +851,10 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                         inputMode="decimal"
                         placeholder="Leave blank to auto-calc"
                     />
+                    <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                        Billing day (1–31)
+                    </label>
+                    <input value={invoiceDay} onChange={e => setInvoiceDay(e.target.value)} disabled={busy} inputMode="numeric" />
                     {plan === 'office' ? (
                         <>
                             <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>

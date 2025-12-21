@@ -245,11 +245,18 @@ export default function ChatDrawer() {
         <>
             <button
                 type="button"
-                className={`platform-chat-toggle ${open ? 'open' : ''}`}
+                className={`platform-chat-toggle ${open ? 'open' : 'pulse'}`}
                 aria-label={open ? 'Close chat' : 'Open chat'}
                 onClick={() => setOpen(v => !v)}
             >
-                {open ? '→' : '←'}
+                {open ? (
+                    <span className="platform-chat-toggle-arrow">→</span>
+                ) : (
+                    <>
+                        <span className="platform-chat-toggle-label">Join chat</span>
+                        <span className="platform-chat-toggle-arrow">←</span>
+                    </>
+                )}
             </button>
 
             <aside className={`platform-chat-drawer ${open ? 'open' : ''}`} aria-label="Member chat">

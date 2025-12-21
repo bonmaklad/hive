@@ -40,6 +40,13 @@ function computeMonthlyCents({ plan, officeId, donationCents, fridgeEnabled, mon
     return Math.max(0, base + (donationCents || 0) + fridge);
 }
 
+function clampInvoiceDay(value, fallbackDay) {
+    const n = Number.isFinite(value) ? value : Number(value);
+    const day = Number.isFinite(n) ? Math.floor(n) : fallbackDay;
+    if (!Number.isFinite(day)) return 1;
+    return Math.min(31, Math.max(1, day));
+}
+
 export async function POST(request, { params }) {
     const guard = await requireAdmin(request);
     if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
@@ -56,6 +63,7 @@ export async function POST(request, { params }) {
     const donationCents = parseIntSafe(payload?.donation_cents, 0);
     const fridgeEnabled = Boolean(payload?.fridge_enabled);
     const monthlyOverrideCents = payload?.monthly_amount_cents;
+    const invoiceDayRaw = payload?.next_invoice_at ?? payload?.next_invoice_day ?? null;
 
     if (!plan) return NextResponse.json({ error: 'Missing plan' }, { status: 400 });
     if (!['live', 'expired', 'cancelled'].includes(status)) {
@@ -98,6 +106,8 @@ export async function POST(request, { params }) {
         monthlyOverrideCents
     });
 
+    const invoiceDay = clampInvoiceDay(invoiceDayRaw, new Date().getDate());
+
     const membershipPayload = {
         owner_id: resolvedOwnerId,
         status,
@@ -106,6 +116,7 @@ export async function POST(request, { params }) {
         donation_cents: Math.max(0, donationCents),
         fridge_enabled: fridgeEnabled,
         monthly_amount_cents: monthlyAmountCents,
+        next_invoice_at: invoiceDay,
         updated_at: new Date().toISOString()
     };
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '../../_lib/supabaseAuth';
-import { getStripeWebhookSecret, verifyStripeWebhookSignature } from '../../_lib/stripe';
+import { getStripeWebhookSecret, stripeRequest, verifyStripeWebhookSignature } from '../../_lib/stripe';
 import { monthStart } from '../../rooms/_lib/bookingMath';
 
 export const runtime = 'nodejs';
@@ -18,7 +18,11 @@ async function alreadyProcessed(admin, eventId) {
 }
 
 async function markProcessed(admin, eventId) {
-    await admin.from('stripe_events').insert({ id: eventId });
+    try {
+        await admin.from('stripe_events').insert({ id: eventId });
+    } catch {
+        // If the idempotency table is missing/misconfigured, don't block webhook handling.
+    }
 }
 
 async function approveBookingFromSession({ admin, session }) {
@@ -45,6 +49,10 @@ async function approveBookingFromSession({ admin, session }) {
 
     const invoiceId = session?.invoice || null;
     const paymentIntentId = session?.payment_intent || null;
+    const amountTotal = typeof session?.amount_total === 'number' ? session.amount_total : null;
+    const currency = typeof session?.currency === 'string' ? session.currency.toUpperCase() : null;
+    const amountDiscount =
+        typeof session?.total_details?.amount_discount === 'number' ? session.total_details.amount_discount : null;
 
     await admin
         .from('room_booking_payments')
@@ -52,6 +60,9 @@ async function approveBookingFromSession({ admin, session }) {
             status: 'paid',
             stripe_invoice_id: typeof invoiceId === 'string' ? invoiceId : null,
             stripe_payment_intent_id: typeof paymentIntentId === 'string' ? paymentIntentId : null,
+            amount_cents: amountTotal !== null ? amountTotal : undefined,
+            currency: currency || undefined,
+            discount_cents: amountDiscount !== null ? amountDiscount : undefined,
             updated_at: new Date().toISOString()
         })
         .eq('id', payment.id);
@@ -79,7 +90,7 @@ async function approveBookingFromSession({ admin, session }) {
     // Create internal invoice record (paid) for visibility in the platform admin UI.
     const ownerId = payment.token_owner_id || session?.metadata?.token_owner_id || null;
     if (ownerId) {
-        const amountCents = Math.max(0, toInt(payment.amount_cents, 0));
+        const amountCents = Math.max(0, toInt(amountTotal !== null ? amountTotal : payment.amount_cents, 0));
         const invoiceNumber = typeof invoiceId === 'string' && invoiceId ? `stripe:${invoiceId}` : `stripe_session:${session.id}`;
         try {
             await admin.from('invoices').insert({
@@ -87,7 +98,7 @@ async function approveBookingFromSession({ admin, session }) {
                 membership_id: null,
                 invoice_number: invoiceNumber,
                 amount_cents: amountCents,
-                currency: payment.currency || 'NZD',
+                currency: currency || payment.currency || 'NZD',
                 status: 'paid',
                 issued_on: booking.booking_date,
                 due_on: booking.booking_date,
@@ -104,6 +115,92 @@ async function cancelBookingFromSession({ admin, session }) {
     if (!bookingId) return;
     await admin.from('room_bookings').update({ status: 'cancelled' }).eq('id', bookingId);
     await admin.from('room_booking_payments').update({ status: 'failed' }).eq('stripe_checkout_session_id', session.id);
+}
+
+function toIsoDate(tsSeconds) {
+    if (!Number.isFinite(tsSeconds)) return null;
+    const d = new Date(tsSeconds * 1000);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+}
+
+function toDayOfMonth(tsSeconds) {
+    if (!Number.isFinite(tsSeconds)) return null;
+    const d = new Date(tsSeconds * 1000);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.getUTCDate();
+}
+
+async function activateMembershipFromSession({ admin, session }) {
+    const membershipId = session?.metadata?.membership_id;
+    if (!membershipId) return;
+
+    const stripeSubscriptionId = typeof session?.subscription === 'string' ? session.subscription : session?.subscription?.id;
+    if (!stripeSubscriptionId) return;
+
+    const { data: membership, error: membershipError } = await admin
+        .from('memberships')
+        .select('id, owner_id, currency')
+        .eq('id', membershipId)
+        .maybeSingle();
+    if (membershipError || !membership) return;
+
+    let nextInvoiceAt = null;
+    try {
+        const sub = await stripeRequest('GET', `/v1/subscriptions/${encodeURIComponent(stripeSubscriptionId)}`);
+        nextInvoiceAt = toDayOfMonth(typeof sub?.current_period_end === 'number' ? sub.current_period_end : NaN);
+    } catch {
+        nextInvoiceAt = null;
+    }
+
+    await admin
+        .from('memberships')
+        .update({
+            payment_terms: 'auto_card',
+            stripe_subscription_id: stripeSubscriptionId,
+            next_invoice_at: nextInvoiceAt || undefined,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', membershipId);
+
+    // Record the initial invoice in the internal invoices table if Stripe generated one.
+    const invoiceId = typeof session?.invoice === 'string' ? session.invoice : session?.invoice?.id;
+    const amountTotal = typeof session?.amount_total === 'number' ? session.amount_total : null;
+    const currency = typeof session?.currency === 'string' ? session.currency.toUpperCase() : (membership.currency || 'NZD');
+    const issuedOn = toIsoDate(typeof session?.created === 'number' ? session.created : NaN) || new Date().toISOString().slice(0, 10);
+
+    if (membership?.owner_id) {
+        const invoiceNumber = invoiceId ? `stripe:${invoiceId}` : `stripe_session:${session.id}`;
+        const amountCents = Math.max(0, toInt(amountTotal !== null ? amountTotal : 0, 0));
+        try {
+            await admin.from('invoices').insert({
+                owner_id: membership.owner_id,
+                membership_id: membershipId,
+                invoice_number: invoiceNumber,
+                amount_cents: amountCents,
+                currency,
+                status: 'paid',
+                issued_on: issuedOn,
+                due_on: issuedOn,
+                paid_at: new Date().toISOString()
+            });
+        } catch {
+            // ignore duplicates
+        }
+    }
+}
+
+async function cancelMembershipFromStripeSubscription({ admin, subscription }) {
+    const stripeSubscriptionId = typeof subscription?.id === 'string' ? subscription.id : null;
+    if (!stripeSubscriptionId) return;
+    await admin
+        .from('memberships')
+        .update({
+            payment_terms: 'invoice',
+            stripe_subscription_id: null,
+            updated_at: new Date().toISOString()
+        })
+        .eq('stripe_subscription_id', stripeSubscriptionId);
 }
 
 export async function POST(request) {
@@ -139,10 +236,15 @@ export async function POST(request) {
 
     if (type === 'checkout.session.completed') {
         await approveBookingFromSession({ admin, session: obj });
+        await activateMembershipFromSession({ admin, session: obj });
     }
 
     if (type === 'checkout.session.async_payment_failed' || type === 'checkout.session.expired') {
         await cancelBookingFromSession({ admin, session: obj });
+    }
+
+    if (type === 'customer.subscription.deleted') {
+        await cancelMembershipFromStripeSubscription({ admin, subscription: obj });
     }
 
     return NextResponse.json({ ok: true });

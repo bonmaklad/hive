@@ -20,6 +20,28 @@ function formatDate(value) {
     return d.toLocaleDateString();
 }
 
+function computeNextInvoiceDateFromDay(dayOfMonth) {
+    const raw = Number.isFinite(dayOfMonth) ? dayOfMonth : Number(dayOfMonth);
+    if (!Number.isFinite(raw)) return null;
+    const safeDay = Math.min(31, Math.max(1, Math.floor(raw)));
+
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const year = todayStart.getFullYear();
+    const month = todayStart.getMonth();
+
+    const dimThisMonth = new Date(year, month + 1, 0).getDate();
+    let candidate = new Date(year, month, Math.min(safeDay, dimThisMonth));
+
+    if (candidate < todayStart) {
+        const nextMonth = new Date(year, month + 1, 1);
+        const dimNextMonth = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
+        candidate = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), Math.min(safeDay, dimNextMonth));
+    }
+
+    return candidate;
+}
+
 function getMonthStart(date) {
     const yyyy = date.getFullYear();
     const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -81,6 +103,11 @@ export default function DashboardClient() {
     const membershipBadge = membershipStatus === 'live' ? 'success' : 'error';
     const membershipLabel = membershipStatus === 'live' ? 'Live' : membershipStatus === 'cancelled' ? 'Cancelled' : 'Expired';
     const monthly = membership?.monthly_amount_cents ?? 0;
+    const nextInvoiceDate = useMemo(() => {
+        const day = Number(membership?.next_invoice_at);
+        if (Number.isFinite(day) && day >= 1 && day <= 31) return computeNextInvoiceDateFromDay(day);
+        return null;
+    }, [membership?.next_invoice_at]);
 
     return (
         <div className="platform-grid">
@@ -107,7 +134,7 @@ export default function DashboardClient() {
                     {loading ? '' : canViewMembership && membership ? `Amount: ${formatNZD(monthly)} / month` : ''}
                 </p>
                 <p className="platform-subtitle">
-                    Next invoice: {loading ? '—' : canViewMembership ? formatDate(membership?.next_invoice_at) : '—'}
+                    Next invoice: {loading ? '—' : canViewMembership ? formatDate(nextInvoiceDate) : '—'}
                 </p>
                 <div className="platform-card-actions">
                     {canViewMembership ? (

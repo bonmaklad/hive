@@ -64,9 +64,24 @@ export async function stripeRequest(method, path, params, { idempotencyKey } = {
     return json;
 }
 
-export async function ensureStripeCustomer({ tenant, tenantId }) {
+export async function ensureStripeCustomer({ tenant, tenantId, email }) {
     const existing = typeof tenant?.stripe_customer_id === 'string' ? tenant.stripe_customer_id.trim() : '';
-    if (existing) return existing;
+    const cleanEmail = typeof email === 'string' ? email.trim() : '';
+    if (existing) {
+        if (cleanEmail) {
+            try {
+                await stripeRequest(
+                    'POST',
+                    `/v1/customers/${encodeURIComponent(existing)}`,
+                    { email: cleanEmail },
+                    { idempotencyKey: `tenant-customer-email-${tenantId}` }
+                );
+            } catch {
+                // ignore best-effort updates
+            }
+        }
+        return existing;
+    }
 
     const name = typeof tenant?.name === 'string' ? tenant.name : `Tenant ${tenantId}`;
     const idempotencyKey = `tenant-customer-${tenantId}`;
@@ -76,6 +91,7 @@ export async function ensureStripeCustomer({ tenant, tenantId }) {
         '/v1/customers',
         {
             name,
+            email: cleanEmail || undefined,
             'metadata[tenant_id]': tenantId
         },
         { idempotencyKey }
@@ -111,6 +127,8 @@ export async function createCheckoutSession({
     description,
     successUrl,
     cancelUrl,
+    returnUrl,
+    uiMode,
     metadata,
     promotionCodeId
 }) {
@@ -119,8 +137,6 @@ export async function createCheckoutSession({
     const params = {
         mode: 'payment',
         customer: customerId,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
         'invoice_creation[enabled]': 'true',
         'line_items[0][quantity]': '1',
         'line_items[0][price_data][currency]': currency.toLowerCase(),
@@ -129,6 +145,14 @@ export async function createCheckoutSession({
         'line_items[0][price_data][product_data][metadata][tenant_id]': metadata?.tenant_id || '',
         'line_items[0][price_data][product_data][metadata][booking_id]': metadata?.booking_id || ''
     };
+
+    if (uiMode === 'embedded') {
+        params.ui_mode = 'embedded';
+        params.return_url = returnUrl || successUrl || cancelUrl;
+    } else {
+        params.success_url = successUrl;
+        params.cancel_url = cancelUrl;
+    }
 
     if (promotionCodeId) {
         params['discounts[0][promotion_code]'] = promotionCodeId;

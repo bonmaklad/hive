@@ -31,6 +31,13 @@ export async function requireTenantContext(request) {
     if (ownerError) return { ok: false, status: 500, error: ownerError.message };
     const tokenOwnerId = ownerLink?.user_id || user.id;
 
-    return { ok: true, status: 200, user, admin, tenantId, tenant, tokenOwnerId };
-}
+    let tokenOwnerEmail = null;
+    try {
+        const { data: ownerProfile } = await admin.from('profiles').select('email').eq('id', tokenOwnerId).maybeSingle();
+        tokenOwnerEmail = ownerProfile?.email || null;
+    } catch {
+        tokenOwnerEmail = null;
+    }
 
+    return { ok: true, status: 200, user, admin, tenantId, tenant, tokenOwnerId, tokenOwnerEmail };
+}

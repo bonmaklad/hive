@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { spaces as staticSpaces } from '@/lib/spaces';
 import { usePlatformSession } from '../PlatformContext';
+import { loadStripe } from '@stripe/stripe-js';
+import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js';
 
 const TOKENS_PER_HOUR = {
     'nikau-room': 1,
@@ -123,6 +125,33 @@ function errorFromResponse(response, payload) {
     return new Error(`Request failed (${response.status}).`);
 }
 
+function Modal({ open, title, onClose, children }) {
+    useEffect(() => {
+        if (!open) return;
+        const onKeyDown = event => {
+            if (event.key === 'Escape') onClose?.();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [onClose, open]);
+
+    if (!open) return null;
+
+    return (
+        <div className="platform-modal-overlay" role="presentation" onMouseDown={onClose}>
+            <div className="platform-modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={event => event.stopPropagation()}>
+                <div className="platform-modal-header">
+                    <h2 style={{ margin: 0 }}>{title}</h2>
+                    <button className="btn ghost" type="button" onClick={onClose}>
+                        Close
+                    </button>
+                </div>
+                <div style={{ marginTop: '1rem' }}>{children}</div>
+            </div>
+        </div>
+    );
+}
+
 export default function RoomBookingClient() {
     const { user, supabase } = usePlatformSession();
     const [rooms, setRooms] = useState([]);
@@ -139,6 +168,10 @@ export default function RoomBookingClient() {
     const [quote, setQuote] = useState(null);
     const [quoteBusy, setQuoteBusy] = useState(false);
     const [couponInfo, setCouponInfo] = useState('');
+    const [checkoutOpen, setCheckoutOpen] = useState(false);
+    const [checkoutClientSecret, setCheckoutClientSecret] = useState('');
+    const [checkoutError, setCheckoutError] = useState('');
+    const [bookingsForDay, setBookingsForDay] = useState([]);
 
     const room = useMemo(() => rooms.find(r => r.id === roomId) || rooms[0] || null, [roomId, rooms]);
 
@@ -162,8 +195,15 @@ export default function RoomBookingClient() {
     const cashDueFinalCents = Math.max(0, cashDueCents - Number(quote?.pricing?.discount_cents || 0));
     const requiresPayment = selection.hours > 0 && cashDueFinalCents > 0;
 
+    const stripePromise = useMemo(() => {
+        const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+        if (!key) return null;
+        return loadStripe(key);
+    }, []);
+
     // Track slot status: 'open' | 'requested' | 'approved'
     const [slotStatus, setSlotStatus] = useState(() => new Map());
+    const availabilityRefreshTimer = useMemo(() => ({ id: null }), []);
     const fullDayAvailable = useMemo(
         () => TIME_SLOTS.every(t => (slotStatus.get(t) || 'open') === 'open'),
         [slotStatus]
@@ -260,53 +300,106 @@ export default function RoomBookingClient() {
         };
     }, [authHeader, date]);
 
+    const refreshTokensLeft = useCallback(async () => {
+        try {
+            const res = await fetch(`/api/rooms/tokens?date=${encodeURIComponent(date)}`, {
+                headers: await authHeader()
+            });
+            const json = await readJsonResponse(res);
+            if (!res.ok) throw errorFromResponse(res, json);
+            setTokensLeft(Math.max(0, Number(json?.tokens_left || 0)));
+        } catch {
+            // ignore
+        }
+    }, [authHeader, date]);
+
+    const resetDraft = useCallback(() => {
+        setStartIndex(null);
+        setEndIndex(null);
+        setCouponCode('');
+        setQuote(null);
+        setCouponInfo('');
+    }, []);
+
+    const loadAvailability = useCallback(async () => {
+        if (!roomId || !date) return;
+        const res = await fetch(`/api/rooms/availability?space_slug=${encodeURIComponent(roomId)}&date=${encodeURIComponent(date)}`, {
+            headers: await authHeader()
+        });
+        const json = await readJsonResponse(res);
+        if (!res.ok) throw errorFromResponse(res, json);
+
+        const bookings = Array.isArray(json?.bookings) ? json.bookings : [];
+        setBookingsForDay(bookings);
+        const statusMap = new Map();
+        for (const booking of bookings) {
+            const startMin = parseTimeToMinutes(booking.start_time);
+            const endMin = parseTimeToMinutes(booking.end_time);
+            const isSelf = Boolean(booking.is_self);
+            TIME_SLOTS.forEach(time => {
+                const slotStart = parseTimeToMinutes(time);
+                const slotEnd = slotStart + 60;
+                const overlaps = slotStart < endMin && slotEnd > startMin;
+                if (!overlaps) return;
+
+                const prev = statusMap.get(time) || 'open';
+                const incoming =
+                    booking.status === 'approved' ? (isSelf ? 'approved_self' : 'approved_other') : isSelf ? 'requested_self' : 'requested_other';
+
+                if (prev.startsWith('approved')) return;
+                if (incoming.startsWith('approved')) {
+                    statusMap.set(time, incoming);
+                    return;
+                }
+                if (prev === 'open') statusMap.set(time, incoming);
+            });
+        }
+
+        setSlotStatus(statusMap);
+    }, [authHeader, date, roomId]);
+
     useEffect(() => {
         let cancelled = false;
 
-        const loadBookings = async () => {
-            if (!roomId || !date) return;
-            const { data, error } = await supabase
-                .from('room_bookings')
-                .select('start_time, end_time, status')
-                .eq('space_slug', roomId)
-                .eq('booking_date', date)
-                .in('status', ['requested', 'approved']);
-
-            if (cancelled) return;
-
-            if (error) {
-                setSlotStatus(new Map());
-                return;
+        const load = async () => {
+            try {
+                await loadAvailability();
+            } catch {
+                if (!cancelled) {
+                    setSlotStatus(new Map());
+                    setBookingsForDay([]);
+                }
             }
-
-            const statusMap = new Map();
-            for (const booking of data || []) {
-                const startMin = parseTimeToMinutes(booking.start_time);
-                const endMin = parseTimeToMinutes(booking.end_time);
-                TIME_SLOTS.forEach(time => {
-                    const slotStart = parseTimeToMinutes(time);
-                    const slotEnd = slotStart + 60;
-                    const overlaps = slotStart < endMin && slotEnd > startMin;
-                    if (overlaps) {
-                        const prev = statusMap.get(time) || 'open';
-                        const nxt = booking.status === 'approved' ? 'approved' : prev === 'approved' ? 'approved' : 'requested';
-                        statusMap.set(time, nxt);
-                    }
-                });
-            }
-            setSlotStatus(statusMap);
         };
 
-        loadBookings();
+        load();
         return () => {
             cancelled = true;
         };
-    }, [date, roomId, supabase]);
+    }, [loadAvailability]);
 
     useEffect(() => {
         setQuote(null);
         setCouponInfo('');
     }, [couponCode, date, roomId, startIndex, endIndex]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const stripeState = params.get('stripe');
+        if (!stripeState) return;
+        if (stripeState === 'success' || stripeState === 'return') {
+            setInfo('Payment complete. Finalising booking…');
+        }
+        if (stripeState === 'cancel') {
+            setInfo('Payment cancelled.');
+        }
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (availabilityRefreshTimer.id) clearInterval(availabilityRefreshTimer.id);
+        };
+    }, [availabilityRefreshTimer]);
 
     const applyCoupon = async () => {
         setCouponInfo('');
@@ -387,9 +480,23 @@ export default function RoomBookingClient() {
             const booking = json?.booking || null;
             const payment = json?.payment || null;
 
-            if (payment?.required && payment?.checkout_url) {
-                setInfo(`Redirecting to payment (${formatNZD(Number(payment.amount_cents || 0) / 100)})…`);
-                window.location.href = payment.checkout_url;
+            if (payment?.required) {
+                const clientSecret = typeof payment?.stripe_checkout_client_secret === 'string' ? payment.stripe_checkout_client_secret : '';
+                if (!clientSecret) {
+                    if (payment?.checkout_url) {
+                        setInfo(`Redirecting to payment (${formatNZD(Number(payment.amount_cents || 0) / 100)})…`);
+                        window.location.href = payment.checkout_url;
+                        return;
+                    }
+                    throw new Error('Payment required but checkout session is missing.');
+                }
+
+                if (!stripePromise) throw new Error('Missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.');
+
+                setCheckoutClientSecret(clientSecret);
+                setCheckoutError('');
+                setCheckoutOpen(true);
+                setInfo(`Payment required: ${formatNZD(Number(payment.amount_cents || 0) / 100)}.`);
                 return;
             }
 
@@ -402,15 +509,13 @@ export default function RoomBookingClient() {
                 // ignore
             }
 
-            // Refresh local slot status quickly: mark selected slots
-            setSlotStatus(prev => {
-                const next = new Map(prev);
-                for (const idx of selection.indices) {
-                    const time = TIME_SLOTS[idx];
-                    next.set(time, booking?.status === 'approved' ? 'approved' : 'requested');
-                }
-                return next;
-            });
+            resetDraft();
+
+            try {
+                await loadAvailability();
+            } catch {
+                // ignore
+            }
         } catch (err) {
             setError(err?.message || 'Could not create booking.');
         } finally {
@@ -522,7 +627,18 @@ export default function RoomBookingClient() {
                                 const status = slotStatus.get(time) || 'open';
                                 const selected = selection.indices.includes(idx);
                                 const isDisabled = busy || status !== 'open';
-                                const bg = status === 'approved' ? '#ff6b6b' : status === 'requested' ? '#ffd166' : selected ? 'var(--accent)' : 'transparent';
+                                const bg =
+                                    status === 'approved_self'
+                                        ? '#06d6a0'
+                                        : status === 'requested_self'
+                                          ? '#b7f0d0'
+                                          : status === 'approved_other'
+                                            ? '#ff6b6b'
+                                            : status === 'requested_other'
+                                              ? '#ffd166'
+                                              : selected
+                                                ? 'var(--accent)'
+                                                : 'transparent';
                                 const color = status === 'open' && !selected ? 'inherit' : '#0b0c10';
                                 return (
                                     <button
@@ -600,6 +716,55 @@ export default function RoomBookingClient() {
                     </div>
                 </form>
 
+                <Modal
+                    open={checkoutOpen}
+                    title="Complete payment"
+                    onClose={() => {
+                        setCheckoutOpen(false);
+                        setCheckoutClientSecret('');
+                        setCheckoutError('');
+                        resetDraft();
+                        setInfo('Payment closed. Your booking will appear once payment is confirmed.');
+                        loadAvailability().catch(() => null);
+                        refreshTokensLeft().catch(() => null);
+                    }}
+                >
+                    {checkoutError ? <p className="platform-message error">{checkoutError}</p> : null}
+                    {!stripePromise ? (
+                        <p className="platform-message error">Missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.</p>
+                    ) : checkoutClientSecret ? (
+                        <EmbeddedCheckoutProvider
+                            stripe={stripePromise}
+                            options={{
+                                clientSecret: checkoutClientSecret,
+                                onComplete: () => {
+                                    setCheckoutOpen(false);
+                                    setCheckoutClientSecret('');
+                                    setCheckoutError('');
+                                    setInfo('Payment submitted. Finalising booking…');
+                                    resetDraft();
+
+                                    let tries = 0;
+                                    if (availabilityRefreshTimer.id) clearInterval(availabilityRefreshTimer.id);
+                                    const interval = setInterval(() => {
+                                        tries += 1;
+                                        loadAvailability().catch(() => null);
+                                        refreshTokensLeft().catch(() => null);
+                                        if (tries >= 8) clearInterval(interval);
+                                    }, 1500);
+                                    availabilityRefreshTimer.id = interval;
+                                }
+                            }}
+                        >
+                            <div style={{ minHeight: '560px' }}>
+                                <EmbeddedCheckout />
+                            </div>
+                        </EmbeddedCheckoutProvider>
+                    ) : (
+                        <p className="platform-subtitle">Preparing checkout…</p>
+                    )}
+                </Modal>
+
                 <aside className="platform-room-preview" aria-label="Selected room preview">
                     {room ? (
                         <figure className="hex hex-program platform-room-hex" style={{ backgroundImage: `url(${room.image})` }}>
@@ -620,6 +785,63 @@ export default function RoomBookingClient() {
                                 {room?.pricing_full_day_cents ? <div>{formatNZD(room.pricing_full_day_cents / 100)} full day</div> : null}
                             </div>
                         )}
+                    </div>
+
+                    <div className="platform-card" style={{ marginTop: '1rem' }}>
+                        <h3 style={{ marginTop: 0 }}>Bookings</h3>
+                        <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                            <span className="badge success" style={{ marginRight: '0.5rem' }}>
+                                yours
+                            </span>
+                            <span className="badge pending" style={{ marginRight: '0.5rem' }}>
+                                requested
+                            </span>
+                            <span className="badge error">taken</span>
+                        </p>
+
+                        <div className="platform-table-wrap" style={{ marginTop: '0.75rem' }}>
+                            <table className="platform-table" style={{ minWidth: '0' }}>
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {bookingsForDay.length ? (
+                                        bookingsForDay
+                                            .slice()
+                                            .sort((a, b) => String(a?.start_time || '').localeCompare(String(b?.start_time || '')))
+                                            .map((b, idx) => {
+                                                const self = Boolean(b?.is_self);
+                                                const status = b?.status === 'approved' ? 'approved' : 'requested';
+                                                return (
+                                                    <tr key={`${b?.start_time}-${b?.end_time}-${idx}`} className={self ? 'row-self' : ''}>
+                                                        <td className="platform-mono">
+                                                            {b?.start_time}–{b?.end_time}
+                                                        </td>
+                                                        <td>
+                                                            {self ? (
+                                                                <span className="badge success">{status}</span>
+                                                            ) : status === 'requested' ? (
+                                                                <span className="badge pending">requested</span>
+                                                            ) : (
+                                                                <span className="badge error">approved</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={2} className="platform-subtitle">
+                                                No bookings yet for this room/day.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </aside>
             </div>
