@@ -53,10 +53,15 @@ export async function GET(request) {
         return list.find(u => u.role === 'owner') || list.find(u => u.role === 'admin') || list[0] || null;
     };
 
+    const resolveMembershipOwnerUser = users => {
+        const list = Array.isArray(users) ? users : [];
+        return list.find(u => u.role === 'owner') || list.find(u => u.role === 'admin') || null;
+    };
+
     const primaryUserIds = Array.from(
         new Set(
             (tenantIds || [])
-                .map(tenantId => resolvePrimaryUser(groupedUsers?.[tenantId])?.user_id)
+                .map(tenantId => resolveMembershipOwnerUser(groupedUsers?.[tenantId])?.user_id)
                 .filter(Boolean)
         )
     );
@@ -122,14 +127,14 @@ export async function GET(request) {
         const users = hydratedUsers?.[t.id] || [];
         const owner = users.find(u => u.role === 'owner') || null;
         const primary = owner || users.find(u => u.role === 'admin') || users[0] || null;
-        const primaryUserId = primary?.user_id || null;
+        const membershipOwnerUserId = owner?.user_id || primary?.user_id || null;
         return {
             ...t,
             users,
             owner,
             primary_user: primary,
-            membership: primaryUserId ? membershipsByOwner[primaryUserId] || null : null,
-            invoices: primaryUserId ? invoicesByOwner?.[primaryUserId] || [] : []
+            membership: membershipOwnerUserId ? membershipsByOwner[membershipOwnerUserId] || null : null,
+            invoices: membershipOwnerUserId ? invoicesByOwner?.[membershipOwnerUserId] || [] : []
         };
     });
 

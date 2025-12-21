@@ -35,7 +35,7 @@ export async function POST(request, { params }) {
     const shouldSendMagicLink = payload?.send_magic_link === false ? false : true;
 
     if (!email) return NextResponse.json({ error: 'Missing email' }, { status: 400 });
-    if (!['owner', 'member', 'admin'].includes(role)) return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+    if (!['owner', 'member'].includes(role)) return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
 
     const { data: existingProfile, error: profileError } = await guard.admin
         .from('profiles')

@@ -217,7 +217,7 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
                 tokens_total: Math.max(0, Math.floor(Number(tokensTotal || 0))),
                 additional_users: additionalUsers
                     .map(u => ({ email: parseEmail(u.email), role: u.role }))
-                    .filter(u => u.email && ['member', 'admin'].includes(u.role)),
+                    .filter(u => u.email && ['member'].includes(u.role)),
                 send_magic_links: sendMagicLinks
             };
 
@@ -276,7 +276,7 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
 
                     <div className="platform-card span-6">
                         <h3 style={{ marginTop: 0 }}>Primary user</h3>
-                        <p className="platform-subtitle">This user holds the membership + token pool for the tenant.</p>
+                        <p className="platform-subtitle">This user is the primary contact for the tenant.</p>
                         <label className="platform-subtitle">Email</label>
                         <input value={primaryEmail} onChange={e => setPrimaryEmail(e.target.value)} disabled={busy} />
                         <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
@@ -284,7 +284,6 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
                         </label>
                         <select value={primaryRole} onChange={e => setPrimaryRole(e.target.value)} disabled={busy}>
                             <option value="owner">owner</option>
-                            <option value="admin">admin</option>
                         </select>
                     </div>
                 </div>
@@ -367,7 +366,7 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
                 <div className="platform-card" style={{ marginTop: '1rem' }}>
                     <h3 style={{ marginTop: 0 }}>Initial token pool</h3>
                     <p className="platform-subtitle">
-                        Tokens are assigned to the tenant’s primary user and shared across tenant users/profiles for this membership.
+                    Tokens are a tenant-level pool. The token holder must be the owner; all tenant users share the same bookings pool.
                     </p>
                     <label className="platform-subtitle">Tokens total (month starting {monthStart})</label>
                     <input value={tokensTotal} onChange={e => setTokensTotal(e.target.value)} disabled={busy} inputMode="numeric" />
@@ -405,7 +404,6 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
                                     disabled={busy}
                                 >
                                     <option value="member">member</option>
-                                    <option value="admin">admin</option>
                                 </select>
                                 <button
                                     className="btn secondary"
@@ -511,7 +509,7 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
         setGlobalError('');
         try {
             if (!tenant?.id) throw new Error('Missing tenant id.');
-            if (!primaryId) throw new Error('Tenant is missing an owner/admin user.');
+            if (!primaryId) throw new Error('Tenant is missing an owner user.');
             const headers = { ...(await authHeader()), 'Content-Type': 'application/json' };
 
             if (name.trim() && name.trim() !== tenant.name) {
@@ -669,84 +667,20 @@ function UserDetailsModal({ open, tenantId, userRow, authHeader, onClose, onSave
     const email = userRow?.profile?.email || '';
     const name = userRow?.profile?.name || '';
 
-    const [loading, setLoading] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
-    const [membership, setMembership] = useState(null);
-
-    const [status, setStatus] = useState('live');
-    const [planId, setPlanId] = useState('member');
-    const [officeId, setOfficeId] = useState('office-a');
-    const [donationText, setDonationText] = useState('');
-    const [fridgeEnabled, setFridgeEnabled] = useState(false);
-    const [customPriceText, setCustomPriceText] = useState('');
-
-    const loadMembership = async () => {
-        if (!userId) return;
-        setLoading(true);
-        setError('');
-        setInfo('');
-        try {
-            const res = await fetch(`/api/admin/memberships/${userId}`, { headers: await authHeader() });
-            const json = await readJsonResponse(res);
-            if (!res.ok) {
-                if (json?._raw) throw errorFromNonJson(res, json);
-                throw new Error(json?.error || 'Failed to load membership.');
-            }
-
-            const row = json?.membership || null;
-            setMembership(row);
-
-            if (row) {
-                setStatus(row.status || 'live');
-                setPlanId(row.plan || 'member');
-                setOfficeId(row.office_id || 'office-a');
-                setDonationText(row.donation_cents ? String(row.donation_cents / 100) : '');
-                setFridgeEnabled(Boolean(row.fridge_enabled));
-                if (row.plan === 'custom') {
-                    const donationCents = row.donation_cents || 0;
-                    const fridgeCents = row.fridge_enabled ? FRIDGE_MONTHLY_CENTS : 0;
-                    const baseCents = Math.max(0, (row.monthly_amount_cents || 0) - donationCents - fridgeCents);
-                    setCustomPriceText(baseCents ? String(baseCents / 100) : '');
-                } else {
-                    setCustomPriceText('');
-                }
-            } else {
-                setStatus('live');
-                setPlanId('member');
-                setOfficeId('office-a');
-                setDonationText('');
-                setFridgeEnabled(false);
-                setCustomPriceText('');
-            }
-        } catch (err) {
-            setError(err?.message || 'Failed to load membership.');
-            setMembership(null);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const [role, setRole] = useState('member');
 
     useEffect(() => {
         if (!open) return;
-        loadMembership();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, userId]);
+        setBusy(false);
+        setError('');
+        setInfo('');
+        setRole(userRow?.role || 'member');
+    }, [open, userRow?.role]);
 
-    const donationCents = toCentsOrZero(donationText);
-    const fridgeCents = fridgeEnabled ? FRIDGE_MONTHLY_CENTS : 0;
-    const customBaseCents = toCentsOrZero(customPriceText);
-    const baseCents =
-        planId === 'custom'
-            ? customBaseCents
-            : planId === 'office'
-                ? OFFICE_MONTHLY_CENTS[officeId] || PLAN_MONTHLY_CENTS.office
-                : PLAN_MONTHLY_CENTS[planId] ?? 0;
-
-    const estimatedMonthlyCents = Math.max(0, baseCents + donationCents + fridgeCents);
-
-    const saveMembership = async () => {
+    const saveUser = async () => {
         if (!tenantId || !userId) return;
 
         setBusy(true);
@@ -754,40 +688,30 @@ function UserDetailsModal({ open, tenantId, userRow, authHeader, onClose, onSave
         setInfo('');
         setGlobalError('');
         try {
-            if (!['member', 'desk', 'pod', 'office', 'premium', 'custom'].includes(planId)) {
-                throw new Error('Invalid plan.');
-            }
-            if (!['live', 'expired', 'cancelled'].includes(status)) {
-                throw new Error('Invalid status.');
-            }
-            if (planId === 'office' && !officeId) throw new Error('Office is required.');
-            if (planId === 'custom' && customBaseCents < 0) throw new Error('Custom price is required.');
+            if (!email) throw new Error('User has no email on file.');
+            if (!['owner', 'member'].includes(role)) throw new Error('Invalid role.');
+            if (userRow?.role === 'owner' && role !== 'owner') throw new Error('Owner role cannot be changed here.');
 
-            const res = await fetch(`/api/admin/tenants/${tenantId}/membership`, {
+            const res = await fetch(`/api/admin/tenants/${tenantId}/users`, {
                 method: 'POST',
                 headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    owner_id: userId,
-                    plan: planId,
-                    office_id: planId === 'office' ? officeId : null,
-                    status,
-                    donation_cents: donationCents,
-                    fridge_enabled: fridgeEnabled,
-                    monthly_amount_cents: planId === 'custom' ? estimatedMonthlyCents : null
+                    email,
+                    role,
+                    send_magic_link: false
                 })
             });
 
             const json = await readJsonResponse(res);
             if (!res.ok) {
                 if (json?._raw) throw errorFromNonJson(res, json);
-                throw new Error(json?.error || 'Failed to update membership.');
+                throw new Error(json?.error || 'Failed to update tenant user.');
             }
 
             setInfo('Saved.');
             await onSaved?.();
-            await loadMembership();
         } catch (err) {
-            setError(err?.message || 'Failed to update membership.');
+            setError(err?.message || 'Failed to update tenant user.');
         } finally {
             setBusy(false);
         }
@@ -798,8 +722,8 @@ function UserDetailsModal({ open, tenantId, userRow, authHeader, onClose, onSave
             <button className="btn secondary" type="button" onClick={onClose} disabled={busy}>
                 Close
             </button>
-            <button className="btn primary" type="button" onClick={saveMembership} disabled={busy || loading || !userId}>
-                {busy ? 'Saving…' : 'Save membership'}
+            <button className="btn primary" type="button" onClick={saveUser} disabled={busy || !userId}>
+                {busy ? 'Saving…' : 'Save user'}
             </button>
         </>
     );
@@ -812,96 +736,25 @@ function UserDetailsModal({ open, tenantId, userRow, authHeader, onClose, onSave
             onClose={() => (busy ? null : onClose())}
             footer={footer}
         >
-            {loading ? <p className="platform-subtitle">Loading…</p> : null}
             {error && <p className="platform-message error">{error}</p>}
             {info && <p className="platform-message info">{info}</p>}
 
             <div className="platform-card" style={{ marginTop: '0.75rem' }}>
-                <h3 style={{ marginTop: 0 }}>Membership</h3>
-
-                <label className="platform-subtitle">Plan</label>
-                <select value={planId} onChange={e => setPlanId(e.target.value)} disabled={busy || loading}>
-                    <option value="member">member</option>
-                    <option value="desk">desk</option>
-                    <option value="pod">pod</option>
-                    <option value="office">office</option>
-                    <option value="premium">premium</option>
-                    <option value="custom">custom</option>
-                </select>
-
-                {planId === 'office' ? (
-                    <>
-                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
-                            Office
-                        </label>
-                        <select value={officeId} onChange={e => setOfficeId(e.target.value)} disabled={busy || loading}>
-                            <option value="office-a">office-a</option>
-                            <option value="office-b">office-b</option>
-                            <option value="office-c">office-c</option>
-                        </select>
-                    </>
-                ) : null}
-
-                {planId === 'custom' ? (
-                    <>
-                        <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
-                            Custom price (NZD / month)
-                        </label>
-                        <input
-                            value={customPriceText}
-                            onChange={e => setCustomPriceText(e.target.value)}
-                            disabled={busy || loading}
-                            inputMode="decimal"
-                            placeholder="e.g. 499"
-                        />
-                    </>
-                ) : null}
-
-                <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
-                    Status
-                </label>
-                <select value={status} onChange={e => setStatus(e.target.value)} disabled={busy || loading}>
-                    <option value="live">live</option>
-                    <option value="expired">expired</option>
-                    <option value="cancelled">cancelled</option>
-                </select>
-
-                <div style={{ marginTop: '1rem' }}>
-                    <h3 style={{ margin: 0 }}>Extras</h3>
-                    <p className="platform-subtitle">Add-ons that adjust the monthly total.</p>
-                </div>
-
-                <label className="platform-subtitle">Donation (NZD / month)</label>
-                <input
-                    value={donationText}
-                    onChange={e => setDonationText(e.target.value)}
-                    disabled={busy || loading}
-                    inputMode="decimal"
-                    placeholder="e.g. 50"
-                />
-
-                <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
-                    <input
-                        type="checkbox"
-                        checked={fridgeEnabled}
-                        onChange={e => setFridgeEnabled(e.target.checked)}
-                        disabled={busy || loading}
-                        style={{ marginRight: '0.5rem' }}
-                    />
-                    Fridge access ({formatNZD(FRIDGE_WEEKLY_CENTS)} / week)
-                </label>
-
-                <p className="platform-message info" style={{ marginTop: '1rem' }}>
-                    Estimated total: <span className="platform-mono">{formatNZD(estimatedMonthlyCents)} / month</span>
+                <h3 style={{ marginTop: 0 }}>Tenant user</h3>
+                <p className="platform-subtitle">
+                    Membership and tokens are configured on the tenant (use the tenant “Edit” button).
                 </p>
 
-                {membership ? (
+                <label className="platform-subtitle">Role</label>
+                <select value={role} onChange={e => setRole(e.target.value)} disabled={busy || userRow?.role === 'owner'}>
+                    <option value="member">member</option>
+                    <option value="owner">owner</option>
+                </select>
+                {userRow?.role === 'owner' ? (
                     <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
-                        Current stored monthly: <span className="platform-mono">{formatNZD(membership.monthly_amount_cents)}</span>
+                        Owner role is locked here.
                     </p>
-                ) : (
-                    <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>No membership row yet.</p>
-                )}
+                ) : null}
 
                 <div className="platform-card-actions">
                     <button
@@ -915,7 +768,7 @@ function UserDetailsModal({ open, tenantId, userRow, authHeader, onClose, onSave
                                 setError(err?.message || 'Failed to send magic link.');
                             }
                         }}
-                        disabled={!email || busy || loading}
+                        disabled={!email || busy}
                     >
                         Send magic link
                     </button>
@@ -934,7 +787,7 @@ function TenantInlineActions({ tenant, monthStart, authHeader, onReload, setGlob
     const primary = tenant?.primary_user || tenant?.owner || (Array.isArray(tenant?.users) ? tenant.users[0] : null) || null;
     const tokenHolders = useMemo(() => {
         const users = Array.isArray(tenant?.users) ? tenant.users : [];
-        const candidates = users.filter(u => u.role === 'owner' || u.role === 'admin');
+        const candidates = users.filter(u => u.role === 'owner');
         return candidates.length ? candidates : users;
     }, [tenant]);
     const [tokenHolderId, setTokenHolderId] = useState(primary?.user_id || '');
@@ -975,7 +828,7 @@ function TenantInlineActions({ tenant, monthStart, authHeader, onReload, setGlob
         setBusy(true);
         setGlobalError('');
         try {
-            if (!tokenHolderId) throw new Error('Select a token holder (owner/admin).');
+            if (!tokenHolderId) throw new Error('Select a token holder (owner).');
             const tokens = Math.max(0, Math.floor(Number(tokensTotal || 0)));
             const res = await fetch(`/api/admin/tenants/${tenant.id}/credits`, {
                 method: 'POST',
@@ -1006,7 +859,7 @@ function TenantInlineActions({ tenant, monthStart, authHeader, onReload, setGlob
                 </label>
                 <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} disabled={busy}>
                     <option value="member">member</option>
-                    <option value="admin">admin</option>
+                    <option value="owner">owner</option>
                 </select>
                 <div className="platform-card-actions">
                     <button className="btn primary" type="button" onClick={addUser} disabled={busy || !inviteEmail.trim()}>
@@ -1161,7 +1014,8 @@ export default function AdminTenantsPage() {
                         const membership = t.membership || null;
                         const invoices = Array.isArray(t.invoices) ? t.invoices : [];
 
-                        const credits = primary?.room_credits || null;
+                        const tokenHolder = users.find(u => u.room_credits) || primary;
+                        const credits = tokenHolder?.room_credits || null;
                         const tokensTotal = credits?.tokens_total || 0;
                         const tokensUsed = credits?.tokens_used || 0;
                         const tokensLeft = Math.max(0, tokensTotal - tokensUsed);
@@ -1187,11 +1041,11 @@ export default function AdminTenantsPage() {
                                             </div>
                                         </div>
                                         <p className="platform-subtitle" style={{ margin: 0 }}>
-                                            Primary: {primaryProfile ? `${primaryProfile.name || '—'} (${primaryProfile.email || '—'})` : '—'} •{' '}
+                                            Primary user: {primaryProfile ? `${primaryProfile.name || '—'} (${primaryProfile.email || '—'})` : '—'} •{' '}
                                             <span className="platform-mono">{primary?.role || '—'}</span>
                                         </p>
                                         <p className="platform-subtitle" style={{ margin: 0 }}>
-                                            Membership:{' '}
+                                            Tenant membership:{' '}
                                             {membership ? (
                                                 <span className="platform-mono">
                                                     {membership.plan} • {formatNZD(membership.monthly_amount_cents)} / month
@@ -1200,6 +1054,14 @@ export default function AdminTenantsPage() {
                                                 '—'
                                             )}{' '}
                                             • Tokens: <span className="platform-mono">{tokensLeft}</span> left ({tokensTotal} total)
+                                            {tokenHolder?.profile?.email ? (
+                                                <>
+                                                    {' '}
+                                                    <span className="platform-subtitle">
+                                                        • holder: <span className="platform-mono">{tokenHolder.profile.email}</span>
+                                                    </span>
+                                                </>
+                                            ) : null}
                                         </p>
                                     </div>
                                     <span className="platform-mono">{isOpen ? '−' : '+'}</span>
@@ -1222,7 +1084,7 @@ export default function AdminTenantsPage() {
                                                             <th>Name</th>
                                                             <th>Email</th>
                                                             <th>Role</th>
-                                                            <th>Membership</th>
+                                                            <th>User</th>
                                                             <th>Magic link</th>
                                                         </tr>
                                                     </thead>
@@ -1247,7 +1109,7 @@ export default function AdminTenantsPage() {
                                                                             type="button"
                                                                             onClick={() => setSelectedUser({ tenantId: t.id, userRow: u })}
                                                                         >
-                                                                            View / edit
+                                                                            View
                                                                         </button>
                                                                     </td>
                                                                     <td>
