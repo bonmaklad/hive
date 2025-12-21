@@ -452,14 +452,14 @@ export default function RoomBookingClient() {
     }, [endIndex, isLounge, startIndex, timeSlots]);
 
     return (
-        <div className="grid" style={{ gridTemplateColumns: '1.2fr 0.8fr', gap: '1.5rem', alignItems: 'start' }}>
+        <div className="room-booking-layout">
             <div className="card">
                 <h2 style={{ marginTop: 0 }}>Choose a room</h2>
                 {loadingRooms ? (
                     <p>Loading rooms…</p>
                 ) : (
                     <form className="contact-form" style={{ marginTop: '1rem' }} onSubmit={e => e.preventDefault()}>
-                        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div className="room-form-grid">
                             <label>
                                 Room
                                 <select
@@ -529,7 +529,7 @@ export default function RoomBookingClient() {
                             </p>
                         </div>
                     ) : (
-                        <div className="grid" style={{ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, marginTop: 10 }}>
+                        <div className="room-time-grid">
                             {timeSlots.map((t, index) => {
                                 const status = slotStatus.get(t) || 'open';
                                 const selected =
@@ -639,7 +639,7 @@ export default function RoomBookingClient() {
                     </div>
                 ) : null}
 
-                <button className="btn primary" type="button" style={{ width: '100%', marginTop: 14 }} disabled={!canBook || busy || !stripePromise} onClick={startBooking}>
+                <button className="btn primary room-hide-mobile" type="button" style={{ width: '100%', marginTop: 14 }} disabled={!canBook || busy || !stripePromise} onClick={startBooking}>
                     {busy ? 'Starting…' : 'Book now'}
                 </button>
 
@@ -671,6 +671,20 @@ export default function RoomBookingClient() {
                     <p>Preparing checkout…</p>
                 )}
             </Modal>
+            {/* Mobile sticky CTA */}
+            <div className="room-sticky-cta">
+                <div className="room-sticky-cta-inner">
+                    <span className="room-sticky-total">{pricingText}</span>
+                    <button
+                        className="btn primary"
+                        type="button"
+                        disabled={!canBook || busy || !stripePromise}
+                        onClick={startBooking}
+                    >
+                        {busy ? 'Starting…' : 'Book now'}
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
