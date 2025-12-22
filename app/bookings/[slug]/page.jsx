@@ -5,8 +5,10 @@ import { notFound } from 'next/navigation';
 import SiteNav from '../../components/SiteNav';
 import { bookingInclusions, getSpaceBySlug } from '../../../lib/spaces';
 
-export function generateMetadata({ params }) {
-    const space = getSpaceBySlug(params.slug);
+export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }) {
+    const space = await getSpaceBySlug(params.slug);
     if (!space) return {};
 
     return {
@@ -23,8 +25,8 @@ function getPricingLines(space) {
     return lines;
 }
 
-export default function BookingVenuePage({ params }) {
-    const space = getSpaceBySlug(params.slug);
+export default async function BookingVenuePage({ params }) {
+    const space = await getSpaceBySlug(params.slug);
     if (!space) notFound();
 
     const bookHref = `/bookings/room?room=${encodeURIComponent(space.slug)}`;
@@ -80,7 +82,7 @@ export default function BookingVenuePage({ params }) {
                             <article className="card">
                                 <h3>Best for</h3>
                                 <ul className="feature-list">
-                                    {space.bestFor.map(item => (
+                                    {(Array.isArray(space.bestFor) ? space.bestFor : []).map(item => (
                                         <li key={item}>{item}</li>
                                     ))}
                                 </ul>
@@ -94,7 +96,7 @@ export default function BookingVenuePage({ params }) {
                         <div className="section-tag">Layouts</div>
                         <h2>Set it up the way you work.</h2>
                         <div className="grid grid-3">
-                            {space.layouts.map(layout => (
+                            {(Array.isArray(space.layouts) ? space.layouts : []).map(layout => (
                                 <article className="card" key={layout.label}>
                                     <h3>{layout.label}</h3>
                                     <p>{layout.capacity}</p>
@@ -120,7 +122,7 @@ export default function BookingVenuePage({ params }) {
                             <article className="card">
                                 <h3>Room highlights</h3>
                                 <ul className="feature-list">
-                                    {space.highlights.map(item => (
+                                    {(Array.isArray(space.highlights) ? space.highlights : []).map(item => (
                                         <li key={item}>{item}</li>
                                     ))}
                                 </ul>
@@ -141,7 +143,7 @@ export default function BookingVenuePage({ params }) {
                         <div className="section-tag">Photos</div>
                         <h2>Get a feel for the room.</h2>
                         <div className="photo-grid" aria-label={`${space.title} photos`}>
-                            {space.images.map((src, index) => (
+                            {(Array.isArray(space.images) ? space.images : []).map((src, index) => (
                                 <div className="photo-tile" key={src}>
                                     <Image
                                         src={src}

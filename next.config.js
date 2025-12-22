@@ -1,4 +1,12 @@
 ﻿/** @type {import('next').NextConfig} */
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+let supabaseHost = null;
+try {
+    supabaseHost = supabaseUrl ? new URL(supabaseUrl).hostname : null;
+} catch {
+    supabaseHost = null;
+}
+
 const nextConfig = {
     reactStrictMode: true,
     output: "standalone",
@@ -17,9 +25,17 @@ const nextConfig = {
             {
                 protocol: 'https',
                 hostname: 'plus.unsplash.com'
-            }
-        ]
-    },
+            },
+	            ...(supabaseHost
+	                ? [
+	                    {
+	                        protocol: 'https',
+	                        hostname: supabaseHost
+	                    }
+	                ]
+	                : [])
+	        ]
+	    },
     async headers() {
         return [
             {

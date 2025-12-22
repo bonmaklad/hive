@@ -47,8 +47,17 @@ export default function AdminHomePage() {
                         </Link>
                     </div>
                 </section>
+
+                <section className="platform-card span-6">
+                    <h2 style={{ marginTop: 0 }}>Spaces</h2>
+                    <p className="platform-subtitle">Update room names, pricing, tokens/hour, and images used across the site.</p>
+                    <div className="platform-card-actions">
+                        <Link className="btn primary" href="/platform/admin/spaces">
+                            Manage spaces
+                        </Link>
+                    </div>
+                </section>
             </div>
         </main>
     );
 }
-

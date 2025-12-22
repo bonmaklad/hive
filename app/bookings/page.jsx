@@ -2,14 +2,17 @@ import Link from 'next/link';
 import ImageCarousel from '../components/ImageCarousel';
 
 import SiteNav from '../components/SiteNav';
-import { bookingInclusions, spaces } from '../../lib/spaces';
+import { bookingInclusions, getSpaces } from '../../lib/spaces';
 
 export const metadata = {
     title: 'Bookings | HIVE Whanganui',
     description: 'Book a room, boardroom, training space, or event lounge at HIVE Whanganui.'
 };
 
-export default function BookingsPage() {
+export const dynamic = 'force-dynamic';
+
+export default async function BookingsPage() {
+    const spaces = await getSpaces().catch(() => []);
     const getPricingLines = space => {
         if (space.pricing?.perEvent) return [`$${space.pricing.perEvent} per event`];
         const lines = [];
@@ -64,13 +67,13 @@ export default function BookingsPage() {
                                 >
                                     <figure
                                         className="hex hex-program"
-                                        style={{ backgroundImage: `url(${space.images[0]})` }}
+                                        style={{ backgroundImage: `url(${space.images?.[0] || space.image || ''})` }}
                                     >
                                         <figcaption>{space.title}</figcaption>
                                     </figure>
                                     <div className="program-copy">
                                         <h3>{space.title}</h3>
-                                        <p>{space.copy}</p>
+                                        <p>{space.copy || ''}</p>
                                         <p>
                                             <strong>Capacity:</strong> {space.capacity}
                                         </p>
@@ -98,7 +101,7 @@ export default function BookingsPage() {
                                 <article className="card" key={space.slug}>
                                     <h3>{space.title}</h3>
                                     <div className="room-feel-media" aria-hidden="true">
-                                        <ImageCarousel images={space.images.slice(0, 3)} alt={`${space.title} preview`} />
+                                        <ImageCarousel images={(Array.isArray(space.images) ? space.images : []).slice(0, 3)} alt={`${space.title} preview`} />
                                     </div>
                                 </article>
                             ))}

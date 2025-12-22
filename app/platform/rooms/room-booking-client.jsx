@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { spaces as staticSpaces } from '@/lib/spaces';
 import { usePlatformSession } from '../PlatformContext';
 import { loadStripe } from '@stripe/stripe-js';
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js';
@@ -42,10 +41,6 @@ function formatDateInput(value) {
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
-}
-
-function getRoomImage(space) {
-    return space?.images?.[0] || space?.headerImage || '';
 }
 
 function toCents(value) {
@@ -224,22 +219,12 @@ export default function RoomBookingClient() {
     useEffect(() => {
         let cancelled = false;
 
-        const wanted = new Set([
-            'nikau-room',
-            'backhouse-boardroom',
-            'hive-lounge',
-            'hive-training-room',
-            'design-lab',
-            'kauri-room',
-            'manukau-room'
-        ]);
-
         const load = async () => {
             setLoadingRooms(true);
             const { data, error } = await supabase
                 .from('spaces')
-                .select('slug, title, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, tokens_per_hour, image')
-                .in('slug', Array.from(wanted));
+                .select('slug, title, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, tokens_per_hour, image, space_images(url, sort_order)')
+                .order('title', { ascending: true });
 
             if (cancelled) return;
 
@@ -250,10 +235,16 @@ export default function RoomBookingClient() {
                 return;
             }
 
-            const staticBySlug = Object.fromEntries(staticSpaces.map(s => [s.slug, s]));
             const mapped = (data || [])
                 .map(row => {
-                    const fallback = staticBySlug[row.slug];
+                    const images = Array.isArray(row?.space_images)
+                        ? row.space_images
+                            .slice()
+                            .sort((a, b) => Number(a?.sort_order || 0) - Number(b?.sort_order || 0))
+                            .map(img => img?.url)
+                            .filter(Boolean)
+                        : [];
+                    const cover = row.image || images[0] || '';
                     return {
                         id: row.slug,
                         slug: row.slug,
@@ -263,7 +254,8 @@ export default function RoomBookingClient() {
                         pricing_half_day_cents: row.pricing_half_day_cents,
                         pricing_full_day_cents: row.pricing_full_day_cents,
                         pricing_per_event_cents: row.pricing_per_event_cents,
-                        image: row.image || getRoomImage(fallback)
+                        image: cover,
+                        images
                     };
                 })
                 .sort((a, b) => a.name.localeCompare(b.name));
