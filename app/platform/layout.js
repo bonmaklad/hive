@@ -1,4 +1,5 @@
 import PlatformShell from './PlatformShell';
+import PwaRegister from './PwaRegister';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,5 +11,10 @@ export const metadata = {
 };
 
 export default async function PlatformLayout({ children }) {
-    return <PlatformShell>{children}</PlatformShell>;
+    return (
+        <>
+            <PwaRegister />
+            <PlatformShell>{children}</PlatformShell>
+        </>
+    );
 }
