@@ -44,6 +44,27 @@ function formatDate(value) {
     return date.toLocaleDateString();
 }
 
+function parseDateOnly(value) {
+    if (!value) return null;
+    if (value instanceof Date) {
+        if (Number.isNaN(value.getTime())) return null;
+        return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+    }
+    const raw = String(value);
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+    if (match) {
+        const year = Number(match[1]);
+        const month = Number(match[2]) - 1;
+        const day = Number(match[3]);
+        const date = new Date(year, month, day);
+        if (Number.isNaN(date.getTime())) return null;
+        return date;
+    }
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 function daysInMonth(year, monthIndex) {
     return new Date(year, monthIndex + 1, 0).getDate();
 }
@@ -70,20 +91,20 @@ function computeNextMonthlyDate(createdAt) {
     return candidate;
 }
 
-function computeNextInvoiceDateFromDay(dayOfMonth) {
+function computeNextInvoiceDateFromDay(dayOfMonth, referenceDate, { strictAfter = false } = {}) {
     const raw = Number.isFinite(dayOfMonth) ? dayOfMonth : Number(dayOfMonth);
     if (!Number.isFinite(raw)) return null;
     const safeDay = Math.min(31, Math.max(1, Math.floor(raw)));
 
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const year = todayStart.getFullYear();
-    const month = todayStart.getMonth();
+    const ref = referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime()) ? referenceDate : new Date();
+    const refStart = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+    const year = refStart.getFullYear();
+    const month = refStart.getMonth();
 
     const dimThisMonth = new Date(year, month + 1, 0).getDate();
     let candidate = new Date(year, month, Math.min(safeDay, dimThisMonth));
 
-    if (candidate < todayStart) {
+    if (candidate < refStart || (strictAfter && candidate <= refStart)) {
         const nextMonth = new Date(year, month + 1, 1);
         const dimNextMonth = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
         candidate = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), Math.min(safeDay, dimNextMonth));
@@ -210,17 +231,24 @@ export default function MembershipClient() {
     const displayMonthlyCents = hasMembershipAmount ? membership.monthly_amount_cents : computedMonthlyCents;
     const hasStripeSubscription = Boolean(typeof membership?.stripe_subscription_id === 'string' && membership.stripe_subscription_id.trim());
     const autoPaymentsEnabled = paymentTerms === 'auto_card' && hasStripeSubscription;
+    const paidTillDate = useMemo(() => parseDateOnly(membership?.paid_till), [membership?.paid_till]);
 
     const nextInvoiceDisplay = useMemo(() => {
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const paidTill = parseDateOnly(membership?.paid_till);
+        const prepaidActive = paymentTerms === 'advanced' && paidTill && paidTill >= todayStart;
+        const reference = prepaidActive ? paidTill : todayStart;
+
         const invoiceDay = Number(membership?.next_invoice_at);
         if (Number.isFinite(invoiceDay) && invoiceDay >= 1 && invoiceDay <= 31) {
-            return computeNextInvoiceDateFromDay(invoiceDay);
+            return computeNextInvoiceDateFromDay(invoiceDay, reference, { strictAfter: prepaidActive });
         }
         if (membership?.created_at) {
-            return computeNextInvoiceDateFromDay(new Date(membership.created_at).getDate());
+            return computeNextInvoiceDateFromDay(new Date(membership.created_at).getDate(), reference, { strictAfter: prepaidActive });
         }
         return null;
-    }, [membership?.created_at, membership?.next_invoice_at]);
+    }, [membership?.created_at, membership?.next_invoice_at, membership?.paid_till, paymentTerms]);
 
     const stripePromise = useMemo(() => {
         const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
@@ -247,7 +275,7 @@ export default function MembershipClient() {
             setFridge(Boolean(membershipRow.fridge_enabled));
             const terms = membershipRow.payment_terms || 'invoice';
             setPaymentTerms(terms);
-            setPaymentTermsDraft(terms);
+            setPaymentTermsDraft(terms === 'advanced' ? 'invoice' : terms);
         }
         return membershipRow ?? null;
     };
@@ -290,7 +318,7 @@ export default function MembershipClient() {
                     setFridge(Boolean(membershipRow.fridge_enabled));
                     const terms = membershipRow.payment_terms || 'invoice';
                     setPaymentTerms(terms);
-                    setPaymentTermsDraft(terms);
+                    setPaymentTermsDraft(terms === 'advanced' ? 'invoice' : terms);
                 } else {
                     setStatus('expired');
                 }
@@ -728,12 +756,17 @@ export default function MembershipClient() {
                             {formatNZD(displayMonthlyCents)} <span className="platform-subtitle">/ month</span>
                         </p>
                         <p className="platform-subtitle">Plan: {planId === 'office' ? `Office • ${office.label}` : plan.label}</p>
-                        <p className="platform-subtitle">Next invoice: {formatDate(nextInvoiceDisplay)}</p>
+                        {paymentTerms === 'advanced' && paidTillDate ? (
+                            <p className="platform-subtitle">Paid until: {formatDate(paidTillDate)}</p>
+                        ) : null}
+                        <p className="platform-subtitle">
+                            Next invoice{paymentTerms === 'advanced' && paidTillDate ? ' (after prepaid period)' : ''}: {formatDate(nextInvoiceDisplay)}
+                        </p>
                         <div style={{ marginTop: '0.75rem' }}>
                             <label className="platform-subtitle">Payment terms</label>
                             <select
                                 value={paymentTermsDraft}
-                                disabled={busy || loading || setupBusy}
+                                disabled={busy || loading || setupBusy || paymentTerms === 'advanced'}
                                 onChange={e => {
                                     setPaymentTermsDraft(e.target.value);
                                     setCheckoutClientSecret('');
@@ -743,13 +776,18 @@ export default function MembershipClient() {
                                 <option value="invoice">Invoice</option>
                                 <option value="auto_card">Automatic card payment</option>
                             </select>
+                            {paymentTerms === 'advanced' ? (
+                                <p className="platform-subtitle">
+                                    You’re on a prepaid invoice schedule. Contact HIVE support to change payment terms.
+                                </p>
+                            ) : null}
 
                             <div className="platform-card-actions" style={{ marginTop: '0.75rem' }}>
                                 <button
                                     className="btn primary"
                                     type="button"
                                     onClick={savePaymentTermsSelection}
-                                    disabled={busy || loading || setupBusy || (paymentTermsDraft === 'auto_card' && autoPaymentsEnabled)}
+                                    disabled={paymentTerms === 'advanced' || busy || loading || setupBusy || (paymentTermsDraft === 'auto_card' && autoPaymentsEnabled)}
                                 >
                                     {setupBusy || busy
                                         ? 'Saving…'
@@ -892,7 +930,7 @@ export default function MembershipClient() {
                         </div>
                     </fieldset>
 
-                    <div style={{ marginTop: '1rem' }}>
+                     <div style={{ display: 'grid', gap: '0.75rem' }}>
                         <h3 style={{ margin: 0 }}>Workspace</h3>
                         <p className="platform-subtitle" style={{ marginTop: 0 }}>
                             Choose a {planId} workspace. For different types or multiple offices, raise a support ticket and we’ll create a custom plan for you.

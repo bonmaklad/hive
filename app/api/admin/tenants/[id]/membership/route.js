@@ -46,6 +46,21 @@ function clampInvoiceDay(value, fallbackDay) {
     return Math.min(31, Math.max(1, day));
 }
 
+function parseDateOnlyString(value) {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]) - 1;
+    const day = Number(match[3]);
+    const date = new Date(year, month, day);
+    if (Number.isNaN(date.getTime())) return null;
+    if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
+    return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
 export async function POST(request, { params }) {
     const guard = await requireAdmin(request);
     if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
@@ -63,12 +78,20 @@ export async function POST(request, { params }) {
     const fridgeEnabled = Boolean(payload?.fridge_enabled);
     const monthlyOverrideCents = payload?.monthly_amount_cents;
     const invoiceDayRaw = payload?.next_invoice_at ?? payload?.next_invoice_day ?? null;
+    const paymentTerms = typeof payload?.payment_terms === 'string' ? payload.payment_terms : null;
+    const paidTill = parseDateOnlyString(payload?.paid_till);
 
     if (!plan) return NextResponse.json({ error: 'Missing plan' }, { status: 400 });
     if (!['live', 'expired', 'cancelled'].includes(status)) {
         return NextResponse.json({ error: 'status must be live/expired/cancelled' }, { status: 400 });
     }
     if (plan === 'office' && !officeId) return NextResponse.json({ error: 'office_id is required for office plan' }, { status: 400 });
+    if (paymentTerms && !['invoice', 'auto_card', 'advanced'].includes(paymentTerms)) {
+        return NextResponse.json({ error: 'payment_terms must be invoice, auto_card, or advanced.' }, { status: 400 });
+    }
+    if (paymentTerms === 'advanced' && !paidTill) {
+        return NextResponse.json({ error: 'paid_till is required when payment_terms is advanced.' }, { status: 400 });
+    }
 
     let resolvedOwnerId = ownerId;
 
@@ -118,6 +141,11 @@ export async function POST(request, { params }) {
         next_invoice_at: invoiceDay,
         updated_at: new Date().toISOString()
     };
+
+    if (paymentTerms) {
+        membershipPayload.payment_terms = paymentTerms;
+        membershipPayload.paid_till = paymentTerms === 'advanced' ? paidTill : null;
+    }
 
     const { data: existingMembership, error: findError } = await guard.admin
         .from('memberships')

@@ -32,11 +32,16 @@ export default function TicketsClient() {
 
         const load = async () => {
             setError('');
-            const query = supabase
+            const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+            let query = supabase
                 .from('tickets')
                 .select('id, owner_id, status, title, body, created_by_name, created_at, updated_at')
                 .order('created_at', { ascending: false })
                 .limit(200);
+
+            // Hide done tickets older than 7 days for everyone
+            // Keep anything not done OR done with updated_at >= cutoff
+            query = query.or(`status.neq.done,and(status.eq.done,updated_at.gte.${cutoff})`);
 
             const { data, error } = admin ? await query : await query.eq('owner_id', user.id);
             if (cancelled) return;
@@ -47,7 +52,9 @@ export default function TicketsClient() {
                 return;
             }
 
-            setTickets(data || []);
+            // Extra client-side guard in case server filter changes
+            const filtered = (data || []).filter(t => t.status !== 'done' || new Date(t.updated_at) >= new Date(cutoff));
+            setTickets(filtered);
         };
 
         load();

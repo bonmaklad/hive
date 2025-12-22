@@ -594,7 +594,7 @@ export default function RoomBookingClient() {
                         <input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="+64…" />
                     </label>
 
-                    <div className="grid" style={{ gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end', marginTop: 6 }}>
+                    <div className="grid room-coupon-row">
                         <label style={{ margin: 0 }}>
                             Coupon
                             <input value={couponCode} onChange={e => setCouponCode(e.target.value)} placeholder="Optional" />

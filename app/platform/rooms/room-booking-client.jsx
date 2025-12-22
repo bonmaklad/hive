@@ -174,8 +174,10 @@ export default function RoomBookingClient() {
     const [bookingsForDay, setBookingsForDay] = useState([]);
 
     const room = useMemo(() => rooms.find(r => r.id === roomId) || rooms[0] || null, [roomId, rooms]);
+    const isLounge = room?.slug === 'hive-lounge';
 
     const selection = useMemo(() => {
+        if (isLounge) return { hours: 5, indices: [] };
         if (startIndex == null) return { hours: 0, indices: [] };
         const a = startIndex;
         const b = endIndex == null ? startIndex : endIndex;
@@ -184,7 +186,7 @@ export default function RoomBookingClient() {
         const indices = [];
         for (let i = min; i <= max; i += 1) indices.push(i);
         return { hours: indices.length, indices };
-    }, [endIndex, startIndex]);
+    }, [endIndex, isLounge, startIndex]);
 
     const requiredTokens = selection.hours * (room?.tokens_per_hour || 0);
     const pricing = useMemo(() => getPricing(room, selection.hours), [room, selection.hours]);
@@ -403,12 +405,10 @@ export default function RoomBookingClient() {
         setQuote(null);
         if (!selection.hours) return;
         if (!couponCode.trim()) return;
-
-        const min = Math.min(startIndex, endIndex == null ? startIndex : endIndex);
-        const max = Math.max(startIndex, endIndex == null ? startIndex : endIndex);
-        const startTime = TIME_SLOTS[min];
-        const endHour = Number(TIME_SLOTS[max].slice(0, 2)) + 1;
-        const endTime = `${String(endHour).padStart(2, '0')}:00`;
+        const startTime = isLounge ? '17:00' : TIME_SLOTS[Math.min(startIndex, endIndex == null ? startIndex : endIndex)];
+        const endTime = isLounge
+            ? '22:00'
+            : `${String(Number(TIME_SLOTS[Math.max(startIndex, endIndex == null ? startIndex : endIndex)].slice(0, 2)) + 1).padStart(2, '0')}:00`;
 
         setQuoteBusy(true);
         try {
@@ -448,17 +448,20 @@ export default function RoomBookingClient() {
 
         try {
             if (!date) throw new Error('Choose a date.');
-            if (!selection.hours) throw new Error('Choose a time range.');
-            for (const idx of selection.indices) {
-                const st = slotStatus.get(TIME_SLOTS[idx]) || 'open';
-                if (st !== 'open') throw new Error('That time range includes unavailable time.');
+            if (!selection.hours) throw new Error(isLounge ? 'Hive Lounge is a fixed 5pm–10pm booking.' : 'Choose a time range.');
+            if (!isLounge) {
+                for (const idx of selection.indices) {
+                    const st = slotStatus.get(TIME_SLOTS[idx]) || 'open';
+                    if (st !== 'open') throw new Error('That time range includes unavailable time.');
+                }
             }
 
-            const min = Math.min(startIndex, endIndex == null ? startIndex : endIndex);
-            const max = Math.max(startIndex, endIndex == null ? startIndex : endIndex);
-            const startTime = TIME_SLOTS[min];
-            const endHour = Number(TIME_SLOTS[max].slice(0, 2)) + 1;
-            const endTime = `${String(endHour).padStart(2, '0')}:00`;
+            const startTime = isLounge
+                ? '17:00'
+                : TIME_SLOTS[Math.min(startIndex, endIndex == null ? startIndex : endIndex)];
+            const endTime = isLounge
+                ? '22:00'
+                : `${String(Number(TIME_SLOTS[Math.max(startIndex, endIndex == null ? startIndex : endIndex)].slice(0, 2)) + 1).padStart(2, '0')}:00`;
 
             const res = await fetch('/api/rooms/book', {
                 method: 'POST',
@@ -596,65 +599,78 @@ export default function RoomBookingClient() {
 
                     <div style={{ marginTop: '0.5rem' }}>
                         <div className="platform-room-times-row">
-                            <p className="platform-subtitle" style={{ marginBottom: 0 }}>
-                                Available times <span className="platform-subtitle">(click start, then end)</span>
-                            </p>
-                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                <button className="btn ghost" type="button" onClick={clearSelection} disabled={busy || !selection.hours}>
-                                    Clear
-                                </button>
-                                <button
-                                    className="btn ghost"
-                                    type="button"
-                                    onClick={selectFullDay}
-                                    disabled={busy || !fullDayAvailable}
-                                    title={!fullDayAvailable ? 'Full day not available' : 'Select the full day'}
-                                >
-                                    Book day
-                                </button>
-                            </div>
+                            {isLounge ? (
+                                <p className="platform-subtitle" style={{ marginBottom: 0 }}>
+                                    Hive Lounge is a fixed event: 5:00pm–10:00pm
+                                </p>
+                            ) : (
+                                <>
+                                    <p className="platform-subtitle" style={{ marginBottom: 0 }}>
+                                        Available times <span className="platform-subtitle">(click start, then end)</span>
+                                    </p>
+                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                        <button className="btn ghost" type="button" onClick={clearSelection} disabled={busy || !selection.hours}>
+                                            Clear
+                                        </button>
+                                        <button
+                                            className="btn ghost"
+                                            type="button"
+                                            onClick={selectFullDay}
+                                            disabled={busy || !fullDayAvailable}
+                                            title={!fullDayAvailable ? 'Full day not available' : 'Select the full day'}
+                                        >
+                                            Book day
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         <p className="platform-subtitle" style={{ marginTop: '0.5rem' }}>
-                            Selected: <span className="platform-mono">{formatRange(startIndex, endIndex)}</span>
+                            Selected:{' '}
+                            <span className="platform-mono">
+                                {isLounge ? '17:00–22:00 (5 hours)' : formatRange(startIndex, endIndex)}
+                            </span>
                         </p>
 
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                            {TIME_SLOTS.map((time, idx) => {
-                                const status = slotStatus.get(time) || 'open';
-                                const selected = selection.indices.includes(idx);
-                                const isDisabled = busy || status !== 'open';
-                                const bg =
-                                    status === 'approved_self'
-                                        ? '#06d6a0'
-                                        : status === 'requested_self'
-                                          ? '#b7f0d0'
-                                          : status === 'approved_other'
-                                            ? '#ff6b6b'
-                                            : status === 'requested_other'
-                                              ? '#ffd166'
-                                              : selected
-                                                ? 'var(--accent)'
-                                                : 'transparent';
-                                const color = status === 'open' && !selected ? 'inherit' : '#0b0c10';
-                                return (
-                                    <button
-                                        key={time}
-                                        type="button"
-                                        className={`btn ${selected ? 'primary' : 'ghost'}`}
-                                        onClick={() => pickSlot(idx)}
-                                        disabled={isDisabled}
-                                        style={{
-                                            opacity: isDisabled && status !== 'open' ? 0.9 : 1,
-                                            background: bg,
-                                            color
-                                        }}
-                                    >
-                                        {time}
-                                    </button>
-                                );
-                            })}
-                        </div>
+                        {!isLounge ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                {TIME_SLOTS.map((time, idx) => {
+                                    const status = slotStatus.get(time) || 'open';
+                                    const selected = selection.indices.includes(idx);
+                                    const isDisabled = busy || status !== 'open';
+                                    const bg =
+                                        status === 'approved_self'
+                                            ? '#06d6a0'
+                                            : status === 'requested_self'
+                                              ? '#b7f0d0'
+                                              : status === 'approved_other'
+                                                ? '#ff6b6b'
+                                                : status === 'requested_other'
+                                                  ? '#ffd166'
+                                                  : selected
+                                                    ? 'var(--accent)'
+                                                    : 'transparent';
+                                    const color = status === 'open' && !selected ? 'inherit' : '#0b0c10';
+                                    return (
+                                        <button
+                                            key={time}
+                                            type="button"
+                                            className={`btn ${selected ? 'primary' : 'ghost'}`}
+                                            onClick={() => pickSlot(idx)}
+                                            disabled={isDisabled}
+                                            style={{
+                                                opacity: isDisabled && status !== 'open' ? 0.9 : 1,
+                                                background: bg,
+                                                color
+                                            }}
+                                        >
+                                            {time}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ) : null}
                     </div>
 
                     {selection.hours ? (

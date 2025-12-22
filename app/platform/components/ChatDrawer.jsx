@@ -68,6 +68,7 @@ export default function ChatDrawer({ mode = 'drawer' }) {
     const [actionBusy, setActionBusy] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
     const [reactionsByMessageId, setReactionsByMessageId] = useState({});
+    const [isMobile, setIsMobile] = useState(false);
 
     const listRef = useRef(null);
     const bottomRef = useRef(null);
@@ -82,6 +83,20 @@ export default function ChatDrawer({ mode = 'drawer' }) {
     useEffect(() => {
         const id = setInterval(() => setNow(Date.now()), 60 * 1000);
         return () => clearInterval(id);
+    }, []);
+
+    useEffect(() => {
+        // Show drawer toggle only on desktop; detect mobile viewport
+        const mq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)') : null;
+        if (!mq) return;
+        const apply = () => setIsMobile(Boolean(mq.matches));
+        apply();
+        if (mq.addEventListener) mq.addEventListener('change', apply);
+        else if (mq.addListener) mq.addListener(apply);
+        return () => {
+            if (mq.removeEventListener) mq.removeEventListener('change', apply);
+            else if (mq.removeListener) mq.removeListener(apply);
+        };
     }, []);
 
     useEffect(() => {
@@ -588,7 +603,7 @@ export default function ChatDrawer({ mode = 'drawer' }) {
 
     return (
         <>
-            {!isPage ? (
+            {!isPage && !isMobile ? (
                 <button
                     type="button"
                     className={`platform-chat-toggle ${open ? 'open' : 'pulse'}`}
@@ -613,7 +628,11 @@ export default function ChatDrawer({ mode = 'drawer' }) {
                         <div className="platform-chat-subtitle">Signed in as {name}</div>
                     </div>
                     <div className="platform-actions">
-                        {isPage ? null : (
+                        {isPage ? (
+                            <Link className="btn secondary" href="/platform">
+                                Back
+                            </Link>
+                        ) : (
                             <button type="button" className="btn ghost" onClick={() => setOpen(false)}>
                                 Close
                             </button>

@@ -640,6 +640,8 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
     const [monthlyOverrideNZD, setMonthlyOverrideNZD] = useState('');
     const [tokensTotal, setTokensTotal] = useState('0');
     const [invoiceDay, setInvoiceDay] = useState(String(new Date().getDate()));
+    const [paymentTerms, setPaymentTerms] = useState('invoice');
+    const [paidTill, setPaidTill] = useState('');
     const [workUnits, setWorkUnits] = useState([]);
     const [workUnitCodes, setWorkUnitCodes] = useState([]);
     const [workUnitsLoading, setWorkUnitsLoading] = useState(false);
@@ -661,6 +663,13 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
             } else {
                 setMonthlyOverrideNZD('');
             }
+        }
+        {
+            const terms = tenant?.membership?.payment_terms || 'invoice';
+            setPaymentTerms(terms);
+            const rawPaidTill = tenant?.membership?.paid_till;
+            const dateString = typeof rawPaidTill === 'string' ? rawPaidTill.slice(0, 10) : '';
+            setPaidTill(dateString);
         }
         setTokensTotal(String(primary?.room_credits?.tokens_total ?? 0));
         {
@@ -730,6 +739,7 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
         try {
             if (!tenant?.id) throw new Error('Missing tenant id.');
             if (!primaryId) throw new Error('Tenant is missing an owner user.');
+            if (paymentTerms === 'advanced' && !paidTill) throw new Error('Paid until date is required for advanced terms.');
             const headers = { ...(await authHeader()), 'Content-Type': 'application/json' };
 
             if (name.trim() && name.trim() !== tenant.name) {
@@ -753,7 +763,9 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                     donation_cents: donationCents,
                     fridge_enabled: fridgeEnabled,
                     monthly_amount_cents: monthlyOverrideCents,
-                    next_invoice_day: Math.min(31, Math.max(1, Math.floor(Number(invoiceDay || new Date().getDate()))))
+                    next_invoice_day: Math.min(31, Math.max(1, Math.floor(Number(invoiceDay || new Date().getDate())))),
+                    payment_terms: paymentTerms,
+                    paid_till: paymentTerms === 'advanced' ? paidTill : null
                 })
             });
             const jsonMembership = await readJsonResponse(resMembership);
@@ -853,6 +865,22 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                         Billing day (1–31)
                     </label>
                     <input value={invoiceDay} onChange={e => setInvoiceDay(e.target.value)} disabled={busy} inputMode="numeric" />
+                    <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                        Payment terms
+                    </label>
+                    <select value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} disabled={busy}>
+                        <option value="invoice">invoice</option>
+                        <option value="auto_card">auto_card</option>
+                        <option value="advanced">advanced (paid in advance)</option>
+                    </select>
+                    {paymentTerms === 'advanced' ? (
+                        <>
+                            <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                                Paid until
+                            </label>
+                            <input type="date" value={paidTill} onChange={e => setPaidTill(e.target.value)} disabled={busy} />
+                        </>
+                    ) : null}
                     {plan === 'office' ? (
                         <>
                             <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>

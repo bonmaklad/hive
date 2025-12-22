@@ -21,6 +21,7 @@
 html, body {
     margin: 0;
     padding: 0;
+    overflow-x: hidden; /* prevent horizontal push on mobile */
 }
 
 body {
@@ -902,6 +903,14 @@ main {
     display: grid;
     gap: 1rem;
     max-width: 520px;
+}
+
+/* Ensure grid items in forms can shrink within cards */
+.contact-form,
+.contact-form > *,
+.contact-form .grid,
+.contact-form .grid > * {
+    min-width: 0;
 }
 
 .contact-form label {
@@ -2001,6 +2010,9 @@ main {
     align-items: start;
 }
 
+/* Allow grid children to shrink without causing overflow */
+.room-booking-layout > * { min-width: 0; }
+
 @media (max-width: 860px) {
     .room-booking-layout {
         grid-template-columns: 1fr;
@@ -2026,6 +2038,9 @@ main {
     gap: 10px;
     margin-top: 10px;
 }
+
+/* Make time buttons fill their grid cell for consistent wrapping */
+.room-time-grid .btn { width: 100%; }
 
 @media (max-width: 780px) {
     .room-time-grid {
@@ -2072,6 +2087,23 @@ main {
     }
     .room-sticky-total {
         font-weight: 700;
+    }
+}
+
+/* Coupon row layout: two columns on wide, stacked on narrow */
+.room-coupon-row {
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: end;
+    margin-top: 6px;
+}
+
+@media (max-width: 520px) {
+    .room-coupon-row {
+        grid-template-columns: 1fr;
+    }
+    .room-coupon-row .btn {
+        width: 100%;
     }
 }
 
