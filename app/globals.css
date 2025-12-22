@@ -1341,6 +1341,78 @@ main {
     color: rgba(255, 127, 127, 0.95);
 }
 
+.platform-chat-reactions {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.platform-chat-reaction {
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 0.25rem 0.55rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.platform-chat-reaction:hover,
+.platform-chat-reaction:focus-visible {
+    outline: none;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.platform-chat-reaction.mine {
+    border-color: rgba(111, 255, 182, 0.45);
+    background: rgba(111, 255, 182, 0.10);
+}
+
+.platform-chat-reaction-count {
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.9rem;
+}
+
+.platform-chat-reactsheet {
+    width: 100%;
+    max-width: 420px;
+    background: rgba(10, 12, 18, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.55);
+}
+
+.platform-chat-reactsheet-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0.75rem 0.75rem 0.6rem;
+    justify-content: center;
+}
+
+.platform-chat-reactsheet-emoji {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    font-size: 1.15rem;
+}
+
+.platform-chat-reactsheet-emoji:hover,
+.platform-chat-reactsheet-emoji:focus-visible {
+    outline: none;
+    background: rgba(255, 255, 255, 0.08);
+}
+
 .platform-chat-form {
     display: grid;
     grid-template-columns: 1fr auto;

@@ -37,6 +37,7 @@ export default function ChatDrawer() {
     const [text, setText] = useState('');
     const [editing, setEditing] = useState(null); // { id, originalBody }
     const [actionMessageId, setActionMessageId] = useState('');
+    const [reactionMessageId, setReactionMessageId] = useState('');
     const [error, setError] = useState('');
     const [mentionError, setMentionError] = useState('');
     const [suggestions, setSuggestions] = useState([]);
@@ -45,11 +46,13 @@ export default function ChatDrawer() {
     const [mentionEveryone, setMentionEveryone] = useState(false);
     const [actionBusy, setActionBusy] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
+    const [reactionsByMessageId, setReactionsByMessageId] = useState({});
 
     const listRef = useRef(null);
     const name = useMemo(() => getDisplayName({ user, profile }), [profile, user]);
     const longPressRef = useRef(null);
     const inputRef = useRef(null);
+    const loadedReactionsFor = useRef(new Set());
 
     const [now, setNow] = useState(Date.now());
     const emojis = useMemo(() => ['😀', '😂', '🥰', '😮', '😢', '😡', '👍', '👎', '🙏', '🎉', '🔥', '✅', '❤️'], []);
@@ -83,7 +86,7 @@ export default function ChatDrawer() {
 
         load();
 
-            const channel = supabase
+        const channel = supabase
             .channel('chat:members')
             .on(
                 'postgres_changes',
@@ -123,6 +126,93 @@ export default function ChatDrawer() {
             supabase.removeChannel(channel);
         };
     }, [supabase]);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!open) return;
+        const ids = (messages || []).map(m => m?.id).filter(Boolean);
+        const toLoad = ids.filter(id => !loadedReactionsFor.current.has(id));
+        if (!toLoad.length) return;
+
+        const loadReactions = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('chat_message_reactions')
+                    .select('id, channel, message_id, user_id, emoji, created_at')
+                    .eq('channel', 'members')
+                    .in('message_id', toLoad)
+                    .order('created_at', { ascending: true });
+                if (cancelled) return;
+                if (error) throw error;
+
+                for (const id of toLoad) loadedReactionsFor.current.add(id);
+
+                setReactionsByMessageId(current => {
+                    const next = { ...(current || {}) };
+                    for (const msgId of toLoad) {
+                        if (!next[msgId]) next[msgId] = [];
+                    }
+                    for (const r of data || []) {
+                        if (!r?.message_id) continue;
+                        const list = next[r.message_id] || [];
+                        if (!list.some(x => x.id === r.id)) next[r.message_id] = [...list, r];
+                    }
+                    return next;
+                });
+            } catch (_) {
+                // No-op: reactions table may not exist yet in some environments.
+            }
+        };
+
+        loadReactions();
+        return () => {
+            cancelled = true;
+        };
+    }, [messages, open, supabase]);
+
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+
+        const channel = supabase
+            .channel('chat:reactions')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'chat_message_reactions', filter: 'channel=eq.members' },
+                payload => {
+                    if (cancelled) return;
+                    const row = payload.new;
+                    if (!row?.message_id) return;
+                    setReactionsByMessageId(current => {
+                        const list = current?.[row.message_id] || [];
+                        if (list.some(r => r.id === row.id)) return current;
+                        return { ...(current || {}), [row.message_id]: [...list, row] };
+                    });
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: 'DELETE', schema: 'public', table: 'chat_message_reactions', filter: 'channel=eq.members' },
+                payload => {
+                    if (cancelled) return;
+                    const row = payload.old;
+                    const msgId = row?.message_id;
+                    const id = row?.id;
+                    if (!msgId || !id) return;
+                    setReactionsByMessageId(current => {
+                        const list = current?.[msgId] || [];
+                        const nextList = list.filter(r => r.id !== id);
+                        return { ...(current || {}), [msgId]: nextList };
+                    });
+                }
+            )
+            .subscribe();
+
+        return () => {
+            cancelled = true;
+            supabase.removeChannel(channel);
+        };
+    }, [open, supabase]);
 
     useEffect(() => {
         if (!open) return;
@@ -314,7 +404,7 @@ export default function ChatDrawer() {
     const beginLongPress = msg => {
         clearLongPress();
         longPressRef.current = setTimeout(() => {
-            setActionMessageId(msg?.id || '');
+            setReactionMessageId(msg?.id || '');
             longPressRef.current = null;
         }, 420);
     };
@@ -322,6 +412,11 @@ export default function ChatDrawer() {
     const closeActions = () => {
         if (actionBusy) return;
         setActionMessageId('');
+    };
+
+    const closeReactions = () => {
+        if (actionBusy) return;
+        setReactionMessageId('');
     };
 
     const startEdit = msg => {
@@ -353,6 +448,45 @@ export default function ChatDrawer() {
         setSuggestions([]);
         setMentionError('');
         setShowEmoji(false);
+    };
+
+    const toggleReaction = async (msg, emoji) => {
+        if (!msg?.id || !user?.id) return;
+        setActionBusy(true);
+        setError('');
+        setMentionError('');
+        try {
+            if (actionMessageId) setActionMessageId('');
+            const current = reactionsByMessageId?.[msg.id] || [];
+            const existing = current.find(r => r.user_id === user.id && r.emoji === emoji);
+            if (existing?.id) {
+                const { error } = await supabase.from('chat_message_reactions').delete().eq('id', existing.id);
+                if (error) throw error;
+                setReactionsByMessageId(map => {
+                    const list = map?.[msg.id] || [];
+                    return { ...(map || {}), [msg.id]: list.filter(r => r.id !== existing.id) };
+                });
+            } else {
+                const { data, error } = await supabase
+                    .from('chat_message_reactions')
+                    .insert({ channel: 'members', message_id: msg.id, user_id: user.id, emoji })
+                    .select('id, channel, message_id, user_id, emoji, created_at')
+                    .single();
+                if (error) throw error;
+                if (data?.id) {
+                    setReactionsByMessageId(map => {
+                        const list = map?.[msg.id] || [];
+                        if (list.some(r => r.id === data.id)) return map;
+                        return { ...(map || {}), [msg.id]: [...list, data] };
+                    });
+                }
+            }
+            setReactionMessageId('');
+        } catch (err) {
+            setError(err?.message || 'Could not react to message.');
+        } finally {
+            setActionBusy(false);
+        }
     };
 
     const insertEmoji = emoji => {
@@ -411,6 +545,7 @@ export default function ChatDrawer() {
     };
 
     const actionMsg = useMemo(() => messages.find(m => m.id === actionMessageId) || null, [actionMessageId, messages]);
+    const reactionMsg = useMemo(() => messages.find(m => m.id === reactionMessageId) || null, [reactionMessageId, messages]);
 
     return (
         <>
@@ -455,16 +590,15 @@ export default function ChatDrawer() {
                                     msg.id === editing?.id ? 'editing' : ''
                                 }`}
                                 onPointerDown={() => {
-                                    if (msg.user_id !== user?.id) return;
                                     beginLongPress(msg);
                                 }}
                                 onPointerUp={clearLongPress}
                                 onPointerCancel={clearLongPress}
                                 onPointerMove={clearLongPress}
                                 onContextMenu={event => {
-                                    if (msg.user_id !== user?.id) return;
                                     event.preventDefault();
-                                    setActionMessageId(msg.id);
+                                    if (msg.user_id === user?.id) setActionMessageId(msg.id);
+                                    else setReactionMessageId(msg.id);
                                 }}
                             >
                                 <div className="platform-chat-meta">
@@ -474,6 +608,35 @@ export default function ChatDrawer() {
                                     </span>
                                 </div>
                                 <div className="platform-chat-body">{msg.body}</div>
+                                {(reactionsByMessageId?.[msg.id] || []).length ? (
+                                    <div className="platform-chat-reactions">
+                                        {Object.entries(
+                                            (reactionsByMessageId?.[msg.id] || []).reduce((acc, r) => {
+                                                const emoji = r?.emoji;
+                                                if (!emoji) return acc;
+                                                const existing = acc[emoji] || { count: 0, mine: false };
+                                                existing.count += 1;
+                                                if (r.user_id === user?.id) existing.mine = true;
+                                                acc[emoji] = existing;
+                                                return acc;
+                                            }, {})
+                                        )
+                                            .sort((a, b) => b[1].count - a[1].count)
+                                            .slice(0, 6)
+                                            .map(([emoji, meta]) => (
+                                                <button
+                                                    key={emoji}
+                                                    type="button"
+                                                    className={`platform-chat-reaction ${meta.mine ? 'mine' : ''}`}
+                                                    onClick={() => toggleReaction(msg, emoji)}
+                                                    disabled={actionBusy}
+                                                >
+                                                    <span>{emoji}</span>
+                                                    <span className="platform-chat-reaction-count">{meta.count}</span>
+                                                </button>
+                                            ))}
+                                    </div>
+                                ) : null}
                                 {msg.user_id === user?.id ? (
                                     <button
                                         type="button"
@@ -570,6 +733,17 @@ export default function ChatDrawer() {
                             </button>
                             <button
                                 type="button"
+                                className="platform-chat-actionsheet-item"
+                                onClick={() => {
+                                    setReactionMessageId(actionMsg.id);
+                                    setActionMessageId('');
+                                }}
+                                disabled={actionBusy}
+                            >
+                                React
+                            </button>
+                            <button
+                                type="button"
                                 className="platform-chat-actionsheet-item danger"
                                 onClick={() => deleteMessage(actionMsg)}
                                 disabled={actionBusy}
@@ -577,6 +751,29 @@ export default function ChatDrawer() {
                                 Delete
                             </button>
                             <button type="button" className="platform-chat-actionsheet-item" onClick={closeActions} disabled={actionBusy}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                ) : null}
+
+                {reactionMsg ? (
+                    <div className="platform-chat-actionsheet-overlay" role="presentation" onMouseDown={closeReactions}>
+                        <div className="platform-chat-reactsheet" role="dialog" aria-label="React to message" onMouseDown={e => e.stopPropagation()}>
+                            <div className="platform-chat-reactsheet-row">
+                                {emojis.map(e => (
+                                    <button
+                                        key={e}
+                                        type="button"
+                                        className="platform-chat-reactsheet-emoji"
+                                        onClick={() => toggleReaction(reactionMsg, e)}
+                                        disabled={actionBusy}
+                                    >
+                                        {e}
+                                    </button>
+                                ))}
+                            </div>
+                            <button type="button" className="platform-chat-actionsheet-item" onClick={closeReactions} disabled={actionBusy}>
                                 Cancel
                             </button>
                         </div>
