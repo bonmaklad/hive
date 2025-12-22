@@ -60,6 +60,75 @@ function toPositiveInt(value, fallback = 1) {
     return Math.max(1, Math.floor(n));
 }
 
+function toNonNegativeInt(value, fallback = 0) {
+    const n = Number.isFinite(value) ? value : Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0, Math.floor(n));
+}
+
+function pickLatestMembershipByOwner(rows) {
+    const byOwner = new Map();
+    for (const row of rows || []) {
+        const ownerId = typeof row?.owner_id === 'string' ? row.owner_id : null;
+        if (!ownerId) continue;
+        const ts = Date.parse(row?.updated_at || row?.created_at || '');
+        const next = Number.isFinite(ts) ? ts : 0;
+        const prev = byOwner.get(ownerId);
+        const prevTs = prev ? Date.parse(prev?.updated_at || prev?.created_at || '') : 0;
+        if (!prev || next >= (Number.isFinite(prevTs) ? prevTs : 0)) byOwner.set(ownerId, row);
+    }
+    return byOwner;
+}
+
+function allocateMembershipAcrossUnits({ totalCents, unitIds, weightByUnitId }) {
+    const total = toNonNegativeInt(totalCents, 0);
+    const ids = Array.isArray(unitIds) ? unitIds.filter(Boolean) : [];
+    if (!ids.length || total <= 0) return new Map();
+
+    const weights = ids.map(id => toNonNegativeInt(weightByUnitId?.get(id), 0));
+    const totalWeight = weights.reduce((acc, w) => acc + w, 0);
+
+    const out = new Map();
+
+    if (totalWeight <= 0) {
+        const base = Math.floor(total / ids.length);
+        const remainder = total - base * ids.length;
+        ids.forEach((id, idx) => {
+            out.set(id, base + (idx < remainder ? 1 : 0));
+        });
+        return out;
+    }
+
+    const totalBig = BigInt(total);
+    const denomBig = BigInt(totalWeight);
+
+    const allocations = ids.map((id, idx) => {
+        const w = weights[idx];
+        const wBig = BigInt(w);
+        const numerator = totalBig * wBig;
+        const share = numerator / denomBig;
+        const rem = numerator % denomBig;
+        return { id, share, rem };
+    });
+
+    let sumShares = 0n;
+    for (const row of allocations) sumShares += row.share;
+
+    let leftover = totalBig - sumShares;
+    allocations.sort((a, b) => {
+        if (a.rem === b.rem) return String(a.id).localeCompare(String(b.id));
+        return a.rem > b.rem ? -1 : 1;
+    });
+
+    for (let i = 0; i < allocations.length && leftover > 0n; i += 1) {
+        allocations[i].share += 1n;
+        leftover -= 1n;
+    }
+
+    for (const row of allocations) out.set(row.id, Number(row.share));
+    return out;
+}
+
 async function insertWorkUnit({ guard, row }) {
     const candidates = Array.isArray(row) ? row : [row];
     let lastError = null;
@@ -177,6 +246,7 @@ export async function GET(request) {
     const url = new URL(request.url);
     const includeOccupant = url.searchParams.get('includeOccupant') === '1';
     const includeInactive = url.searchParams.get('includeInactive') === '1';
+    const includeBilling = url.searchParams.get('includeBilling') === '1';
 
     // The schema for work_units has varied during iteration (active vs is_active, custom_price_cents optional).
     // Use select('*') + JS filtering to avoid "column does not exist" errors.
@@ -189,10 +259,11 @@ export async function GET(request) {
     if (unitsError) return NextResponse.json({ error: unitsError.message }, { status: 500 });
 
     let occupantsByUnitId = {};
+    let activeAllocations = [];
 
-    if (includeOccupant) {
+    if (includeOccupant || includeBilling) {
         const today = toIsoDate(new Date());
-        const { data: activeAllocations, error: allocationsError } = await guard.admin
+        const { data: allocations, error: allocationsError } = await guard.admin
             .from('work_unit_allocations')
             .select('work_unit_id, tenant_id')
             .lte('start_date', today)
@@ -200,18 +271,111 @@ export async function GET(request) {
 
         if (allocationsError) return NextResponse.json({ error: allocationsError.message }, { status: 500 });
 
-        for (const row of activeAllocations || []) {
+        activeAllocations = Array.isArray(allocations) ? allocations : [];
+        for (const row of activeAllocations) {
             if (!row?.work_unit_id) continue;
             if (!occupantsByUnitId[row.work_unit_id]) occupantsByUnitId[row.work_unit_id] = [];
             if (row.tenant_id) occupantsByUnitId[row.work_unit_id].push(row.tenant_id);
         }
     }
 
-    const units = (unitsRaw || [])
-        .map(u => serializeWorkUnit(u, { includeOccupant, occupantsByUnitId }))
-        .filter(u => u && (includeInactive || (u.active ?? true) !== false));
+    const allSerialized = (unitsRaw || []).map(u => serializeWorkUnit(u, { includeOccupant: includeOccupant || includeBilling, occupantsByUnitId }));
+    const unitsForResponse = allSerialized.filter(u => u && (includeInactive || (u.active ?? true) !== false));
 
-    return NextResponse.json({ units });
+    let metrics = null;
+
+    if (includeBilling) {
+        const activeUnits = allSerialized.filter(u => u && (u.active ?? true) !== false);
+        const totalCapacity = activeUnits.reduce((acc, u) => acc + toPositiveInt(u?.capacity, 1), 0);
+        const occupiedSlots = activeUnits.reduce((acc, u) => acc + toNonNegativeInt(u?.occupied_count, 0), 0);
+        const occupancyRate = totalCapacity > 0 ? occupiedSlots / totalCapacity : 0;
+
+        const weightByUnitId = new Map(
+            activeUnits.map(u => [
+                u.id,
+                toNonNegativeInt(u?.display_price_cents ?? u?.price_cents ?? 0, 0)
+            ])
+        );
+
+        const allocationsByTenant = new Map();
+        const tenantIds = new Set();
+        for (const row of activeAllocations || []) {
+            const tenantId = row?.tenant_id;
+            const unitId = row?.work_unit_id;
+            if (!tenantId || !unitId) continue;
+            tenantIds.add(tenantId);
+            if (!allocationsByTenant.has(tenantId)) allocationsByTenant.set(tenantId, []);
+            allocationsByTenant.get(tenantId).push(unitId);
+        }
+
+        const ownersByTenant = new Map();
+        if (tenantIds.size) {
+            const { data: ownerRows, error: ownerError } = await guard.admin
+                .from('tenant_users')
+                .select('tenant_id, user_id, role')
+                .in('tenant_id', Array.from(tenantIds))
+                .eq('role', 'owner');
+            if (ownerError) return NextResponse.json({ error: ownerError.message }, { status: 500 });
+            for (const row of ownerRows || []) {
+                if (row?.tenant_id && row?.user_id) ownersByTenant.set(row.tenant_id, row.user_id);
+            }
+        }
+
+        const ownerIdsForBilling = Array.from(new Set(Array.from(ownersByTenant.values()).filter(Boolean)));
+        let membershipsByOwner = new Map();
+        if (ownerIdsForBilling.length) {
+            const { data: membershipRows, error: membershipError } = await guard.admin
+                .from('memberships')
+                .select('owner_id, status, monthly_amount_cents, updated_at, created_at')
+                .in('owner_id', ownerIdsForBilling);
+            if (membershipError) return NextResponse.json({ error: membershipError.message }, { status: 500 });
+            membershipsByOwner = pickLatestMembershipByOwner(membershipRows || []);
+        }
+
+        // Total recurring revenue (MRR): sum latest live memberships (monthly_amount_cents).
+        let totalRecurringRevenueCents = 0;
+        {
+            const { data: liveMemberships, error: liveError } = await guard.admin
+                .from('memberships')
+                .select('owner_id, monthly_amount_cents, updated_at, created_at')
+                .eq('status', 'live');
+            if (liveError) return NextResponse.json({ error: liveError.message }, { status: 500 });
+            const latestLive = pickLatestMembershipByOwner(liveMemberships || []);
+            for (const m of latestLive.values()) totalRecurringRevenueCents += toNonNegativeInt(m?.monthly_amount_cents, 0);
+        }
+
+        const billingByUnitId = new Map();
+        for (const [tenantId, unitIds] of allocationsByTenant.entries()) {
+            const ownerId = ownersByTenant.get(tenantId);
+            if (!ownerId) continue;
+            const membership = membershipsByOwner.get(ownerId);
+            if (!membership || membership.status !== 'live') continue;
+            const monthly = toNonNegativeInt(membership?.monthly_amount_cents, 0);
+            if (!monthly) continue;
+
+            const uniqueUnitIds = Array.from(new Set(unitIds)).filter(id => weightByUnitId.has(id));
+            const allocation = allocateMembershipAcrossUnits({ totalCents: monthly, unitIds: uniqueUnitIds, weightByUnitId });
+            for (const [unitId, cents] of allocation.entries()) {
+                billingByUnitId.set(unitId, (billingByUnitId.get(unitId) || 0) + toNonNegativeInt(cents, 0));
+            }
+        }
+
+        const units = unitsForResponse.map(u => ({
+            ...u,
+            billing_cents: billingByUnitId.get(u.id) || 0
+        }));
+
+        metrics = {
+            occupancy_rate: occupancyRate,
+            occupied_slots: occupiedSlots,
+            total_capacity: totalCapacity,
+            total_recurring_revenue_cents: totalRecurringRevenueCents
+        };
+
+        return NextResponse.json({ units, metrics });
+    }
+
+    return NextResponse.json({ units: unitsForResponse });
 }
 
 export async function POST(request) {

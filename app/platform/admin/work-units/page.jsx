@@ -114,6 +114,7 @@ export default function AdminWorkUnitsPage() {
     const { supabase } = usePlatformSession();
 
     const [units, setUnits] = useState([]);
+    const [metrics, setMetrics] = useState(null);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
@@ -149,14 +150,16 @@ export default function AdminWorkUnitsPage() {
         setInfo('');
         try {
             const res = await fetch(
-                `/api/admin/work-units?includeInactive=${showInactive ? '1' : '0'}&includeOccupant=1`,
+                `/api/admin/work-units?includeInactive=${showInactive ? '1' : '0'}&includeOccupant=1&includeBilling=1`,
                 { headers: await authHeader() }
             );
             const json = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(json?.error || 'Failed to load work units.');
             setUnits(Array.isArray(json?.units) ? json.units : []);
+            setMetrics(json?.metrics || null);
         } catch (err) {
             setUnits([]);
+            setMetrics(null);
             setError(err?.message || 'Failed to load work units.');
         } finally {
             setLoading(false);
@@ -318,6 +321,24 @@ export default function AdminWorkUnitsPage() {
                 Show inactive
             </label>
 
+            {metrics ? (
+                <div className="platform-steps" style={{ marginTop: '0.75rem' }}>
+                    <span className="platform-step active">
+                        Occupancy:{' '}
+                        {Number.isFinite(Number(metrics?.occupancy_rate))
+                            ? `${Math.round(Number(metrics.occupancy_rate) * 100)}%`
+                            : '—'}{' '}
+                        <span className="platform-subtitle">
+                            ({metrics?.occupied_slots ?? 0}/{metrics?.total_capacity ?? 0})
+                        </span>
+                    </span>
+                    <span className="platform-step active">
+                        Total recurring revenue:{' '}
+                        <span className="platform-mono">{formatNZDOptional(metrics?.total_recurring_revenue_cents ?? null)}</span> / month
+                    </span>
+                </div>
+            ) : null}
+
             {error && <p className="platform-message error">{error}</p>}
             {info && <p className="platform-message success">{info}</p>}
 
@@ -409,6 +430,7 @@ export default function AdminWorkUnitsPage() {
                                 <th>Unit type</th>
                                 <th>Capacity</th>
                                 <th>Price</th>
+                                <th>Billing</th>
                                 <th>Active</th>
                                 <th>Action</th>
                             </tr>
@@ -416,8 +438,14 @@ export default function AdminWorkUnitsPage() {
                         <tbody>
                             {sortedUnits.length ? (
                                 sortedUnits.map(unit => {
-                                    const vacant = unit?.is_vacant;
+                                    const hasVacancy =
+                                        unit?.is_full === false
+                                        || (Number.isFinite(Number(unit?.slots_remaining)) && Number(unit.slots_remaining) > 0)
+                                        || (unit?.is_full !== true && unit?.is_vacant === true);
                                     const displayPrice = unit?.display_price_cents ?? unit?.price_cents ?? null;
+                                    const billingCents = Number.isFinite(Number(unit?.billing_cents)) && Number(unit.billing_cents) > 0
+                                        ? Number(unit.billing_cents)
+                                        : null;
                                     return (
                                         <tr key={unit?.id || unit?.code}>
                                             <td className="platform-mono">
@@ -427,9 +455,7 @@ export default function AdminWorkUnitsPage() {
                                                 {unit?.unit_number ?? '—'}
                                             </td>
                                             <td>
-                                                {vacant === true ? <span className="badge success">yes</span> : null}
-                                                {vacant === false ? <span className="badge pending">no</span> : null}
-                                                {vacant !== true && vacant !== false ? '—' : null}
+                                                {hasVacancy === true ? <span className="badge success">yes</span> : <span className="badge pending">no</span>}
                                             </td>
                                             <td className="platform-mono">
                                                 {unit?.unit_type || '—'}
@@ -439,6 +465,9 @@ export default function AdminWorkUnitsPage() {
                                             </td>
                                             <td className="platform-mono">
                                                 {formatNZDOptional(displayPrice)}
+                                            </td>
+                                            <td className="platform-mono">
+                                                {formatNZDOptional(billingCents)}
                                             </td>
                                             <td style={{ textAlign: 'center' }}>
                                                 <span className={unit?.is_active ? 'badge success' : 'badge pending'}>{unit?.is_active ? 'yes' : 'no'}</span>
@@ -458,7 +487,7 @@ export default function AdminWorkUnitsPage() {
                                 })
                             ) : (
                                 <tr>
-                                    <td colSpan={8} className="platform-subtitle">
+                                    <td colSpan={9} className="platform-subtitle">
                                         No work units found.
                                     </td>
                                 </tr>

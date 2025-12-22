@@ -47,6 +47,11 @@ async function loadTenantWorkUnitCodes({ guard, tenantId }) {
     return Array.from(new Set(codes)).sort((a, b) => a.localeCompare(b));
 }
 
+function isConstraintConflict(err) {
+    const msg = String(err?.message || '').toLowerCase();
+    return msg.includes('exclusion constraint') || msg.includes('duplicate key value') || msg.includes('unique constraint');
+}
+
 export async function GET(request, { params }) {
     const guard = await requireAdmin(request);
     if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
@@ -180,7 +185,10 @@ export async function POST(request, { params }) {
             start_date: today
         }));
         const { error: insertError } = await guard.admin.from('work_unit_allocations').insert(rows);
-        if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
+        if (insertError) {
+            const status = isConstraintConflict(insertError) ? 409 : 500;
+            return NextResponse.json({ error: insertError.message }, { status });
+        }
     }
 
     let updatedCodes = desiredCodes;
