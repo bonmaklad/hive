@@ -11,6 +11,15 @@ function toCode(building, unitNumber) {
     return `${String(building).trim()}.${String(unitNumber).trim()}`;
 }
 
+function isMissingColumnError(err, columnName) {
+    const msg = String(err?.message || '').toLowerCase();
+    const col = String(columnName || '').toLowerCase();
+    if (!col) return false;
+    const mentionsColumn = msg.includes(`'${col}'`) || msg.includes(`"${col}"`) || msg.includes(`.${col}`) || msg.includes(` ${col} `);
+    if (!mentionsColumn) return false;
+    return msg.includes('does not exist') || msg.includes('schema cache');
+}
+
 function safeText(value, limit = 200) {
     const v = typeof value === 'string' ? value.trim() : '';
     return v.slice(0, limit);
@@ -46,9 +55,15 @@ function toIsoDate(date) {
 }
 
 async function insertWorkUnit({ guard, row }) {
-    const { data, error } = await guard.admin.from('work_units').insert(row).select('*').single();
-    if (error) throw new Error(error.message);
-    return data;
+    const candidates = Array.isArray(row) ? row : [row];
+    let lastError = null;
+    for (const candidate of candidates) {
+        const { data, error } = await guard.admin.from('work_units').insert(candidate).select('*').single();
+        if (!error) return data;
+        lastError = new Error(error.message);
+        if (!isMissingColumnError(lastError, 'code')) throw lastError;
+    }
+    throw lastError || new Error('Failed to create work unit.');
 }
 
 async function updateWorkUnitColumns({ guard, id, updates }) {
@@ -89,13 +104,22 @@ async function applyOptionalWorkUnitUpdates({ guard, id, payload }) {
                 break;
             } catch (err) {
                 lastError = err;
-                const msg = String(err?.message || '');
-                if (!msg.includes('column') || !msg.includes('does not exist')) break;
+                const missingColumn = isMissingColumnError(err, 'price_cents')
+                    || isMissingColumnError(err, 'custom_price_cents')
+                    || isMissingColumnError(err, 'base_price_cents')
+                    || isMissingColumnError(err, 'category')
+                    || isMissingColumnError(err, 'active')
+                    || isMissingColumnError(err, 'is_active');
+                if (!missingColumn) break;
             }
         }
         if (!succeeded && lastError) {
-            const msg = String(lastError?.message || '');
-            const missingColumn = msg.includes('column') && msg.includes('does not exist');
+            const missingColumn = isMissingColumnError(lastError, 'price_cents')
+                || isMissingColumnError(lastError, 'custom_price_cents')
+                || isMissingColumnError(lastError, 'base_price_cents')
+                || isMissingColumnError(lastError, 'category')
+                || isMissingColumnError(lastError, 'active')
+                || isMissingColumnError(lastError, 'is_active');
             if (!missingColumn) throw lastError;
         }
     }
@@ -195,17 +219,28 @@ export async function POST(request) {
     if (!Number.isFinite(capacity) || capacity < 1) return NextResponse.json({ error: 'capacity must be >= 1.' }, { status: 400 });
 
     const label = safeText(payload?.label, 120) || unitType;
+    const code = toCode(building, unitNumber);
 
     try {
         const created = await insertWorkUnit({
             guard,
-            row: {
-                building,
-                unit_number: unitNumber,
-                label,
-                unit_type: unitType,
-                capacity
-            }
+            row: [
+                {
+                    building,
+                    unit_number: unitNumber,
+                    code,
+                    label,
+                    unit_type: unitType,
+                    capacity
+                },
+                {
+                    building,
+                    unit_number: unitNumber,
+                    label,
+                    unit_type: unitType,
+                    capacity
+                }
+            ]
         });
 
         let updated = created;

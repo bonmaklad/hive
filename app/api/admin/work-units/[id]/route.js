@@ -5,6 +5,12 @@ export const runtime = 'nodejs';
 
 const UNIT_TYPES = ['premium_office', 'private_office', 'desk', 'desk_pod', 'small_office'];
 
+function toCode(building, unitNumber) {
+    if (!building && building !== 0) return '';
+    if (unitNumber === null || unitNumber === undefined) return '';
+    return `${String(building).trim()}.${String(unitNumber).trim()}`;
+}
+
 function safeText(value, limit = 200) {
     const v = typeof value === 'string' ? value.trim() : '';
     return v.slice(0, limit);
@@ -35,9 +41,35 @@ async function updateWorkUnitColumns({ guard, id, updates }) {
     return data;
 }
 
-function isMissingColumnError(err) {
-    const msg = String(err?.message || '');
-    return msg.includes('column') && msg.includes('does not exist');
+function isMissingColumnError(err, columnName) {
+    const msg = String(err?.message || '').toLowerCase();
+    const col = String(columnName || '').toLowerCase();
+    if (!col) return false;
+    const mentionsColumn = msg.includes(`'${col}'`) || msg.includes(`"${col}"`) || msg.includes(`.${col}`) || msg.includes(` ${col} `);
+    if (!mentionsColumn) return false;
+    return msg.includes('does not exist') || msg.includes('schema cache');
+}
+
+async function updateWorkUnitColumnsWithFallback({ guard, id, updates }) {
+    const candidates = [];
+    candidates.push(updates);
+    if (Object.prototype.hasOwnProperty.call(updates, 'code')) {
+        // Support schemas that don't have a stored `code` column.
+        const { code: _code, ...withoutCode } = updates;
+        candidates.push(withoutCode);
+    }
+
+    let lastError = null;
+    for (const candidate of candidates) {
+        try {
+            return await updateWorkUnitColumns({ guard, id, updates: candidate });
+        } catch (err) {
+            lastError = err;
+            if (Object.prototype.hasOwnProperty.call(candidate, 'code') && isMissingColumnError(err, 'code')) continue;
+            throw err;
+        }
+    }
+    throw lastError || new Error('Failed to update work unit.');
 }
 
 async function applyOptionalUpdates({ guard, id, payload }) {
@@ -72,10 +104,24 @@ async function applyOptionalUpdates({ guard, id, payload }) {
                 break;
             } catch (err) {
                 lastError = err;
-                if (!isMissingColumnError(err)) break;
+                const missingColumn = isMissingColumnError(err, 'active')
+                    || isMissingColumnError(err, 'is_active')
+                    || isMissingColumnError(err, 'category')
+                    || isMissingColumnError(err, 'price_cents')
+                    || isMissingColumnError(err, 'custom_price_cents')
+                    || isMissingColumnError(err, 'base_price_cents');
+                if (!missingColumn) break;
             }
         }
-        if (!succeeded && lastError && !isMissingColumnError(lastError)) throw lastError;
+        if (!succeeded && lastError) {
+            const missingColumn = isMissingColumnError(lastError, 'active')
+                || isMissingColumnError(lastError, 'is_active')
+                || isMissingColumnError(lastError, 'category')
+                || isMissingColumnError(lastError, 'price_cents')
+                || isMissingColumnError(lastError, 'custom_price_cents')
+                || isMissingColumnError(lastError, 'base_price_cents');
+            if (!missingColumn) throw lastError;
+        }
     }
     return latest;
 }
@@ -132,8 +178,28 @@ export async function PATCH(request, { params }) {
 
     let latest = null;
     try {
+        const needsCodeUpdate = updates.building !== undefined || updates.unit_number !== undefined;
+        if (needsCodeUpdate) {
+            let buildingForCode = updates.building;
+            let unitNumberForCode = updates.unit_number;
+
+            if (buildingForCode === undefined || unitNumberForCode === undefined) {
+                const { data: existing, error } = await guard.admin
+                    .from('work_units')
+                    .select('building, unit_number')
+                    .eq('id', id)
+                    .maybeSingle();
+                if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+                if (!existing) return NextResponse.json({ error: 'Work unit not found.' }, { status: 404 });
+                if (buildingForCode === undefined) buildingForCode = existing.building;
+                if (unitNumberForCode === undefined) unitNumberForCode = existing.unit_number;
+            }
+
+            updates.code = toCode(buildingForCode, unitNumberForCode);
+        }
+
         if (Object.keys(updates).length) {
-            latest = await updateWorkUnitColumns({ guard, id, updates });
+            latest = await updateWorkUnitColumnsWithFallback({ guard, id, updates });
         }
 
         latest = (await applyOptionalUpdates({ guard, id, payload })) || latest;
