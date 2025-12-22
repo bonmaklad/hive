@@ -17,6 +17,7 @@ export default function PlatformShell({ children }) {
     const router = useRouter();
     const pathname = usePathname();
     const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+    const isChatPage = pathname === '/platform/chat';
 
     const [ready, setReady] = useState(false);
     const [user, setUser] = useState(null);
@@ -197,46 +198,51 @@ export default function PlatformShell({ children }) {
     return (
         <PlatformSessionProvider value={{ user, profile, tenantRole, tenantRoleError, supabase }}>
             <div className="platform-shell">
-                <header className="platform-header">
-                    <Link href="/platform" className="platform-brand">
-                        <Image
-                            src="/logo-square.png"
-                            width={36}
-                            height={36}
-                            alt="HIVE"
-                            priority
-                            className="platform-logo"
-                        />
-                        <span>Platform</span>
-                    </Link>
-                    <button
-                        className="btn ghost platform-nav-toggle"
-                        type="button"
-                        onClick={() => setMobileNavOpen(open => !open)}
-                        aria-expanded={mobileNavOpen}
-                        aria-controls="platform-mobile-nav"
-                    >
-                        Menu
-                    </button>
-                    <nav className="platform-nav">
-                        <Link href="/platform" className="btn ghost">
-                            Dashboard
+                {!isChatPage ? (
+                    <header className="platform-header">
+                        <Link href="/platform" className="platform-brand">
+                            <Image
+                                src="/logo-square.png"
+                                width={36}
+                                height={36}
+                                alt="HIVE"
+                                priority
+                                className="platform-logo"
+                            />
+                            <span>Platform</span>
                         </Link>
-                        {profile?.is_admin ? (
-                            <Link href="/platform/admin" className="btn ghost">
-                                Admin
+                        <button
+                            className="btn ghost platform-nav-toggle"
+                            type="button"
+                            onClick={() => setMobileNavOpen(open => !open)}
+                            aria-expanded={mobileNavOpen}
+                            aria-controls="platform-mobile-nav"
+                        >
+                            Menu
+                        </button>
+                        <nav className="platform-nav">
+                            <Link href="/platform" className="btn ghost">
+                                Dashboard
                             </Link>
-                        ) : null}
-                        <Link href="/platform/settings" className="btn ghost">
-                            Settings
-                        </Link>
-                        <Link href="/auth/signout" className="btn secondary">
-                            Sign out
-                        </Link>
-                    </nav>
-                </header>
+                            <Link href="/platform/chat" className="btn ghost">
+                                Chat
+                            </Link>
+                            {profile?.is_admin ? (
+                                <Link href="/platform/admin" className="btn ghost">
+                                    Admin
+                                </Link>
+                            ) : null}
+                            <Link href="/platform/settings" className="btn ghost">
+                                Settings
+                            </Link>
+                            <Link href="/auth/signout" className="btn secondary">
+                                Sign out
+                            </Link>
+                        </nav>
+                    </header>
+                ) : null}
 
-                {mobileNavOpen ? (
+                {mobileNavOpen && !isChatPage ? (
                     <div
                         id="platform-mobile-nav"
                         className="platform-mobile-nav-overlay"
@@ -260,6 +266,9 @@ export default function PlatformShell({ children }) {
                                 <Link href="/platform" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
                                     Dashboard
                                 </Link>
+                                <Link href="/platform/chat" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
+                                    Chat
+                                </Link>
                                 {profile?.is_admin ? (
                                     <Link href="/platform/admin" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
                                         Admin
@@ -278,15 +287,17 @@ export default function PlatformShell({ children }) {
                         </div>
                     </div>
                 ) : null}
-                <div className="platform-content">{children}</div>
+                <div className={`platform-content ${isChatPage ? 'platform-content-chat' : ''}`}>{children}</div>
 
-                <footer className="platform-footer-bar">
-                    <Link className="btn ghost" href="/platform/tickets">
-                        Raise a ticket
-                    </Link>
-                </footer>
+                {!isChatPage ? (
+                    <footer className="platform-footer-bar">
+                        <Link className="btn ghost" href="/platform/tickets">
+                            Raise a ticket
+                        </Link>
+                    </footer>
+                ) : null}
 
-                <ChatDrawer />
+                {!isChatPage ? <ChatDrawer /> : null}
             </div>
         </PlatformSessionProvider>
     );

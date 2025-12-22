@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { getDisplayName, usePlatformSession } from '../PlatformContext';
 
 function getMentionQuery(text) {
@@ -30,9 +31,29 @@ function formatRelativeTime(value, nowTs = Date.now()) {
     return d.toLocaleDateString();
 }
 
-export default function ChatDrawer() {
+function copyToClipboard(text) {
+    const value = typeof text === 'string' ? text : '';
+    if (!value) return false;
+
+    try {
+        if (navigator?.clipboard?.writeText) {
+            navigator.clipboard.writeText(value);
+            return true;
+        }
+    } catch (_) {}
+
+    try {
+        window.prompt('Copy this link:', value);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+export default function ChatDrawer({ mode = 'drawer' }) {
     const { user, profile, supabase } = usePlatformSession();
-    const [open, setOpen] = useState(false);
+    const isPage = mode === 'page';
+    const [open, setOpen] = useState(isPage);
     const [messages, setMessages] = useState([]);
     const [text, setText] = useState('');
     const [editing, setEditing] = useState(null); // { id, originalBody }
@@ -49,6 +70,7 @@ export default function ChatDrawer() {
     const [reactionsByMessageId, setReactionsByMessageId] = useState({});
 
     const listRef = useRef(null);
+    const bottomRef = useRef(null);
     const name = useMemo(() => getDisplayName({ user, profile }), [profile, user]);
     const longPressRef = useRef(null);
     const inputRef = useRef(null);
@@ -61,6 +83,10 @@ export default function ChatDrawer() {
         const id = setInterval(() => setNow(Date.now()), 60 * 1000);
         return () => clearInterval(id);
     }, []);
+
+    useEffect(() => {
+        if (isPage) setOpen(true);
+    }, [isPage]);
     useEffect(() => {
         let cancelled = false;
 
@@ -214,20 +240,30 @@ export default function ChatDrawer() {
         };
     }, [open, supabase]);
 
-    useEffect(() => {
-        if (!open) return;
+    const scrollToBottom = useCallback(() => {
         const el = listRef.current;
-        if (!el) return;
+        if (!open || !el) return;
+        // Prefer sentinel to handle dynamic heights
+        if (bottomRef.current && typeof bottomRef.current.scrollIntoView === 'function') {
+            try {
+                bottomRef.current.scrollIntoView({ block: 'end' });
+                return;
+            } catch (_) {}
+        }
         el.scrollTop = el.scrollHeight;
-    }, [messages, open]);
+    }, [open]);
 
     useEffect(() => {
         if (!open) return;
+        const id = requestAnimationFrame(scrollToBottom);
+        return () => cancelAnimationFrame(id);
+    }, [messages, open, showEmoji, editing, scrollToBottom]);
+
+    useEffect(() => {
+        if (isPage) return;
         const url = new URL(window.location.href);
-        if (url.searchParams.get('chat') === '1') {
-            setOpen(true);
-        }
-    }, [open]);
+        if (url.searchParams.get('chat') === '1') setOpen(true);
+    }, [isPage]);
 
     useEffect(() => {
         let cancelled = false;
@@ -241,6 +277,7 @@ export default function ChatDrawer() {
             };
         }
 
+        setShowEmoji(false);
         setShowSuggestions(true);
         setMentionError('');
 
@@ -483,7 +520,9 @@ export default function ChatDrawer() {
             }
             setReactionMessageId('');
         } catch (err) {
-            setError(err?.message || 'Could not react to message.');
+            const msg = err?.message || '';
+            const hint = msg.includes('does not exist') && msg.includes('chat_message_reactions') ? ' (Run the `chat_reactions` migration in Supabase.)' : '';
+            setError((msg || 'Could not react to message.') + hint);
         } finally {
             setActionBusy(false);
         }
@@ -549,31 +588,37 @@ export default function ChatDrawer() {
 
     return (
         <>
-            <button
-                type="button"
-                className={`platform-chat-toggle ${open ? 'open' : 'pulse'}`}
-                aria-label={open ? 'Close chat' : 'Open chat'}
-                onClick={() => setOpen(v => !v)}
-            >
-                {open ? (
-                    <span className="platform-chat-toggle-arrow">→</span>
-                ) : (
-                    <>
-                        <span className="platform-chat-toggle-label">Join chat</span>
-                        <span className="platform-chat-toggle-arrow">←</span>
-                    </>
-                )}
-            </button>
+            {!isPage ? (
+                <button
+                    type="button"
+                    className={`platform-chat-toggle ${open ? 'open' : 'pulse'}`}
+                    aria-label={open ? 'Close chat' : 'Open chat'}
+                    onClick={() => setOpen(v => !v)}
+                >
+                    {open ? (
+                        <span className="platform-chat-toggle-arrow">→</span>
+                    ) : (
+                        <>
+                            <span className="platform-chat-toggle-label">Join chat</span>
+                            <span className="platform-chat-toggle-arrow">←</span>
+                        </>
+                    )}
+                </button>
+            ) : null}
 
-            <aside className={`platform-chat-drawer ${open ? 'open' : ''}`} aria-label="Member chat">
+            <aside className={`platform-chat-drawer ${open ? 'open' : ''} ${isPage ? 'page' : ''}`} aria-label="Member chat">
                 <div className="platform-chat-header">
                     <div>
                         <div className="platform-chat-title">Member chat</div>
                         <div className="platform-chat-subtitle">Signed in as {name}</div>
                     </div>
-                    <button type="button" className="btn ghost" onClick={() => setOpen(false)}>
-                        Close
-                    </button>
+                    <div className="platform-actions">
+                        {isPage ? null : (
+                            <button type="button" className="btn ghost" onClick={() => setOpen(false)}>
+                                Close
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 <div>
@@ -652,6 +697,8 @@ export default function ChatDrawer() {
                     ) : (
                         <p className="platform-subtitle">No messages yet.</p>
                     )}
+                    {/* sentinel to keep view pinned to the latest message */}
+                    <div ref={bottomRef} />
                 </div>
 
                 <form className="platform-chat-form" onSubmit={send}>
@@ -672,6 +719,7 @@ export default function ChatDrawer() {
                             ref={inputRef}
                             value={text}
                             onChange={e => setText(e.target.value)}
+                            onFocus={() => setTimeout(scrollToBottom, 0)}
                             placeholder={editing?.id ? 'Edit your message…' : 'Write a message…'}
                             autoComplete="off"
                         />

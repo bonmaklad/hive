@@ -1087,6 +1087,11 @@ main {
     width: 100%;
 }
 
+.platform-content.platform-content-chat {
+    max-width: none;
+    margin: 0;
+}
+
 .platform-footer-bar {
     max-width: 1100px;
     margin: 2rem auto 0;
@@ -1177,6 +1182,21 @@ main {
     display: grid;
     grid-template-rows: auto auto 1fr auto;
     gap: 0.75rem;
+}
+
+.platform-chat-drawer.page {
+    top: 0;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: 100vw;
+    border-radius: 0;
+    padding: calc(1rem + env(safe-area-inset-top)) 1rem calc(1rem + env(safe-area-inset-bottom)) 1rem;
+    transform: none;
+}
+
+.platform-chat-drawer.page.open {
+    transform: none;
 }
 
 .platform-chat-drawer.open {
