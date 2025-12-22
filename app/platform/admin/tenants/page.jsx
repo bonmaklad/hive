@@ -971,16 +971,20 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                                     .map(unit => {
                                         const code = unit?.code;
                                         if (!code) return null;
-                                        const occupiedBy = unit?.occupied_by_tenant_id || null;
-                                        const occupiedByOther = Boolean(occupiedBy && occupiedBy !== tenant?.id);
+                                        const capacity = Number.isFinite(Number(unit?.capacity)) ? Math.max(1, Math.floor(Number(unit.capacity))) : 1;
+                                        const occupiedCount = Number.isFinite(Number(unit?.occupied_count))
+                                            ? Math.max(0, Math.floor(Number(unit.occupied_count)))
+                                            : 0;
+                                        const isFull = Boolean(unit?.is_full ?? (occupiedCount >= capacity));
                                         const checked = workUnitCodes.includes(code);
+                                        const disabled = Boolean(!checked && isFull);
                                         const basePrice = unit?.price_cents ?? unit?.display_price_cents;
                                         return (
-                                            <tr key={code} className={occupiedByOther ? 'row-disabled' : ''}>
+                                            <tr key={code} className={disabled ? 'row-disabled' : ''}>
                                                 <td>
                                                     <input
                                                         type="checkbox"
-                                                        disabled={busy || occupiedByOther}
+                                                        disabled={busy || disabled}
                                                         checked={checked}
                                                         onChange={e => {
                                                             setWorkUnitCodes(list => {
@@ -996,10 +1000,14 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                                                 <td className="platform-mono">{unit?.unit_number ?? unit?.code}</td>
                                                 <td>{unit?.label || '—'}</td>
                                                 <td className="platform-mono">{unit?.unit_type || unit?.type || '—'}</td>
-                                                <td className="platform-mono">{Number.isFinite(Number(unit?.capacity)) ? Number(unit?.capacity) : '—'}</td>
+                                                <td className="platform-mono">{capacity}</td>
                                                 <td className="platform-mono">{formatNZDOptional(basePrice)}</td>
                                                 <td>
-                                                    {occupiedByOther ? <span className="badge pending">taken</span> : <span className="badge success">available</span>}
+                                                    {isFull
+                                                        ? <span className="badge pending">full</span>
+                                                        : occupiedCount > 0
+                                                            ? <span className="badge neutral">{occupiedCount}/{capacity} used</span>
+                                                            : <span className="badge success">available</span>}
                                                 </td>
                                             </tr>
                                         );

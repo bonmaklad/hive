@@ -9,8 +9,8 @@ const PLANS = [
     { id: 'member', label: 'Member', monthlyCents: 9900 },
     { id: 'desk', label: 'Desk', monthlyCents: 24900 },
     { id: 'pod', label: 'Pod', monthlyCents: 34900 },
-    { id: 'office', label: 'Office', monthlyCents: 69900 },
-    { id: 'premium', label: 'Premium', monthlyCents: 49900 }
+    { id: 'office', label: 'Office', monthlyCents: 65000 },
+    { id: 'premium', label: 'Premium', monthlyCents: 69900 }
 ];
 
 const OFFICES = [
@@ -951,7 +951,8 @@ export default function MembershipClient() {
                             const filtered = (units || []).filter(u => {
                                 if (u.mine) return true;
                                 if (!targetType) return false;
-                                return u.unit_type === targetType && (!u.is_occupied);
+                                const isFull = Boolean(u?.is_full ?? u?.is_occupied);
+                                return u.unit_type === targetType && (!isFull);
                             });
                             if (!filtered.length) {
                                 // For member/custom we intentionally show nothing
@@ -985,7 +986,8 @@ export default function MembershipClient() {
                                                 return String(a?.unit_number || '').localeCompare(String(b?.unit_number || ''));
                                             })
                                             .map(u => {
-                                                const disabled = (u.is_occupied && !u.mine);
+                                                const isFull = Boolean(u?.is_full ?? u?.is_occupied);
+                                                const disabled = (isFull && !u.mine);
                                                 const checked = selectedUnitCode === u.code;
                                                 return (
                                                     <tr key={u.code} className={disabled ? 'row-disabled' : ''}>
@@ -1002,7 +1004,13 @@ export default function MembershipClient() {
                                                         <td className="platform-mono">{u.unit_number ?? u.code}</td>
                                                         <td>{u.label || '—'}</td>
                                                         <td className="platform-mono">{Number.isFinite(Number(u.capacity)) ? Number(u.capacity) : '—'}</td>
-                                                        <td>{u.mine ? <span className="badge success">yours</span> : u.is_occupied ? <span className="badge pending">taken</span> : <span className="badge neutral">available</span>}</td>
+                                                        <td>
+                                                            {u.mine
+                                                                ? <span className="badge success">yours</span>
+                                                                : isFull
+                                                                    ? <span className="badge pending">full</span>
+                                                                    : <span className="badge neutral">available</span>}
+                                                        </td>
                                                     </tr>
                                                 );
                                             })}

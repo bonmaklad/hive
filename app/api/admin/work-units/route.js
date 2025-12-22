@@ -54,6 +54,12 @@ function toIsoDate(date) {
     return date.toISOString().slice(0, 10);
 }
 
+function toPositiveInt(value, fallback = 1) {
+    const n = Number.isFinite(value) ? value : Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(1, Math.floor(n));
+}
+
 async function insertWorkUnit({ guard, row }) {
     const candidates = Array.isArray(row) ? row : [row];
     let lastError = null;
@@ -130,8 +136,11 @@ async function applyOptionalWorkUnitUpdates({ guard, id, payload }) {
 function serializeWorkUnit(u, { includeOccupant, occupantsByUnitId }) {
     const unitNumber = asNumber(u?.unit_number, 0);
     const code = toCode(u?.building, unitNumber);
-    const occupiedBy = includeOccupant ? occupantsByUnitId?.[u.id] || null : null;
-    const isOccupied = Boolean(occupiedBy);
+    const capacity = toPositiveInt(u?.capacity, 1);
+    const occupiedTenantIds = includeOccupant ? (occupantsByUnitId?.[u.id] || []) : [];
+    const occupiedCount = Array.isArray(occupiedTenantIds) ? occupiedTenantIds.length : 0;
+    const isFull = occupiedCount >= capacity;
+    const isOccupied = occupiedCount > 0;
     const basePriceCents = u?.base_price_cents === null ? null : toIntOrNull(u?.base_price_cents);
     const legacyCustomPriceCents = u?.custom_price_cents === null ? null : toIntOrNull(u?.custom_price_cents);
     const priceCents = u?.price_cents === null ? null : toIntOrNull(u?.price_cents);
@@ -146,14 +155,18 @@ function serializeWorkUnit(u, { includeOccupant, occupantsByUnitId }) {
         label: u?.label ?? '',
         unit_type: u?.unit_type ?? null,
         category: u?.category ?? null,
-        capacity: asNumber(u?.capacity, 1),
+        capacity,
         price_cents: (priceCents ?? legacyCustomPriceCents) ?? null,
         display_price_cents: displayPriceCents,
+        occupied_count: occupiedCount,
+        slots_remaining: Math.max(0, capacity - occupiedCount),
+        is_full: isFull,
         is_occupied: isOccupied,
-        is_vacant: !isOccupied,
+        is_vacant: occupiedCount === 0,
         active,
         is_active: active,
-        occupied_by_tenant_id: occupiedBy
+        occupied_by_tenant_id: includeOccupant && Array.isArray(occupiedTenantIds) ? (occupiedTenantIds[0] || null) : null,
+        occupied_by_tenant_ids: includeOccupant && Array.isArray(occupiedTenantIds) ? Array.from(new Set(occupiedTenantIds)) : []
     };
 }
 
@@ -189,7 +202,8 @@ export async function GET(request) {
 
         for (const row of activeAllocations || []) {
             if (!row?.work_unit_id) continue;
-            occupantsByUnitId[row.work_unit_id] = row.tenant_id || null;
+            if (!occupantsByUnitId[row.work_unit_id]) occupantsByUnitId[row.work_unit_id] = [];
+            if (row.tenant_id) occupantsByUnitId[row.work_unit_id].push(row.tenant_id);
         }
     }
 

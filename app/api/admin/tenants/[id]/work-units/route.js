@@ -85,43 +85,26 @@ export async function POST(request, { params }) {
 
     if (allUnitsError) return NextResponse.json({ error: allUnitsError.message }, { status: 500 });
 
+    const activeUnits = (allUnits || [])
+        .filter(u => u?.id && u?.building && u?.unit_number !== null && u?.unit_number !== undefined)
+        .filter(u => (u?.active ?? u?.is_active ?? true) !== false);
+
     const idByCode = new Map(
-        (allUnits || [])
-            .filter(u => u?.id && u?.building && u?.unit_number !== null && u?.unit_number !== undefined)
-            .filter(u => (u?.active ?? u?.is_active ?? true) !== false)
-            .map(u => [`${String(u.building).trim()}.${String(u.unit_number).trim()}`, u.id])
+        activeUnits.map(u => [`${String(u.building).trim()}.${String(u.unit_number).trim()}`, u.id])
+    );
+
+    const capacityById = new Map(
+        activeUnits.map(u => {
+            const raw = Number.isFinite(u?.capacity) ? u.capacity : Number(u?.capacity);
+            const capacity = Number.isFinite(raw) ? Math.max(1, Math.floor(raw)) : 1;
+            return [u.id, capacity];
+        })
     );
 
     const missing = desiredCodes.filter(code => !idByCode.has(code));
     if (missing.length) return NextResponse.json({ error: `Unknown work unit codes: ${missing.join(', ')}` }, { status: 400 });
 
     const desiredUnitIds = desiredCodes.map(code => idByCode.get(code));
-
-    // Check for conflicts: active allocations for requested units owned by other tenants.
-    if (desiredUnitIds.length) {
-        const today = todayIso();
-        const { data: conflicts, error: conflictError } = await guard.admin
-            .from('work_unit_allocations')
-            .select('work_unit_id, tenant_id')
-            .in('work_unit_id', desiredUnitIds)
-            .lte('start_date', today)
-            .or(`end_date.is.null,end_date.gt.${today}`);
-
-        if (conflictError) return NextResponse.json({ error: conflictError.message }, { status: 500 });
-
-        const occupiedByOther = (conflicts || []).filter(a => a.tenant_id && a.tenant_id !== tenantId);
-        if (occupiedByOther.length) {
-            const occupiedIds = occupiedByOther.map(a => a.work_unit_id);
-            const { data: occupiedUnits } = await guard.admin.from('work_units').select('building, unit_number, id').in('id', occupiedIds);
-            const occupiedCodes = (occupiedUnits || [])
-                .map(u => (u?.building && (u?.unit_number === 0 || u?.unit_number) ? `${u.building}.${u.unit_number}` : null))
-                .filter(Boolean);
-            return NextResponse.json(
-                { error: `Some units are already allocated: ${occupiedCodes.join(', ')}`, conflicts: occupiedCodes },
-                { status: 409 }
-            );
-        }
-    }
 
     // Load existing active allocations for this tenant.
     const today = todayIso();
@@ -138,6 +121,46 @@ export async function POST(request, { params }) {
 
     const toEnd = (existingActive || []).filter(a => a.work_unit_id && !desiredUnitIds.includes(a.work_unit_id));
     const toAdd = desiredUnitIds.filter(id => !existingUnitIds.has(id));
+
+    // Check for capacity conflicts: active allocations for requested (new) units.
+    // A unit is unavailable only when active allocations count >= capacity.
+    if (toAdd.length) {
+        const { data: conflicts, error: conflictError } = await guard.admin
+            .from('work_unit_allocations')
+            .select('work_unit_id, tenant_id')
+            .in('work_unit_id', toAdd)
+            .lte('start_date', today)
+            .or(`end_date.is.null,end_date.gt.${today}`);
+
+        if (conflictError) return NextResponse.json({ error: conflictError.message }, { status: 500 });
+
+        const countsByUnitId = new Map();
+        for (const row of conflicts || []) {
+            if (!row?.work_unit_id) continue;
+            countsByUnitId.set(row.work_unit_id, (countsByUnitId.get(row.work_unit_id) || 0) + 1);
+        }
+
+        const fullIds = toAdd.filter(id => {
+            const capacity = capacityById.get(id) || 1;
+            const count = countsByUnitId.get(id) || 0;
+            return count >= capacity;
+        });
+
+        if (fullIds.length) {
+            const { data: occupiedUnits, error: occupiedError } = await guard.admin
+                .from('work_units')
+                .select('building, unit_number, id')
+                .in('id', fullIds);
+            if (occupiedError) return NextResponse.json({ error: occupiedError.message }, { status: 500 });
+            const occupiedCodes = (occupiedUnits || [])
+                .map(u => (u?.building && (u?.unit_number === 0 || u?.unit_number) ? `${u.building}.${u.unit_number}` : null))
+                .filter(Boolean);
+            return NextResponse.json(
+                { error: `Some units are full: ${occupiedCodes.join(', ')}`, conflicts: occupiedCodes },
+                { status: 409 }
+            );
+        }
+    }
 
     // End allocations not desired.
     if (toEnd.length) {

@@ -13,6 +13,12 @@ function toIsoDate(date) {
     return date.toISOString().slice(0, 10);
 }
 
+function toPositiveInt(value, fallback = 1) {
+    const n = Number.isFinite(value) ? value : Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(1, Math.floor(n));
+}
+
 export async function GET(request) {
     // Auth required, but not admin; we only expose minimal unit info
     const { user, error } = await getUserFromRequest(request);
@@ -40,7 +46,8 @@ export async function GET(request) {
         if (allocationsError) return NextResponse.json({ error: allocationsError.message }, { status: 500 });
         for (const row of activeAllocations || []) {
             if (!row?.work_unit_id) continue;
-            occupantsByUnitId[row.work_unit_id] = row.tenant_id || null;
+            if (!occupantsByUnitId[row.work_unit_id]) occupantsByUnitId[row.work_unit_id] = [];
+            if (row.tenant_id) occupantsByUnitId[row.work_unit_id].push(row.tenant_id);
         }
     }
 
@@ -59,9 +66,11 @@ export async function GET(request) {
             const building = u?.building ?? null;
             const unitNumber = Number.isFinite(u?.unit_number) ? u.unit_number : Number(u?.unit_number);
             const code = toCode(building, unitNumber);
-            const occupiedBy = includeOccupant ? occupantsByUnitId?.[u.id] || null : null;
-            const isOccupied = Boolean(occupiedBy);
-            const mine = occupiedBy ? myTenantIds.has(occupiedBy) : false;
+            const capacity = toPositiveInt(u?.capacity, 1);
+            const occupiedTenantIds = includeOccupant ? (occupantsByUnitId?.[u.id] || []) : [];
+            const occupiedCount = Array.isArray(occupiedTenantIds) ? occupiedTenantIds.length : 0;
+            const isFull = occupiedCount >= capacity;
+            const mine = Array.isArray(occupiedTenantIds) ? occupiedTenantIds.some(id => myTenantIds.has(id)) : false;
             const active = u?.active ?? u?.is_active ?? true;
             return active === false
                 ? null
@@ -72,8 +81,12 @@ export async function GET(request) {
                       code,
                       label: u?.label ?? '',
                       unit_type: u?.unit_type ?? null,
-                      capacity: Number.isFinite(u?.capacity) ? u.capacity : Number(u?.capacity),
-                      is_occupied: isOccupied,
+                      capacity,
+                      occupied_count: occupiedCount,
+                      slots_remaining: Math.max(0, capacity - occupiedCount),
+                      is_full: isFull,
+                      // Back-compat: in UI we treat "occupied" as "unavailable"
+                      is_occupied: isFull,
                       mine
                   };
         })
