@@ -57,6 +57,16 @@ export default function AdminHomePage() {
                         </Link>
                     </div>
                 </section>
+
+                <section className="platform-card span-6">
+                    <h2 style={{ marginTop: 0 }}>Work units</h2>
+                    <p className="platform-subtitle">Manage desk/pod/office inventory used for memberships.</p>
+                    <div className="platform-card-actions">
+                        <Link className="btn primary" href="/platform/admin/work-units">
+                            Manage work units
+                        </Link>
+                    </div>
+                </section>
             </div>
         </main>
     );

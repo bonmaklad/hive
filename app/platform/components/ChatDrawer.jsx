@@ -35,17 +35,24 @@ export default function ChatDrawer() {
     const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState([]);
     const [text, setText] = useState('');
+    const [editing, setEditing] = useState(null); // { id, originalBody }
+    const [actionMessageId, setActionMessageId] = useState('');
     const [error, setError] = useState('');
     const [mentionError, setMentionError] = useState('');
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [mentionedUserIds, setMentionedUserIds] = useState([]);
     const [mentionEveryone, setMentionEveryone] = useState(false);
+    const [actionBusy, setActionBusy] = useState(false);
+    const [showEmoji, setShowEmoji] = useState(false);
 
     const listRef = useRef(null);
     const name = useMemo(() => getDisplayName({ user, profile }), [profile, user]);
+    const longPressRef = useRef(null);
+    const inputRef = useRef(null);
 
     const [now, setNow] = useState(Date.now());
+    const emojis = useMemo(() => ['😀', '😂', '🥰', '😮', '😢', '😡', '👍', '👎', '🙏', '🎉', '🔥', '✅', '❤️'], []);
 
     useEffect(() => {
         const id = setInterval(() => setNow(Date.now()), 60 * 1000);
@@ -76,7 +83,7 @@ export default function ChatDrawer() {
 
         load();
 
-        const channel = supabase
+            const channel = supabase
             .channel('chat:members')
             .on(
                 'postgres_changes',
@@ -88,6 +95,25 @@ export default function ChatDrawer() {
                         if (current.some(m => m.id === row.id)) return current;
                         return [...current, row].slice(-200);
                     });
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: 'channel=eq.members' },
+                payload => {
+                    if (cancelled) return;
+                    const row = payload.new;
+                    setMessages(current => current.map(m => (m.id === row.id ? { ...m, ...row } : m)));
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: 'DELETE', schema: 'public', table: 'chat_messages', filter: 'channel=eq.members' },
+                payload => {
+                    if (cancelled) return;
+                    const id = payload.old?.id;
+                    if (!id) return;
+                    setMessages(current => current.filter(m => m.id !== id));
                 }
             )
             .subscribe();
@@ -184,10 +210,46 @@ export default function ChatDrawer() {
         setShowSuggestions(false);
     };
 
+    async function saveEdit(trimmed) {
+        if (!editing?.id) return;
+        setActionBusy(true);
+        setError('');
+        setMentionError('');
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token;
+            if (!token) throw new Error('No session token.');
+
+            const res = await fetch(`/api/chat/messages/${encodeURIComponent(editing.id)}`, {
+                method: 'PATCH',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ body: trimmed })
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || 'Could not edit message.');
+
+            setMessages(current => current.map(m => (m.id === editing.id ? { ...m, body: trimmed } : m)));
+            setEditing(null);
+            setText('');
+            setMentionedUserIds([]);
+            setMentionEveryone(false);
+            setShowEmoji(false);
+        } catch (err) {
+            setError(err?.message || 'Could not edit message.');
+        } finally {
+            setActionBusy(false);
+        }
+    }
+
     const send = async event => {
         event.preventDefault();
         const trimmed = text.trim();
         if (!trimmed) return;
+
+        if (editing?.id) {
+            await saveEdit(trimmed);
+            return;
+        }
 
         setError('');
         setMentionError('');
@@ -239,7 +301,116 @@ export default function ChatDrawer() {
         setText('');
         setMentionedUserIds([]);
         setMentionEveryone(false);
+        setShowEmoji(false);
     };
+
+    const clearLongPress = () => {
+        if (longPressRef.current) {
+            clearTimeout(longPressRef.current);
+            longPressRef.current = null;
+        }
+    };
+
+    const beginLongPress = msg => {
+        clearLongPress();
+        longPressRef.current = setTimeout(() => {
+            setActionMessageId(msg?.id || '');
+            longPressRef.current = null;
+        }, 420);
+    };
+
+    const closeActions = () => {
+        if (actionBusy) return;
+        setActionMessageId('');
+    };
+
+    const startEdit = msg => {
+        if (!msg?.id) return;
+        setEditing({ id: msg.id, originalBody: msg.body || '' });
+        setText(msg.body || '');
+        setActionMessageId('');
+        setError('');
+        setMentionError('');
+        setShowSuggestions(false);
+        setSuggestions([]);
+
+        if (open) {
+            setTimeout(() => {
+                const el = listRef.current;
+                if (!el) return;
+                el.scrollTop = el.scrollHeight;
+            }, 0);
+        }
+    };
+
+    const cancelEdit = () => {
+        if (actionBusy) return;
+        setEditing(null);
+        setText('');
+        setMentionedUserIds([]);
+        setMentionEveryone(false);
+        setShowSuggestions(false);
+        setSuggestions([]);
+        setMentionError('');
+        setShowEmoji(false);
+    };
+
+    const insertEmoji = emoji => {
+        const el = inputRef.current;
+        if (!el) {
+            setText(current => `${current}${emoji}`);
+            return;
+        }
+
+        const start = typeof el.selectionStart === 'number' ? el.selectionStart : el.value.length;
+        const end = typeof el.selectionEnd === 'number' ? el.selectionEnd : el.value.length;
+        const currentText = text;
+        const next = `${currentText.slice(0, start)}${emoji}${currentText.slice(end)}`;
+        const cursor = start + emoji.length;
+
+        setText(next);
+        setShowSuggestions(false);
+        setSuggestions([]);
+        setMentionError('');
+
+        requestAnimationFrame(() => {
+            try {
+                el.focus();
+                el.setSelectionRange(cursor, cursor);
+            } catch (_) {}
+        });
+    };
+
+    const deleteMessage = async msg => {
+        if (!msg?.id) return;
+        const ok = window.confirm('Delete this message?');
+        if (!ok) return;
+        setActionBusy(true);
+        setError('');
+        setMentionError('');
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token;
+            if (!token) throw new Error('No session token.');
+
+            const res = await fetch(`/api/chat/messages/${encodeURIComponent(msg.id)}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || 'Could not delete message.');
+
+            setMessages(current => current.filter(m => m.id !== msg.id));
+            if (editing?.id === msg.id) cancelEdit();
+            closeActions();
+        } catch (err) {
+            setError(err?.message || 'Could not delete message.');
+        } finally {
+            setActionBusy(false);
+        }
+    };
+
+    const actionMsg = useMemo(() => messages.find(m => m.id === actionMessageId) || null, [actionMessageId, messages]);
 
     return (
         <>
@@ -280,7 +451,21 @@ export default function ChatDrawer() {
                         messages.map(msg => (
                             <div
                                 key={msg.id}
-                                className={`platform-chat-msg ${msg.user_id === user?.id ? 'own' : ''}`}
+                                className={`platform-chat-msg ${msg.user_id === user?.id ? 'own' : ''} ${
+                                    msg.id === editing?.id ? 'editing' : ''
+                                }`}
+                                onPointerDown={() => {
+                                    if (msg.user_id !== user?.id) return;
+                                    beginLongPress(msg);
+                                }}
+                                onPointerUp={clearLongPress}
+                                onPointerCancel={clearLongPress}
+                                onPointerMove={clearLongPress}
+                                onContextMenu={event => {
+                                    if (msg.user_id !== user?.id) return;
+                                    event.preventDefault();
+                                    setActionMessageId(msg.id);
+                                }}
                             >
                                 <div className="platform-chat-meta">
                                     <span className="platform-chat-author">{msg.user_name}</span>
@@ -289,6 +474,16 @@ export default function ChatDrawer() {
                                     </span>
                                 </div>
                                 <div className="platform-chat-body">{msg.body}</div>
+                                {msg.user_id === user?.id ? (
+                                    <button
+                                        type="button"
+                                        className="platform-chat-more"
+                                        aria-label="Message actions"
+                                        onClick={() => setActionMessageId(msg.id)}
+                                    >
+                                        •••
+                                    </button>
+                                ) : null}
                             </div>
                         ))
                     ) : (
@@ -297,15 +492,37 @@ export default function ChatDrawer() {
                 </div>
 
                 <form className="platform-chat-form" onSubmit={send}>
+                    {editing?.id ? (
+                        <div className="platform-chat-editbar">
+                            <span>
+                                Editing message
+                            </span>
+                            <button className="btn ghost" type="button" onClick={cancelEdit} disabled={actionBusy}>
+                                Cancel
+                            </button>
+                        </div>
+                    ) : null}
                     <label className="platform-chat-input">
                         <span className="sr-only">Message</span>
                         <input
                             type="text"
+                            ref={inputRef}
                             value={text}
                             onChange={e => setText(e.target.value)}
-                            placeholder="Write a message…"
+                            placeholder={editing?.id ? 'Edit your message…' : 'Write a message…'}
                             autoComplete="off"
                         />
+                        <button
+                            className="platform-chat-emoji-toggle"
+                            type="button"
+                            aria-label="Add emoji"
+                            onClick={() => {
+                                setShowEmoji(v => !v);
+                                setShowSuggestions(false);
+                            }}
+                        >
+                            🙂
+                        </button>
                         {showSuggestions && (
                             <div className="platform-chat-suggest">
                                 {profile?.is_admin ? (
@@ -330,11 +547,41 @@ export default function ChatDrawer() {
                                 )}
                             </div>
                         )}
+                        {showEmoji ? (
+                            <div className="platform-chat-emoji-picker" role="dialog" aria-label="Emoji picker">
+                                {emojis.map(e => (
+                                    <button key={e} type="button" className="platform-chat-emoji" onClick={() => insertEmoji(e)}>
+                                        {e}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
                     </label>
-                    <button className="btn primary" type="submit" disabled={!text.trim()}>
-                        Send
+                    <button className="btn primary" type="submit" disabled={!text.trim() || actionBusy}>
+                        {editing?.id ? (actionBusy ? 'Saving…' : 'Save') : 'Send'}
                     </button>
                 </form>
+
+                {actionMsg && actionMsg.user_id === user?.id ? (
+                    <div className="platform-chat-actionsheet-overlay" role="presentation" onMouseDown={closeActions}>
+                        <div className="platform-chat-actionsheet" role="dialog" aria-label="Message actions" onMouseDown={e => e.stopPropagation()}>
+                            <button type="button" className="platform-chat-actionsheet-item" onClick={() => startEdit(actionMsg)} disabled={actionBusy}>
+                                Edit
+                            </button>
+                            <button
+                                type="button"
+                                className="platform-chat-actionsheet-item danger"
+                                onClick={() => deleteMessage(actionMsg)}
+                                disabled={actionBusy}
+                            >
+                                Delete
+                            </button>
+                            <button type="button" className="platform-chat-actionsheet-item" onClick={closeActions} disabled={actionBusy}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                ) : null}
             </aside>
         </>
     );
