@@ -6,6 +6,7 @@ import Link from 'next/link';
 import ContactForm from './components/ContactForm';
 import ImageCarousel from './components/ImageCarousel';
 import SiteNav from './components/SiteNav';
+import HiveAvailabilitySection from './components/HiveAvailabilitySection';
 import { events as programs } from '../lib/events';
 
 const heroStats = [
@@ -416,6 +417,8 @@ export default function HomePage() {
                         ))}
                     </div>
                 </section>
+
+                {/* <HiveAvailabilitySection /> */}
 
                 <section id="memberships" className="section memberships">
                     <div className="section-tag">Membership</div>

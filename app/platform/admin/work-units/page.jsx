@@ -60,6 +60,13 @@ function formatNZDOptional(cents) {
     }
 }
 
+function monthlyToWeeklyCents(monthlyCents) {
+    const n = Number(monthlyCents);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    // Convert monthly to weekly using 12 months / 52 weeks
+    return Math.round((n * 12) / 52);
+}
+
 function Modal({ open, title, subtitle, onClose, children, footer }) {
     useEffect(() => {
         if (!open) return;
@@ -356,7 +363,11 @@ export default function AdminWorkUnitsPage() {
                     </span>
                     <span className="platform-step active">
                         Total recurring revenue:{' '}
-                        <span className="platform-mono">{formatNZDOptional(metrics?.total_recurring_revenue_cents ?? null)}</span> / month
+                        <span className="platform-mono">{formatNZDOptional(
+                            metrics?.total_recurring_revenue_cents != null
+                                ? monthlyToWeeklyCents(metrics.total_recurring_revenue_cents)
+                                : null
+                        )}</span> / week
                     </span>
                 </div>
             ) : null}
@@ -462,9 +473,10 @@ export default function AdminWorkUnitsPage() {
                                 visibleUnits.map(unit => {
                                     const hasVacancy = unitHasVacancy(unit);
                                     const displayPrice = unit?.display_price_cents ?? unit?.price_cents ?? null;
-                                    const billingCents = Number.isFinite(Number(unit?.billing_cents)) && Number(unit.billing_cents) > 0
+                                    const billingMonthlyCents = Number.isFinite(Number(unit?.billing_cents)) && Number(unit.billing_cents) > 0
                                         ? Number(unit.billing_cents)
                                         : null;
+                                    const billingWeeklyCents = billingMonthlyCents != null ? monthlyToWeeklyCents(billingMonthlyCents) : null;
                                     return (
                                         <tr key={unit?.id || unit?.code}>
                                             <td className="platform-mono">
@@ -486,7 +498,7 @@ export default function AdminWorkUnitsPage() {
                                                 {formatNZDOptional(displayPrice)}
                                             </td>
                                             <td className="platform-mono">
-                                                {formatNZDOptional(billingCents)}
+                                                {formatNZDOptional(billingWeeklyCents)}
                                             </td>
                                             <td style={{ textAlign: 'center' }}>
                                                 <span className={unit?.is_active ? 'badge success' : 'badge pending'}>{unit?.is_active ? 'yes' : 'no'}</span>
