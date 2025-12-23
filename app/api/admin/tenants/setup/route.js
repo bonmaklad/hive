@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../_lib/adminGuard';
 import { createSupabaseAnonClient } from '../../../_lib/supabaseAuth';
+import { ensureStripeCustomer } from '../../../_lib/stripe';
 
 export const runtime = 'nodejs';
 
@@ -151,7 +152,7 @@ export async function POST(request) {
     const { data: tenant, error: tenantError } = await guard.admin
         .from('tenants')
         .insert({ name: tenantName })
-        .select('id, name, created_at')
+        .select('id, name, created_at, stripe_customer_id')
         .single();
 
     if (tenantError) return NextResponse.json({ error: tenantError.message }, { status: 500 });
@@ -245,6 +246,27 @@ export async function POST(request) {
             for (const u of createdUsers) {
                 await sendMagicLink({ email: u.email });
             }
+        }
+
+        // Ensure the tenant exists as a Stripe customer so invoices can be sent.
+        try {
+            const customerId = await ensureStripeCustomer({ tenant, tenantId: tenant.id, email: primaryEmail });
+            if (customerId && tenant?.stripe_customer_id !== customerId) {
+                await guard.admin.from('tenants').update({ stripe_customer_id: customerId }).eq('id', tenant.id);
+                tenant.stripe_customer_id = customerId;
+            }
+        } catch (stripeErr) {
+            // Do not fail tenant creation; surface error so admin can retry from UI.
+            return NextResponse.json(
+                {
+                    ok: true,
+                    tenant,
+                    users: createdUsers,
+                    magic_links_sent: sendMagicLinks,
+                    stripe_error: stripeErr?.message || 'Failed to create Stripe customer.'
+                },
+                { status: 200 }
+            );
         }
 
         // Ensure tenant storage folder exists (bucket: tenant-docs / folder: <tenantId>/)

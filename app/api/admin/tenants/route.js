@@ -23,7 +23,7 @@ export async function GET(request) {
 
     const { data: tenants, error: tenantsError } = await guard.admin
         .from('tenants')
-        .select('id, name, created_at')
+        .select('id, name, created_at, stripe_customer_id')
         .order('created_at', { ascending: false })
         .limit(200);
 

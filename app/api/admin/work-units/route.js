@@ -80,6 +80,34 @@ function pickLatestMembershipByOwner(rows) {
     return byOwner;
 }
 
+function resolveBillingOwnerByTenantId(tenantUsersRows) {
+    const grouped = new Map();
+    for (const row of tenantUsersRows || []) {
+        const tenantId = row?.tenant_id;
+        const userId = row?.user_id;
+        if (!tenantId || !userId) continue;
+        if (!grouped.has(tenantId)) grouped.set(tenantId, []);
+        grouped.get(tenantId).push(row);
+    }
+
+    const out = new Map();
+    for (const [tenantId, rows] of grouped.entries()) {
+        const list = (rows || []).slice().sort((a, b) => {
+            const at = Date.parse(a?.created_at || '');
+            const bt = Date.parse(b?.created_at || '');
+            const aTs = Number.isFinite(at) ? at : 0;
+            const bTs = Number.isFinite(bt) ? bt : 0;
+            return aTs - bTs;
+        });
+        const owner = list.find(r => r.role === 'owner') || null;
+        const admin = list.find(r => r.role === 'admin') || null;
+        const chosen = owner || admin || list[0] || null;
+        if (chosen?.user_id) out.set(tenantId, chosen.user_id);
+    }
+
+    return out;
+}
+
 function allocateMembershipAcrossUnits({ totalCents, unitIds, weightByUnitId }) {
     const total = toNonNegativeInt(totalCents, 0);
     const ids = Array.isArray(unitIds) ? unitIds.filter(Boolean) : [];
@@ -310,15 +338,14 @@ export async function GET(request) {
 
         const ownersByTenant = new Map();
         if (tenantIds.size) {
-            const { data: ownerRows, error: ownerError } = await guard.admin
+            const { data: tenantUsers, error: ownerError } = await guard.admin
                 .from('tenant_users')
-                .select('tenant_id, user_id, role')
+                .select('tenant_id, user_id, role, created_at')
                 .in('tenant_id', Array.from(tenantIds))
-                .eq('role', 'owner');
+                .in('role', ['owner', 'admin']);
             if (ownerError) return NextResponse.json({ error: ownerError.message }, { status: 500 });
-            for (const row of ownerRows || []) {
-                if (row?.tenant_id && row?.user_id) ownersByTenant.set(row.tenant_id, row.user_id);
-            }
+            const resolved = resolveBillingOwnerByTenantId(tenantUsers || []);
+            for (const [tenantId, ownerId] of resolved.entries()) ownersByTenant.set(tenantId, ownerId);
         }
 
         const ownerIdsForBilling = Array.from(new Set(Array.from(ownersByTenant.values()).filter(Boolean)));

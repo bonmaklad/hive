@@ -1265,6 +1265,8 @@ export default function AdminTenantsPage() {
     const [error, setError] = useState('');
     const [monthStart, setMonthStart] = useState(() => getMonthStart());
     const [query, setQuery] = useState('');
+    const [planFilter, setPlanFilter] = useState('all');
+    const [stripeBusyTenantId, setStripeBusyTenantId] = useState(null);
 
     const [createOpen, setCreateOpen] = useState(false);
     const [editTenantId, setEditTenantId] = useState(null);
@@ -1302,25 +1304,29 @@ export default function AdminTenantsPage() {
 
     const filteredTenants = useMemo(() => {
         const q = query.trim().toLowerCase();
-        if (!q) return tenants;
+        const filteredByQuery = q
+            ? tenants.filter(t => {
+                const users = Array.isArray(t.users) ? t.users : [];
+                const primaryEmail = t.primary_user?.profile?.email || '';
+                const primaryName = t.primary_user?.profile?.name || '';
+                const haystack = [
+                    t.name || '',
+                    t.id || '',
+                    primaryEmail,
+                    primaryName,
+                    ...users.map(u => u.profile?.email || ''),
+                    ...users.map(u => u.profile?.name || '')
+                ]
+                    .join(' ')
+                    .toLowerCase();
+                return haystack.includes(q);
+            })
+            : tenants;
 
-        return tenants.filter(t => {
-            const users = Array.isArray(t.users) ? t.users : [];
-            const primaryEmail = t.primary_user?.profile?.email || '';
-            const primaryName = t.primary_user?.profile?.name || '';
-            const haystack = [
-                t.name || '',
-                t.id || '',
-                primaryEmail,
-                primaryName,
-                ...users.map(u => u.profile?.email || ''),
-                ...users.map(u => u.profile?.name || '')
-            ]
-                .join(' ')
-                .toLowerCase();
-            return haystack.includes(q);
-        });
-    }, [query, tenants]);
+        if (planFilter === 'all') return filteredByQuery;
+        if (planFilter === 'none') return filteredByQuery.filter(t => !t?.membership?.plan);
+        return filteredByQuery.filter(t => t?.membership?.plan === planFilter);
+    }, [planFilter, query, tenants]);
 
     const selectedTenant = useMemo(() => tenants.find(t => t.id === editTenantId) || null, [editTenantId, tenants]);
 
@@ -1337,6 +1343,28 @@ export default function AdminTenantsPage() {
             throw new Error(json?.error || 'Failed to send magic link.');
         }
         return true;
+    };
+
+    const ensureStripeCustomer = async tenantId => {
+        if (!tenantId) return;
+        setStripeBusyTenantId(tenantId);
+        setError('');
+        try {
+            const res = await fetch(`/api/admin/tenants/${tenantId}/stripe-customer`, {
+                method: 'POST',
+                headers: await authHeader()
+            });
+            const json = await readJsonResponse(res);
+            if (!res.ok) {
+                if (json?._raw) throw errorFromNonJson(res, json);
+                throw new Error(json?.error || 'Failed to create Stripe customer.');
+            }
+            await load();
+        } catch (err) {
+            setError(err?.message || 'Failed to create Stripe customer.');
+        } finally {
+            setStripeBusyTenantId(null);
+        }
     };
 
     return (
@@ -1361,6 +1389,19 @@ export default function AdminTenantsPage() {
             <div className="platform-card" style={{ display: 'grid', gap: '0.75rem' }}>
                 <label className="platform-subtitle">Search</label>
                 <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by tenant, user, or email…" />
+                <label className="platform-subtitle" style={{ marginTop: '0.5rem' }}>
+                    Membership type
+                </label>
+                <select value={planFilter} onChange={e => setPlanFilter(e.target.value)}>
+                    <option value="all">All</option>
+                    <option value="member">Members</option>
+                    <option value="desk">Desks</option>
+                    <option value="pod">Pods</option>
+                    <option value="office">Offices</option>
+                    <option value="premium">Premium</option>
+                    <option value="custom">Custom</option>
+                    <option value="none">No membership</option>
+                </select>
             </div>
 
             {loading ? (
@@ -1397,6 +1438,13 @@ export default function AdminTenantsPage() {
                                             <h2 style={{ margin: 0 }}>{t.name}</h2>
                                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                                 <span className="badge neutral">{t.id?.slice(0, 8)}</span>
+                                                {t?.stripe_customer_id ? (
+                                                    <span className="badge success" title={t.stripe_customer_id}>
+                                                        stripe
+                                                    </span>
+                                                ) : (
+                                                    <span className="badge pending">stripe missing</span>
+                                                )}
                                                 {membership?.status ? (
                                                     <span className={`badge ${membership.status === 'live' ? 'success' : 'pending'}`}>{membership.status}</span>
                                                 ) : null}
@@ -1435,6 +1483,20 @@ export default function AdminTenantsPage() {
                                             <button className="btn secondary" type="button" onClick={() => setEditTenantId(t.id)}>
                                                 Edit
                                             </button>
+                                            {!t?.stripe_customer_id ? (
+                                                <button
+                                                    className="btn primary"
+                                                    type="button"
+                                                    onClick={() => ensureStripeCustomer(t.id)}
+                                                    disabled={stripeBusyTenantId === t.id}
+                                                >
+                                                    {stripeBusyTenantId === t.id ? 'Creating Stripe customer…' : 'Create Stripe customer'}
+                                                </button>
+                                            ) : (
+                                                <span className="platform-subtitle">
+                                                    Stripe customer: <span className="platform-mono">{String(t.stripe_customer_id).slice(0, 10)}…</span>
+                                                </span>
+                                            )}
                                         </div>
 
                                         <div style={{ marginTop: '1rem' }}>
