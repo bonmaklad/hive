@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "icons:dark": "node scripts/make-dark-icons.mjs"
   },
   "engines": {
     "node": ">=18.18.0 <21"

@@ -41,3 +41,13 @@ Env vars (Next.js):
 - `STRIPE_SECRET_KEY` (server)
 - `STRIPE_WEBHOOK_SECRET` (server)
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (client)
+
+## Membership invoicing (Stripe invoices)
+
+An Edge Function `supabase/functions/invoice-memberships/index.ts` can generate monthly Stripe invoices for memberships with:
+
+- `memberships.status = 'live'`
+- `memberships.payment_terms = 'invoice'` (or `advanced` that has expired)
+- `memberships.next_invoice_at = <today day-of-month in NZ>`
+
+It creates/sends a Stripe invoice for `memberships.monthly_amount_cents` (GST-inclusive) and upserts a row into `public.invoices`.

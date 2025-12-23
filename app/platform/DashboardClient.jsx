@@ -194,6 +194,19 @@ export default function DashboardClient() {
                     </Link>
                 </div>
             </section>
+
+            <section className="platform-card span-6" aria-label="Documentation">
+                <div className="platform-kpi-row">
+                    <h2 style={{ margin: 0 }}>Documentation</h2>
+                    <span className="badge neutral">Wiki</span>
+                </div>
+                <p className="platform-subtitle">How-to guides, policies, and help for using HIVE HQ.</p>
+                <div className="platform-card-actions">
+                    <Link className="btn primary" href="/platform/docs">
+                        Open docs
+                    </Link>
+                </div>
+            </section>
         </div>
     );
 }

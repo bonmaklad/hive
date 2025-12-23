@@ -6,6 +6,14 @@ import { usePlatformSession } from '../../PlatformContext';
 
 const UNIT_TYPES = ['premium_office', 'private_office', 'desk', 'desk_pod', 'small_office'];
 
+function unitHasVacancy(unit) {
+    return (
+        unit?.is_full === false
+        || (Number.isFinite(Number(unit?.slots_remaining)) && Number(unit.slots_remaining) > 0)
+        || (unit?.is_full !== true && unit?.is_vacant === true)
+    );
+}
+
 function toCode(building, unitNumber) {
     const b = typeof building === 'string' ? building.trim() : '';
     const n = typeof unitNumber === 'string' ? unitNumber.trim() : String(unitNumber ?? '').trim();
@@ -120,7 +128,8 @@ export default function AdminWorkUnitsPage() {
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
 
-    const [showInactive, setShowInactive] = useState(true);
+    const [showInactive, setShowInactive] = useState(false);
+    const [showVacantOnly, setShowVacantOnly] = useState(false);
 
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState('create');
@@ -183,6 +192,13 @@ export default function AdminWorkUnitsPage() {
             return String(a?.unit_number || '').localeCompare(String(b?.unit_number || ''));
         });
     }, [units]);
+
+    const visibleUnits = useMemo(() => {
+        if (!showVacantOnly) return sortedUnits;
+        return sortedUnits.filter(unit => unitHasVacancy(unit));
+    }, [sortedUnits, showVacantOnly]);
+
+    const emptyStateLabel = showVacantOnly ? 'No vacant work units found.' : 'No work units found.';
 
     const closeModal = (opts = {}) => {
         const force = Boolean(opts.force);
@@ -316,10 +332,16 @@ export default function AdminWorkUnitsPage() {
                 </div>
             </div>
 
-            <label className="platform-subtitle" style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
-                <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} disabled={busy} />
-                Show inactive
-            </label>
+            <div className="platform-subtitle" style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+                <label style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
+                    <input type="checkbox" checked={showVacantOnly} onChange={e => setShowVacantOnly(e.target.checked)} disabled={busy} />
+                    Show vacant only
+                </label>
+                <label style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
+                    <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} disabled={busy} />
+                    Show inactive
+                </label>
+            </div>
 
             {metrics ? (
                 <div className="platform-steps" style={{ marginTop: '0.75rem' }}>
@@ -436,12 +458,9 @@ export default function AdminWorkUnitsPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {sortedUnits.length ? (
-                                sortedUnits.map(unit => {
-                                    const hasVacancy =
-                                        unit?.is_full === false
-                                        || (Number.isFinite(Number(unit?.slots_remaining)) && Number(unit.slots_remaining) > 0)
-                                        || (unit?.is_full !== true && unit?.is_vacant === true);
+                            {visibleUnits.length ? (
+                                visibleUnits.map(unit => {
+                                    const hasVacancy = unitHasVacancy(unit);
                                     const displayPrice = unit?.display_price_cents ?? unit?.price_cents ?? null;
                                     const billingCents = Number.isFinite(Number(unit?.billing_cents)) && Number(unit.billing_cents) > 0
                                         ? Number(unit.billing_cents)
@@ -488,7 +507,7 @@ export default function AdminWorkUnitsPage() {
                             ) : (
                                 <tr>
                                     <td colSpan={9} className="platform-subtitle">
-                                        No work units found.
+                                        {emptyStateLabel}
                                     </td>
                                 </tr>
                             )}
