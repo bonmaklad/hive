@@ -243,6 +243,9 @@ function serializeWorkUnit(u, { includeOccupant, occupantsByUnitId }) {
     const priceCents = u?.price_cents === null ? null : toIntOrNull(u?.price_cents);
     const displayPriceCents = (priceCents ?? legacyCustomPriceCents) ?? basePriceCents;
     const active = u?.active ?? u?.is_active ?? true;
+    const image = typeof u?.image === 'string' ? u.image : null;
+    const imageBucket = typeof u?.image_bucket === 'string' ? u.image_bucket : null;
+    const imagePath = typeof u?.image_path === 'string' ? u.image_path : null;
 
     return {
         id: u?.id,
@@ -253,6 +256,9 @@ function serializeWorkUnit(u, { includeOccupant, occupantsByUnitId }) {
         unit_type: u?.unit_type ?? null,
         category: u?.category ?? null,
         capacity,
+        image,
+        image_bucket: imageBucket,
+        image_path: imagePath,
         price_cents: (priceCents ?? legacyCustomPriceCents) ?? null,
         display_price_cents: displayPriceCents,
         occupied_count: occupiedCount,

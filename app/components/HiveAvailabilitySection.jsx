@@ -20,7 +20,9 @@ function formatUnitType(value) {
     const map = {
         premium_office: 'Premium Office',
         private_office: 'Private Office',
-        desk: 'Desk'
+        small_office: 'Small Office',
+        desk: 'Desk',
+        desk_pod: 'Desk Pod'
     };
     return map[v] || v;
 }
@@ -186,7 +188,51 @@ function HiveMapViewer() {
     );
 }
 
+function HiveMapModal({ open, onClose }) {
+    useEffect(() => {
+        if (!open) return undefined;
+        const onKey = event => {
+            if (event.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [open, onClose]);
+
+    if (!open) return null;
+
+    return (
+        <div
+            className="platform-modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="HIVE map viewer"
+            onMouseDown={event => {
+                if (event.target === event.currentTarget) onClose();
+            }}
+        >
+            <div className="platform-modal hive-map-modal">
+                <div className="platform-modal-header">
+                    <div>
+                        <h3 style={{ marginTop: 0, marginBottom: '0.35rem' }}>HIVE map</h3>
+                        <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                            Drag to pan. Scroll to zoom.
+                        </p>
+                    </div>
+                    <button className="btn ghost" type="button" onClick={onClose}>
+                        Close
+                    </button>
+                </div>
+                <HiveMapViewer />
+            </div>
+        </div>
+    );
+}
+
 function AvailabilityModal({ unit, onClose }) {
+    const [imageFailed, setImageFailed] = useState(false);
+    const imageUrl = typeof unit?.image_url === 'string' ? unit.image_url.trim() : '';
+    const showImage = Boolean(imageUrl) && !imageFailed;
+
     useEffect(() => {
         if (!unit) return undefined;
         const onKey = event => {
@@ -195,6 +241,10 @@ function AvailabilityModal({ unit, onClose }) {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [unit, onClose]);
+
+    useEffect(() => {
+        setImageFailed(false);
+    }, [imageUrl]);
 
     if (!unit) return null;
 
@@ -215,16 +265,36 @@ function AvailabilityModal({ unit, onClose }) {
                     <div>
                         <h3 style={{ marginTop: 0, marginBottom: '0.35rem' }}>{title}</h3>
                         <p className="platform-subtitle" style={{ marginTop: 0 }}>
-                            Image coming soon (placeholder)
+                            {showImage ? 'Workspace photo' : 'Image coming soon'}
                         </p>
                     </div>
                     <button className="btn ghost" type="button" onClick={onClose}>
                         Close
                     </button>
                 </div>
-                <div className="availability-image-placeholder" aria-hidden="true">
-                    <div className="availability-image-placeholder-inner">Image placeholder</div>
-                </div>
+                {showImage ? (
+                    <div className="availability-image" aria-label={`Image for ${title}`}>
+                        <Image
+                            src={imageUrl}
+                            alt={`${title} workspace`}
+                            fill
+                            sizes="(max-width: 900px) 92vw, 860px"
+                            style={{ objectFit: 'cover' }}
+                            onError={() => setImageFailed(true)}
+                        />
+                    </div>
+                ) : (
+                    <div className="availability-image-placeholder" aria-hidden="true">
+                        <Image
+                            className="availability-placeholder-logo"
+                            src="/logo-square.png"
+                            alt=""
+                            width={120}
+                            height={120}
+                        />
+                        <div className="availability-image-placeholder-inner">Coming soon</div>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -236,7 +306,9 @@ export default function HiveAvailabilitySection() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [activeUnit, setActiveUnit] = useState(null);
+    const [mapOpen, setMapOpen] = useState(false);
     const closeModal = useCallback(() => setActiveUnit(null), []);
+    const closeMap = useCallback(() => setMapOpen(false), []);
 
     useEffect(() => {
         let cancelled = false;
@@ -292,9 +364,22 @@ export default function HiveAvailabilitySection() {
         <>
             <section id="availability" className="section availability">
                 <div className="section-tag">Who’s here</div>
-                <h2>Who Is At HIVE HQ?</h2>
+                <h2>Who Is @ HIVE HQ?</h2>
 
-                <HiveMapViewer />
+                <button className="hive-map-preview" type="button" onClick={() => setMapOpen(true)}>
+                    <Image
+                        className="hive-map-preview-img"
+                        src="/HIVE.svg"
+                        alt="HIVE map"
+                        width={2115}
+                        height={1432}
+                        sizes="(max-width: 900px) 92vw, 1200px"
+                        priority={false}
+                    />
+                    <div className="hive-map-preview-overlay" aria-hidden="true">
+                        <span className="btn secondary">Explore HIVE</span>
+                    </div>
+                </button>
 
                 <div className="availability-panel">
                     <h3>Check Availability</h3>
@@ -355,6 +440,7 @@ export default function HiveAvailabilitySection() {
                 </div>
             </section>
 
+            <HiveMapModal open={mapOpen} onClose={closeMap} />
             <AvailabilityModal unit={activeUnit} onClose={closeModal} />
         </>
     );

@@ -134,6 +134,7 @@ export default function AdminWorkUnitsPage() {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
+    const [imageFile, setImageFile] = useState(null);
 
     const [showInactive, setShowInactive] = useState(false);
     const [showVacantOnly, setShowVacantOnly] = useState(false);
@@ -214,6 +215,7 @@ export default function AdminWorkUnitsPage() {
         setActiveUnit(null);
         setError('');
         setInfo('');
+        setImageFile(null);
     };
 
     const openCreate = () => {
@@ -233,6 +235,7 @@ export default function AdminWorkUnitsPage() {
         setModalOpen(true);
         setError('');
         setInfo('');
+        setImageFile(null);
     };
 
     const submitCreate = async () => {
@@ -266,6 +269,66 @@ export default function AdminWorkUnitsPage() {
         setModalOpen(true);
         setError('');
         setInfo('');
+        setImageFile(null);
+    };
+
+    const uploadImage = async event => {
+        event.preventDefault();
+        if (!activeUnit?.id) {
+            setError('Save the workspace first before uploading an image.');
+            return;
+        }
+        if (!imageFile) {
+            setError('Choose an image file to upload.');
+            return;
+        }
+        setBusy(true);
+        setError('');
+        setInfo('');
+        try {
+            const form = new FormData();
+            form.set('file', imageFile);
+            const res = await fetch(`/api/admin/work-units/${encodeURIComponent(activeUnit.id)}/image`, {
+                method: 'POST',
+                headers: await authHeader(),
+                body: form
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || 'Failed to upload image.');
+            setInfo('Image uploaded.');
+            setImageFile(null);
+            setActiveUnit(u => (u?.id === activeUnit.id ? { ...u, ...(json?.unit || {}) } : u));
+            await loadUnits();
+        } catch (e) {
+            setError(e?.message || 'Failed to upload image.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const removeImage = async () => {
+        if (!activeUnit?.id) return;
+        const ok = window.confirm('Remove this workspace image?');
+        if (!ok) return;
+        setBusy(true);
+        setError('');
+        setInfo('');
+        try {
+            const res = await fetch(`/api/admin/work-units/${encodeURIComponent(activeUnit.id)}/image`, {
+                method: 'DELETE',
+                headers: await authHeader()
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || 'Failed to remove image.');
+            setInfo('Image removed.');
+            setImageFile(null);
+            setActiveUnit(u => (u?.id === activeUnit.id ? { ...u, ...(json?.unit || {}) } : u));
+            await loadUnits();
+        } catch (e) {
+            setError(e?.message || 'Failed to remove image.');
+        } finally {
+            setBusy(false);
+        }
     };
 
     const submitEdit = async () => {
@@ -448,6 +511,43 @@ export default function AdminWorkUnitsPage() {
                         Active
                     </label>
                 </div>
+
+                {modalMode === 'edit' && activeUnit?.id ? (
+                    <div style={{ marginTop: '1.25rem', display: 'grid', gap: '0.75rem' }}>
+                        <h3 style={{ margin: 0 }}>Workspace image</h3>
+                        <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                            Uploads go to the Supabase Storage bucket <span className="platform-mono">HIVE</span> under{' '}
+                            <span className="platform-mono">work-units/{activeUnit.id}/</span>.
+                        </p>
+
+                        {activeUnit?.image ? (
+                            <div className="platform-actions">
+                                <a className="btn ghost" href={activeUnit.image} target="_blank" rel="noreferrer">
+                                    View image
+                                </a>
+                                <button className="btn ghost" type="button" onClick={removeImage} disabled={busy}>
+                                    Remove
+                                </button>
+                            </div>
+                        ) : (
+                            <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                                No image uploaded yet (public availability uses logo + “Coming soon”).
+                            </p>
+                        )}
+
+                        <form onSubmit={uploadImage} className="platform-actions">
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={e => setImageFile(e.target.files?.[0] || null)}
+                                disabled={busy}
+                            />
+                            <button className="btn secondary" type="submit" disabled={busy || !imageFile}>
+                                Upload image
+                            </button>
+                        </form>
+                    </div>
+                ) : null}
             </Modal>
 
             {loading ? (

@@ -418,7 +418,7 @@ export default function HomePage() {
                     </div>
                 </section>
 
-                {/* <HiveAvailabilitySection /> */}
+                <HiveAvailabilitySection />
 
                 <section id="memberships" className="section memberships">
                     <div className="section-tag">Membership</div>

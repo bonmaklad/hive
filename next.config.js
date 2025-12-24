@@ -26,16 +26,14 @@ const nextConfig = {
                 protocol: 'https',
                 hostname: 'plus.unsplash.com'
             },
-	            ...(supabaseHost
-	                ? [
-	                    {
-	                        protocol: 'https',
-	                        hostname: supabaseHost
-	                    }
-	                ]
-	                : [])
-	        ]
-	    },
+            ...(supabaseHost
+                ? [
+                    { protocol: 'https', hostname: supabaseHost },
+                    { protocol: 'http', hostname: supabaseHost }
+                ]
+                : [])
+        ]
+    },
     async headers() {
         return [
             {
