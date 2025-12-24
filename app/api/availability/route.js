@@ -4,6 +4,9 @@ import { createSupabaseAdminClient } from '../_lib/supabaseAuth';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const DEFAULT_IMAGE_BUCKET = 'HIVE';
+const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7;
+
 function toIsoDate(date) {
     return date.toISOString().slice(0, 10);
 }
@@ -20,6 +23,45 @@ function normalizeUrl(value) {
     const lower = v.toLowerCase();
     if (lower === 'null' || lower === 'undefined') return null;
     return v;
+}
+
+function parseSupabaseStorageObjectUrl(value) {
+    const raw = normalizeUrl(value);
+    if (!raw) return null;
+    if (!raw.startsWith('http://') && !raw.startsWith('https://')) return null;
+
+    let url = null;
+    try {
+        url = new URL(raw);
+    } catch {
+        return null;
+    }
+
+    const pathname = url.pathname || '';
+    const match = pathname.match(/\/storage\/v1\/object\/(public|sign)\/([^/]+)\/(.+)$/);
+    if (!match) return null;
+    const bucket = normalizeUrl(match[2]);
+    let decoded = match[3] || '';
+    try {
+        decoded = decodeURIComponent(decoded);
+    } catch {}
+    const path = normalizeUrl(decoded)?.replace(/^\/+/, '') || null;
+    if (!bucket || !path) return null;
+    return { bucket, path };
+}
+
+function resolveStorageObjectLocation({ storedImage, imageBucket, imagePath }) {
+    const bucket = normalizeUrl(imageBucket) || DEFAULT_IMAGE_BUCKET;
+    const pathFromColumn = normalizeUrl(imagePath)?.replace(/^\/+/, '') || null;
+    if (pathFromColumn) return { bucket, path: pathFromColumn };
+
+    const stored = normalizeUrl(storedImage);
+    if (stored && !stored.startsWith('http://') && !stored.startsWith('https://') && !stored.startsWith('/')) {
+        const path = stored.replace(/^\/+/, '');
+        return path ? { bucket, path } : null;
+    }
+
+    return parseSupabaseStorageObjectUrl(stored);
 }
 
 async function loadWorkUnits(admin) {
@@ -54,43 +96,60 @@ export async function GET() {
             occupantsByUnitId[row.work_unit_id] = (occupantsByUnitId[row.work_unit_id] || 0) + 1;
         }
 
-        const units = (unitsRaw || [])
-            .map(u => {
-                const isActive = u?.is_active ?? true;
-                if (isActive === false) return null;
-                const capacity = toPositiveInt(u?.capacity, 1);
-                const occupiedCount = occupantsByUnitId[u.id] || 0;
-                const slotsRemaining = Math.max(0, capacity - occupiedCount);
-                const displayPrice = u?.price_cents ?? u?.custom_price_cents ?? u?.base_price_cents ?? null;
-                const imageBucket = normalizeUrl(u?.image_bucket);
-                const imagePath = normalizeUrl(u?.image_path);
-                const storedImage = normalizeUrl(u?.image);
-                let imageUrl = storedImage;
+        const units = [];
+        const signTasks = [];
 
-                // If `image` contains a storage path (common in some setups), treat it as a path.
-                if (imageUrl && !imageUrl.startsWith('http://') && !imageUrl.startsWith('https://') && !imageUrl.startsWith('/')) {
-                    const bucket = imageBucket || 'HIVE';
-                    const { data } = admin.storage.from(bucket).getPublicUrl(imageUrl);
-                    imageUrl = normalizeUrl(data?.publicUrl);
-                } else if (!imageUrl && imageBucket && imagePath) {
-                    const { data } = admin.storage.from(imageBucket).getPublicUrl(imagePath);
-                    imageUrl = normalizeUrl(data?.publicUrl);
-                }
+        for (const u of unitsRaw || []) {
+            const isActive = u?.is_active ?? true;
+            if (isActive === false) continue;
+            const capacity = toPositiveInt(u?.capacity, 1);
+            const occupiedCount = occupantsByUnitId[u.id] || 0;
+            const slotsRemaining = Math.max(0, capacity - occupiedCount);
+            const isVacant = slotsRemaining > 0;
+            if (!isVacant) continue;
 
-                const isVacant = slotsRemaining > 0;
-                return isVacant
-                    ? {
-                          id: u?.id,
-                          building: u?.building ?? null,
-                          unit_number: u?.unit_number ?? null,
-                          unit_type: u?.unit_type ?? null,
-                          slots_remaining: slotsRemaining,
-                          display_price_cents: displayPrice,
-                          image_url: imageUrl
-                      }
-                    : null;
-            })
-            .filter(Boolean);
+            const displayPrice = u?.price_cents ?? u?.custom_price_cents ?? u?.base_price_cents ?? null;
+            const imageBucket = normalizeUrl(u?.image_bucket);
+            const imagePath = normalizeUrl(u?.image_path);
+            const storedImage = normalizeUrl(u?.image);
+            const location = resolveStorageObjectLocation({ storedImage, imageBucket, imagePath });
+
+            let imageUrl = storedImage;
+            if (location?.bucket && location?.path) {
+                const { data } = admin.storage.from(location.bucket).getPublicUrl(location.path);
+                imageUrl = normalizeUrl(data?.publicUrl) || imageUrl;
+            }
+
+            const unit = {
+                id: u?.id,
+                building: u?.building ?? null,
+                unit_number: u?.unit_number ?? null,
+                unit_type: u?.unit_type ?? null,
+                slots_remaining: slotsRemaining,
+                display_price_cents: displayPrice,
+                image_url: imageUrl,
+                signed_image_url: null
+            };
+
+            if (location?.bucket && location?.path && typeof admin.storage.from(location.bucket).createSignedUrl === 'function') {
+                signTasks.push({ unit, location });
+            }
+
+            units.push(unit);
+        }
+
+        if (signTasks.length) {
+            await Promise.allSettled(
+                signTasks.map(async ({ unit, location }) => {
+                    try {
+                        const { data, error } = await admin.storage
+                            .from(location.bucket)
+                            .createSignedUrl(location.path, SIGNED_URL_TTL_SECONDS);
+                        if (!error) unit.signed_image_url = normalizeUrl(data?.signedUrl);
+                    } catch {}
+                })
+            );
+        }
 
         const res = NextResponse.json({ units });
         res.headers.set('Cache-Control', 'no-store, max-age=0');

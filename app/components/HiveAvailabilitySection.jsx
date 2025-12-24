@@ -230,8 +230,11 @@ function HiveMapModal({ open, onClose }) {
 
 function AvailabilityModal({ unit, onClose }) {
     const [imageFailed, setImageFailed] = useState(false);
-    const imageUrl = typeof unit?.image_url === 'string' ? unit.image_url.trim() : '';
-    const showImage = Boolean(imageUrl) && !imageFailed;
+    const [activeUrl, setActiveUrl] = useState('');
+    const [triedSigned, setTriedSigned] = useState(false);
+    const primaryUrl = typeof unit?.image_url === 'string' ? unit.image_url.trim() : '';
+    const signedUrl = typeof unit?.signed_image_url === 'string' ? unit.signed_image_url.trim() : '';
+    const showImage = Boolean(activeUrl) && !imageFailed;
 
     useEffect(() => {
         if (!unit) return undefined;
@@ -243,8 +246,11 @@ function AvailabilityModal({ unit, onClose }) {
     }, [unit, onClose]);
 
     useEffect(() => {
+        const initial = primaryUrl || signedUrl || '';
+        setActiveUrl(initial);
         setImageFailed(false);
-    }, [imageUrl]);
+        setTriedSigned(false);
+    }, [primaryUrl, signedUrl]);
 
     if (!unit) return null;
 
@@ -275,12 +281,21 @@ function AvailabilityModal({ unit, onClose }) {
                 {showImage ? (
                     <div className="availability-image" aria-label={`Image for ${title}`}>
                         <Image
-                            src={imageUrl}
+                            src={activeUrl}
                             alt={`${title} workspace`}
                             fill
+                            unoptimized
                             sizes="(max-width: 900px) 92vw, 860px"
                             style={{ objectFit: 'cover' }}
-                            onError={() => setImageFailed(true)}
+                            referrerPolicy="no-referrer"
+                            onError={() => {
+                                if (!triedSigned && signedUrl && activeUrl !== signedUrl) {
+                                    setTriedSigned(true);
+                                    setActiveUrl(signedUrl);
+                                    return;
+                                }
+                                setImageFailed(true);
+                            }}
                         />
                     </div>
                 ) : (
@@ -360,7 +375,7 @@ export default function HiveAvailabilitySection() {
             });
     }, [units, filter.unitTypes]);
 
-    return (
+    return ( 
         <>
             <section id="availability" className="section availability">
                 <div className="section-tag">Who’s here</div>

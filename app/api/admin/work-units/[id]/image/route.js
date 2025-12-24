@@ -11,6 +11,21 @@ function safeText(value, limit = 400) {
     return v.slice(0, limit);
 }
 
+function guessContentType({ fileType, filename }) {
+    const type = safeText(fileType, 100);
+    if (type && type.startsWith('image/')) return type;
+    const name = safeText(filename, 200).toLowerCase();
+    const ext = name.includes('.') ? name.split('.').pop() : '';
+    if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+    if (ext === 'png') return 'image/png';
+    if (ext === 'webp') return 'image/webp';
+    if (ext === 'gif') return 'image/gif';
+    if (ext === 'svg') return 'image/svg+xml';
+    if (ext === 'avif') return 'image/avif';
+    if (ext === 'heic') return 'image/heic';
+    return 'application/octet-stream';
+}
+
 function sanitizeFilename(name) {
     const base = safeText(name, 140);
     if (!base) return 'image';
@@ -30,6 +45,45 @@ function isMissingColumnError(err, columnName) {
     const mentionsColumn = msg.includes(`'${col}'`) || msg.includes(`"${col}"`) || msg.includes(`.${col}`) || msg.includes(` ${col} `);
     if (!mentionsColumn) return false;
     return msg.includes('does not exist') || msg.includes('schema cache');
+}
+
+function parseStorageObjectLocation(value) {
+    const raw = safeText(value, 2000);
+    if (!raw) return null;
+
+    // Storage path only (e.g. "work-units/<id>/<file>.jpg")
+    if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+        const pathOnly = raw.replace(/^\/+/, '');
+        if (!pathOnly) return null;
+        return { bucket: BUCKET, path: pathOnly };
+    }
+
+    let url = null;
+    try {
+        url = new URL(raw);
+    } catch {
+        return null;
+    }
+
+    const pathname = url.pathname || '';
+    const match = pathname.match(/\/storage\/v1\/object\/(public|sign)\/([^/]+)\/(.+)$/);
+    if (!match) return null;
+
+    const bucket = safeText(match[2], 200);
+    let decoded = match[3] || '';
+    try {
+        decoded = decodeURIComponent(decoded);
+    } catch {}
+    const path = safeText(decoded, 2000).replace(/^\/+/, '');
+    if (!bucket || !path) return null;
+    return { bucket, path };
+}
+
+function resolveExistingObjectLocation(existing) {
+    const bucket = safeText(existing?.image_bucket, 200);
+    const path = safeText(existing?.image_path, 2000).replace(/^\/+/, '');
+    if (path) return { bucket: bucket || BUCKET, path };
+    return parseStorageObjectLocation(existing?.image) || null;
 }
 
 async function ensureBucket(admin) {
@@ -55,6 +109,11 @@ async function ensureBucket(admin) {
         const { error: createError } = await admin.storage.createBucket(BUCKET, { public: true });
         if (createError && !String(createError?.message || '').includes('already exists')) {
             return { ok: false, error: createError.message };
+        }
+        if (typeof admin.storage.updateBucket === 'function') {
+            try {
+                await admin.storage.updateBucket(BUCKET, { public: true });
+            } catch {}
         }
         return { ok: true };
     } catch (e) {
@@ -117,15 +176,17 @@ export async function POST(request, { params }) {
     if (!file) return NextResponse.json({ error: 'Provide a file to upload.' }, { status: 400 });
 
     const existing = await getExistingImage(guard.admin, id);
+    const existingLocation = resolveExistingObjectLocation(existing);
 
     const ab = await file.arrayBuffer();
     const safeName = sanitizeFilename(file?.name || 'image');
     const uploadId = crypto.randomUUID();
     const path = `work-units/${id}/${uploadId}-${safeName}`;
+    const contentType = guessContentType({ fileType: file?.type, filename: safeName });
 
     const { error: upErr } = await guard.admin.storage
         .from(BUCKET)
-        .upload(path, ab, { contentType: file?.type || 'application/octet-stream', upsert: true });
+        .upload(path, ab, { contentType, upsert: true });
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
 
     const { data: pub } = guard.admin.storage.from(BUCKET).getPublicUrl(path);
@@ -138,9 +199,9 @@ export async function POST(request, { params }) {
         updates: { image: publicUrl, image_bucket: BUCKET, image_path: path }
     });
 
-    if (existing?.image_bucket && existing?.image_path) {
+    if (existingLocation?.bucket && existingLocation?.path) {
         try {
-            await guard.admin.storage.from(existing.image_bucket).remove([existing.image_path]);
+            await guard.admin.storage.from(existingLocation.bucket).remove([existingLocation.path]);
         } catch {}
     }
 
@@ -155,18 +216,18 @@ export async function DELETE(request, { params }) {
     if (!id) return NextResponse.json({ error: 'Missing work unit id.' }, { status: 400 });
 
     const existing = await getExistingImage(guard.admin, id);
+    const existingLocation = resolveExistingObjectLocation(existing);
     const updated = await updateWorkUnitImageColumns({
         admin: guard.admin,
         id,
         updates: { image: null, image_bucket: null, image_path: null }
     });
 
-    if (existing?.image_bucket && existing?.image_path) {
+    if (existingLocation?.bucket && existingLocation?.path) {
         try {
-            await guard.admin.storage.from(existing.image_bucket).remove([existing.image_path]);
+            await guard.admin.storage.from(existingLocation.bucket).remove([existingLocation.path]);
         } catch {}
     }
 
     return NextResponse.json({ ok: true, unit: updated });
 }
-
