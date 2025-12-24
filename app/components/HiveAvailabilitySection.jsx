@@ -18,11 +18,9 @@ function formatUnitType(value) {
     const v = typeof value === 'string' ? value.trim() : '';
     if (!v) return '—';
     const map = {
-        premium_office: 'premium_office',
-        private_office: 'private_office',
-        small_office: 'small_office',
-        desk: 'desk',
-        desk_pod: 'desk_pod'
+        premium_office: 'Premium Office',
+        private_office: 'Private Office',
+        desk: 'Desk'
     };
     return map[v] || v;
 }

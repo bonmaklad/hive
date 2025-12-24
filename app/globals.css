@@ -335,6 +335,12 @@ main {
     contain-intrinsic-size: 1000px;
 }
 
+.section.horizontal-scroll {
+    content-visibility: visible;
+    contain: none;
+    contain-intrinsic-size: auto;
+}
+
 .section:nth-of-type(even) {
     background: rgba(255, 255, 255, 0.02);
 }
@@ -658,14 +664,32 @@ main {
 .horizontal-scroll {
     position: relative;
     padding: 0; /* full-bleed; height will be expanded dynamically */
+    min-height: 100vh;
 }
 
 .horizontal-scroll .pin {
-    position: sticky;
-    top: 0;
+    position: relative;
     height: 100vh;
     overflow: hidden; /* hide native scrollbar */
     width: 100vw; /* no margins around the scroll area */
+}
+
+.horizontal-scroll.is-fixed .pin {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 5;
+}
+
+.horizontal-scroll.is-end .pin {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: 1;
 }
 
 .horizontal-scroll .track {
@@ -675,6 +699,12 @@ main {
     height: 100%;
     will-change: transform;
     padding: 25vh 0; /* 25% top/bottom; no side padding */
+}
+
+@media (min-width: 900px) {
+    .horizontal-scroll .track {
+        padding-inline: clamp(1rem, 4vw, 5rem);
+    }
 }
 
 .horizontal-scroll .hex {

@@ -69,10 +69,11 @@ export default function HomePageEffects() {
             section.style.height = `${range + vh()}px`;
         };
 
-        const onScroll = () => {
+        const update = () => {
             const rect = section.getBoundingClientRect();
             const start = rect.top;
-            const max = section.offsetHeight - vh();
+            const viewHeight = vh();
+            const max = section.offsetHeight - viewHeight;
             const y = Math.min(Math.max(-start, 0), max);
             const total = track.scrollWidth;
             const buffer = 32;
@@ -80,20 +81,39 @@ export default function HomePageEffects() {
             const progress = max > 0 ? y / max : 0;
             const x = -progress * range;
             track.style.transform = `translate3d(${x}px, 0, 0)`;
+
+            const pinned = rect.top <= 0 && rect.bottom >= viewHeight;
+            const ended = rect.bottom < viewHeight;
+            section.classList.toggle('is-fixed', pinned);
+            section.classList.toggle('is-end', ended);
+        };
+
+        let raf = null;
+        const onScroll = () => {
+            if (raf) return;
+            raf = window.requestAnimationFrame(() => {
+                raf = null;
+                update();
+            });
         };
 
         const onResize = () => {
             setup();
-            onScroll();
+            update();
         };
 
         setup();
-        onScroll();
+        update();
         window.addEventListener('scroll', onScroll, { passive: true });
         window.addEventListener('resize', onResize);
+        window.addEventListener('load', onResize);
         return () => {
+            if (raf) window.cancelAnimationFrame(raf);
             window.removeEventListener('scroll', onScroll);
             window.removeEventListener('resize', onResize);
+            window.removeEventListener('load', onResize);
+            section.classList.remove('is-fixed');
+            section.classList.remove('is-end');
         };
     }, []);
 
@@ -118,4 +138,3 @@ export default function HomePageEffects() {
 
     return null;
 }
-
