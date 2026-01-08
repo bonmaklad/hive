@@ -232,6 +232,7 @@ function AvailabilityModal({ unit, onClose }) {
     const [imageFailed, setImageFailed] = useState(false);
     const [activeUrl, setActiveUrl] = useState('');
     const [triedSigned, setTriedSigned] = useState(false);
+    const [loading, setLoading] = useState(false);
     const primaryUrl = typeof unit?.image_url === 'string' ? unit.image_url.trim() : '';
     const signedUrl = typeof unit?.signed_image_url === 'string' ? unit.signed_image_url.trim() : '';
     const showImage = Boolean(activeUrl) && !imageFailed;
@@ -246,10 +247,11 @@ function AvailabilityModal({ unit, onClose }) {
     }, [unit, onClose]);
 
     useEffect(() => {
-        const initial = primaryUrl || signedUrl || '';
+        const initial = signedUrl || primaryUrl || '';
         setActiveUrl(initial);
         setImageFailed(false);
         setTriedSigned(false);
+        setLoading(Boolean(initial));
     }, [primaryUrl, signedUrl]);
 
     if (!unit) return null;
@@ -288,15 +290,23 @@ function AvailabilityModal({ unit, onClose }) {
                             sizes="(max-width: 900px) 92vw, 860px"
                             style={{ objectFit: 'cover' }}
                             referrerPolicy="no-referrer"
+                            onLoadingComplete={() => setLoading(false)}
                             onError={() => {
                                 if (!triedSigned && signedUrl && activeUrl !== signedUrl) {
                                     setTriedSigned(true);
                                     setActiveUrl(signedUrl);
+                                    setLoading(true);
                                     return;
                                 }
+                                setLoading(false);
                                 setImageFailed(true);
                             }}
                         />
+                        {loading ? (
+                            <div className="availability-image-loading" aria-label="Loading image">
+                                <div className="availability-spinner" aria-hidden="true" />
+                            </div>
+                        ) : null}
                     </div>
                 ) : (
                     <div className="availability-image-placeholder" aria-hidden="true">

@@ -26,6 +26,14 @@ const nextConfig = {
                 protocol: 'https',
                 hostname: 'plus.unsplash.com'
             },
+            {
+                protocol: 'https',
+                hostname: 'supabase.hivehq.nz'
+            },
+            {
+                protocol: 'http',
+                hostname: 'supabase.hivehq.nz'
+            },
             ...(supabaseHost
                 ? [
                     { protocol: 'https', hostname: supabaseHost },
