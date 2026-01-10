@@ -60,6 +60,8 @@ export default function NewSiteForm() {
     const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
     const [repo, setRepo] = useState('');
+    const [name, setName] = useState('');
+    const [nameTouched, setNameTouched] = useState(false);
     const [framework, setFramework] = useState('next');
     const [domain, setDomain] = useState('');
     const [busy, setBusy] = useState(false);
@@ -83,7 +85,9 @@ export default function NewSiteForm() {
     useEffect(() => {
         try {
             const existing = window.localStorage.getItem('github_installation_new_site') || '';
-            if (existing && !installationId) setInstallationId(existing);
+            const latest = window.localStorage.getItem('github_installation_latest') || '';
+            const found = existing || latest;
+            if (found && !installationId) setInstallationId(found);
         } catch {
             // ignore
         }
@@ -141,10 +145,12 @@ export default function NewSiteForm() {
         setError('');
 
         try {
+            const trimmedName = String(name || '').trim();
             const normalizedRepo = normalizeRepo(repo);
             const normalizedDomain = normalizeDomain(domain);
             const normalizedFramework = String(framework || '').trim();
 
+            if (!trimmedName) throw new Error('Name is required.');
             if (!normalizedRepo) throw new Error('Repo must be in the form owner/repo.');
             if (!normalizedDomain) throw new Error('Domain must be a hostname like example.com.');
             if (!['next', 'gatsby', 'static', 'node', 'vue'].includes(normalizedFramework)) {
@@ -157,6 +163,7 @@ export default function NewSiteForm() {
             const { data, error } = await supabase
                 .from('sites')
                 .insert({
+                    name: trimmedName,
                     owner_id: authData.user.id,
                     repo: normalizedRepo,
                     framework: normalizedFramework,
@@ -199,6 +206,23 @@ export default function NewSiteForm() {
                     />
                 </label>
 
+                <label>
+                    Name
+                    <input
+                        type="text"
+                        name="name"
+                        placeholder="Site name"
+                        autoComplete="off"
+                        required
+                        value={name}
+                        onChange={e => {
+                            setNameTouched(true);
+                            setName(e.target.value);
+                        }}
+                        disabled={busy}
+                    />
+                </label>
+
                 <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr', alignItems: 'end' }}>
                     <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.2fr)' }}>
                         <div>
@@ -234,7 +258,17 @@ export default function NewSiteForm() {
                             autoComplete="off"
                             required
                             value={repo}
-                            onChange={e => setRepo(e.target.value)}
+                            onChange={e => {
+                                const nextRepo = e.target.value;
+                                setRepo(nextRepo);
+                                if (!nameTouched) {
+                                    const normalized = normalizeRepo(nextRepo);
+                                    if (normalized) {
+                                        const repoName = normalized.split('/')[1] || '';
+                                        if (repoName) setName(repoName);
+                                    }
+                                }
+                            }}
                             disabled={busy}
                         />
                     </label>
@@ -299,7 +333,9 @@ export default function NewSiteForm() {
                                     setShowGithubModal(false);
                                     try {
                                         const existing = window.localStorage.getItem('github_installation_new_site') || '';
-                                        if (existing) setInstallationId(existing);
+                                        const latest = window.localStorage.getItem('github_installation_latest') || '';
+                                        const found = existing || latest;
+                                        if (found) setInstallationId(found);
                                     } catch {
                                         // ignore
                                     }
@@ -373,16 +409,20 @@ export default function NewSiteForm() {
                                                     <td className="platform-mono">{r.full_name}</td>
                                                     <td className="platform-mono">{r.default_branch}</td>
                                                     <td style={{ width: 1 }}>
-                                                        <button
-                                                            className="btn primary"
-                                                            type="button"
-                                                            onClick={() => {
+                                                            <button
+                                                                className="btn primary"
+                                                                type="button"
+                                                                onClick={() => {
                                                                 setRepo(r.full_name);
+                                                                if (!nameTouched) {
+                                                                    const repoName = String(r.full_name || '').split('/')[1] || '';
+                                                                    if (repoName) setName(repoName);
+                                                                }
                                                                 setShowRepoModal(false);
-                                                            }}
-                                                        >
-                                                            Use this repo
-                                                        </button>
+                                                                }}
+                                                            >
+                                                                Use this repo
+                                                            </button>
                                                     </td>
                                                 </tr>
                                             ))
