@@ -166,18 +166,37 @@ export default function PlatformDocsPage() {
                         </p>
                         <h3>Custom domains</h3>
                         <p className="platform-subtitle" style={{ marginTop: 0 }}>
-                            You can attach a custom domain by pointing DNS to the tunnel and then verifying in the platform.
+                            Custom domains must be set up by the HIVE HQ team. Raise a ticket and we’ll configure it with Surge.
                         </p>
                         <ol>
                             <li>
-                                Create a <span className="platform-mono">CNAME</span> record for your domain pointing to{' '}
-                                <span className="platform-mono">92967c7e-6463-4353-a331-ebe0c43af013.cfargotunnel.com</span>.
+                                Update your domain’s nameservers (not Cloudflare tunnel DNS) to:
+                                <ul>
+                                    <li>
+                                        <span className="platform-mono">dean.ns.cloudflare.com</span>
+                                    </li>
+                                    <li>
+                                        <span className="platform-mono">perla.ns.cloudflare.com</span>
+                                    </li>
+                                </ul>
                             </li>
                             <li>
-                                If your DNS provider doesn’t allow a root/apex CNAME, use an <span className="platform-mono">ALIAS/ANAME</span> at the root, or point <span className="platform-mono">www</span> to the tunnel and redirect the root domain.
+                                Once DNS is updated, raise a ticket with your domain name and the site you want it attached to.
+                            </li>
+                        </ol>
+                        <h3>Multiple sites + GitHub app</h3>
+                        <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                            The first site usually attaches automatically after you install the GitHub app. For additional sites, you may need to supply the same installation ID.
+                        </p>
+                        <ol>
+                            <li>
+                                Open <span className="platform-mono">Connect GitHub</span> and install the app once (choose <span className="platform-mono">All repositories</span>).
                             </li>
                             <li>
-                                Set <span className="platform-mono">www</span> to redirect to the root (or keep <span className="platform-mono">www</span> as the canonical host if your DNS requires it).
+                                For new sites, click <span className="platform-mono">Choose repo</span>. If repositories don’t load, paste your installation ID into the field provided.
+                            </li>
+                            <li>
+                                You can find the installation ID in GitHub under <span className="platform-mono">Settings → Installed GitHub Apps → Hive Deploy</span> (the URL ends in <span className="platform-mono">/installations/&lt;id&gt;</span>).
                             </li>
                         </ol>
                     </>

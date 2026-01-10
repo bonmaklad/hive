@@ -14,6 +14,17 @@ function formatTimestamp(value) {
     return date.toLocaleString();
 }
 
+function deriveReasonFromLogs(logs) {
+    if (!Array.isArray(logs) || !logs.length) return '';
+    const errorLine =
+        logs.find(entry => String(entry?.stream || '').toLowerCase() === 'stderr') ||
+        logs.find(entry => /error|failed|exception|fatal|panic/i.test(entry?.message || ''));
+    if (!errorLine?.message) return '';
+    const message = String(errorLine.message).trim();
+    if (!message) return '';
+    return message.length > 220 ? `${message.slice(0, 220)}…` : message;
+}
+
 export default function SiteDetailPage({ params }) {
     const supabase = useMemo(() => createSupabaseBrowserClient(), []);
     const [site, setSite] = useState(null);
@@ -22,6 +33,11 @@ export default function SiteDetailPage({ params }) {
     const [depDetail, setDepDetail] = useState(null);
     const [depDetailLoading, setDepDetailLoading] = useState(false);
     const [depDetailError, setDepDetailError] = useState('');
+    const [depLogs, setDepLogs] = useState([]);
+    const [depLogsLoading, setDepLogsLoading] = useState(false);
+    const [depLogsError, setDepLogsError] = useState('');
+    const [logFilter, setLogFilter] = useState('all');
+    const [logQuery, setLogQuery] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -245,28 +261,76 @@ export default function SiteDetailPage({ params }) {
             setDepDetailError('');
             setDepDetail(null);
             setDepDetailLoading(true);
+            setDepLogsError('');
+            setDepLogs([]);
+            setDepLogsLoading(true);
+            setLogFilter('all');
+            setLogQuery('');
             setDepModalOpen(true);
 
             // Try to fetch rich failure information for this deployment
-            const { data, error } = await supabase
-                .from('deployments')
-                .select('*')
-                .eq('id', depId)
-                .maybeSingle();
+            const [detailResponse, logsResponse] = await Promise.all([
+                supabase.from('deployments').select('*').eq('id', depId).maybeSingle(),
+                supabase
+                    .from('deployment_logs')
+                    .select('id, stream, message, created_at')
+                    .eq('deployment_id', depId)
+                    .order('created_at', { ascending: true })
+            ]);
 
-            if (error) {
-                setDepDetailError(error.message);
+            if (detailResponse.error) {
+                setDepDetailError(detailResponse.error.message);
                 setDepDetail(null);
             } else {
-                setDepDetail(data || null);
+                setDepDetail(detailResponse.data || null);
+            }
+
+            if (logsResponse.error) {
+                setDepLogsError(logsResponse.error.message);
+                setDepLogs([]);
+            } else {
+                setDepLogs(Array.isArray(logsResponse.data) ? logsResponse.data : []);
             }
         } catch (e) {
             setDepDetailError(e?.message || 'Could not load deployment details.');
             setDepDetail(null);
+            setDepLogsError('Could not load deployment logs.');
+            setDepLogs([]);
         } finally {
             setDepDetailLoading(false);
+            setDepLogsLoading(false);
         }
     }
+
+    const logCounts = useMemo(() => {
+        const counts = { all: 0, stdout: 0, stderr: 0, system: 0 };
+        for (const log of depLogs) {
+            const stream = ['stdout', 'stderr', 'system'].includes(log?.stream) ? log.stream : 'system';
+            counts.all += 1;
+            counts[stream] += 1;
+        }
+        return counts;
+    }, [depLogs]);
+
+    const filteredLogs = useMemo(() => {
+        const q = logQuery.trim().toLowerCase();
+        return depLogs.filter(log => {
+            const stream = ['stdout', 'stderr', 'system'].includes(log?.stream) ? log.stream : 'system';
+            if (logFilter !== 'all' && stream !== logFilter) return false;
+            if (q && !String(log?.message || '').toLowerCase().includes(q)) return false;
+            return true;
+        });
+    }, [depLogs, logFilter, logQuery]);
+
+    const derivedReason = useMemo(() => deriveReasonFromLogs(depLogs), [depLogs]);
+    const reasonValue = depDetail?.error_reason || depDetail?.error || depDetail?.error_message || derivedReason || '—';
+    const reasonFromLogs = !depDetail?.error_reason && !depDetail?.error && !depDetail?.error_message && Boolean(derivedReason);
+    const logFilters = [
+        { id: 'all', label: `All (${logCounts.all})` },
+        { id: 'stdout', label: `Stdout (${logCounts.stdout})` },
+        { id: 'stderr', label: `Stderr (${logCounts.stderr})` },
+        { id: 'system', label: `System (${logCounts.system})` }
+    ];
 
     return (
         <main className="platform-main">
@@ -483,17 +547,13 @@ export default function SiteDetailPage({ params }) {
                                             </td>
                                             <td className="platform-mono">{formatTimestamp(dep.created_at)}</td>
                                             <td style={{ width: 1 }}>
-                                                {String(dep.status).toLowerCase() === 'failed' || String(dep.status).toLowerCase() === 'error' ? (
-                                                    <button
-                                                        className="btn secondary"
-                                                        type="button"
-                                                        onClick={() => viewDeploymentDetails(dep.id)}
-                                                    >
-                                                        View details
-                                                    </button>
-                                                ) : (
-                                                    <span className="platform-subtitle">—</span>
-                                                )}
+                                                <button
+                                                    className="btn secondary"
+                                                    type="button"
+                                                    onClick={() => viewDeploymentDetails(dep.id)}
+                                                >
+                                                    View details
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
@@ -704,44 +764,111 @@ export default function SiteDetailPage({ params }) {
                 >
                     <div className="platform-card" style={{ width: 'min(800px, 95vw)', maxHeight: '90vh', overflow: 'auto' }}>
                         <h2 id="dep-modal-title" style={{ marginTop: 0 }}>Deployment details</h2>
-                        {depDetailLoading ? (
+                        {depDetailLoading && depLogsLoading ? (
                             <p className="platform-subtitle">Loading…</p>
-                        ) : depDetailError ? (
-                            <p className="platform-message error">{depDetailError}</p>
-                        ) : depDetail ? (
+                        ) : (
                             <>
+                                {depDetailError && <p className="platform-message error">{depDetailError}</p>}
+
                                 <div className="platform-table-wrap">
                                     <table className="platform-table">
                                         <tbody>
                                             <tr>
                                                 <th>Status</th>
-                                                <td className="platform-mono">{depDetail.status || '—'}</td>
+                                                <td className="platform-mono">{depDetail?.status || '—'}</td>
                                             </tr>
                                             <tr>
                                                 <th>Created at</th>
-                                                <td className="platform-mono">{formatTimestamp(depDetail.created_at)}</td>
+                                                <td className="platform-mono">
+                                                    {depDetail?.created_at ? formatTimestamp(depDetail.created_at) : '—'}
+                                                </td>
                                             </tr>
                                             <tr>
                                                 <th>Reason</th>
-                                                <td className="platform-mono">{depDetail.error_reason || depDetail.error || depDetail.error_message || '—'}</td>
+                                                <td className="platform-mono">{reasonValue}</td>
                                             </tr>
                                         </tbody>
                                     </table>
                                 </div>
-                                {(depDetail.logs || depDetail.output || depDetail.details) && (
+                                {reasonFromLogs && <p className="platform-subtitle">Reason derived from logs.</p>}
+
+                                {depLogsLoading ? (
+                                    <p className="platform-subtitle" style={{ marginTop: '1rem' }}>Loading logs…</p>
+                                ) : depLogsError ? (
+                                    <p className="platform-message error" style={{ marginTop: '1rem' }}>{depLogsError}</p>
+                                ) : depLogs.length ? (
+                                    <div className="deployment-log-panel">
+                                        <div className="deployment-log-header">
+                                            <div>
+                                                <h3 style={{ marginTop: 0 }}>Logs</h3>
+                                                <p className="platform-subtitle">
+                                                    Showing {filteredLogs.length} of {depLogs.length} lines.
+                                                </p>
+                                            </div>
+                                            <div className="deployment-log-controls">
+                                                <div className="deployment-log-filters">
+                                                    {logFilters.map(filter => (
+                                                        <button
+                                                            key={filter.id}
+                                                            type="button"
+                                                            className={`deployment-log-filter${logFilter === filter.id ? ' active' : ''}`}
+                                                            onClick={() => setLogFilter(filter.id)}
+                                                        >
+                                                            {filter.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <input
+                                                    className="table-input platform-mono"
+                                                    placeholder="Filter logs…"
+                                                    value={logQuery}
+                                                    onChange={e => setLogQuery(e.target.value)}
+                                                    style={{ maxWidth: 260 }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="deployment-log-body">
+                                            {filteredLogs.length ? (
+                                                filteredLogs.map(log => {
+                                                    const stream = ['stdout', 'stderr', 'system'].includes(log?.stream)
+                                                        ? log.stream
+                                                        : 'system';
+                                                    const badgeClass =
+                                                        stream === 'stderr' ? 'badge error' : stream === 'system' ? 'badge pending' : 'badge neutral';
+                                                    return (
+                                                        <div className="deployment-log-line" key={log.id}>
+                                                            <div className="deployment-log-meta">
+                                                                <span className={badgeClass}>{stream}</span>
+                                                                <span className="deployment-log-time">{formatTimestamp(log.created_at)}</span>
+                                                            </div>
+                                                            <div className="deployment-log-message">{String(log.message || '')}</div>
+                                                        </div>
+                                                    );
+                                                })
+                                            ) : (
+                                                <div className="deployment-log-empty">No logs match the current filters.</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="platform-subtitle" style={{ marginTop: '1rem' }}>
+                                        No logs have been collected for this deployment.
+                                    </p>
+                                )}
+
+                                {(depDetail?.logs || depDetail?.output || depDetail?.details) && (
                                     <div style={{ marginTop: '1rem' }}>
                                         <h3 style={{ marginTop: 0 }}>Raw details</h3>
-                                        <pre className="platform-mono" style={{ whiteSpace: 'pre-wrap', overflowX: 'auto' }}>
+                                        <pre className="platform-code">
 {JSON.stringify({ logs: depDetail.logs, output: depDetail.output, details: depDetail.details }, null, 2)}
                                         </pre>
                                     </div>
                                 )}
-                                {!depDetail.error && !depDetail.error_message && !depDetail.error_reason && !depDetail.logs && !depDetail.output && !depDetail.details && (
-                                    <p className="platform-subtitle">No failure details were provided for this deployment.</p>
+
+                                {!depDetail && !depLogs.length && !depDetailError && !depLogsError && (
+                                    <p className="platform-subtitle">No details found.</p>
                                 )}
                             </>
-                        ) : (
-                            <p className="platform-subtitle">No details found.</p>
                         )}
 
                         <div className="platform-actions" style={{ marginTop: '1rem' }}>

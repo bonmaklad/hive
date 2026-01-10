@@ -160,11 +160,26 @@ export default function NewSiteForm() {
             const { data: authData, error: authError } = await supabase.auth.getUser();
             if (authError || !authData?.user) throw new Error('You must be signed in to create a site.');
 
+            const { data: tenantLinks, error: tenantError } = await supabase
+                .from('tenant_users')
+                .select('tenant_id, role, created_at')
+                .eq('user_id', authData.user.id)
+                .order('created_at', { ascending: true });
+
+            if (tenantError) throw new Error(tenantError.message);
+            const list = Array.isArray(tenantLinks) ? tenantLinks : [];
+            const owner = list.find(item => item.role === 'owner');
+            const adminRole = list.find(item => item.role === 'admin');
+            const chosen = owner || adminRole || list[0];
+            const tenantId = chosen?.tenant_id || null;
+            if (!tenantId) throw new Error('No tenant membership found.');
+
             const { data, error } = await supabase
                 .from('sites')
                 .insert({
                     name: trimmedName,
                     owner_id: authData.user.id,
+                    tenant_id: tenantId,
                     repo: normalizedRepo,
                     framework: normalizedFramework,
                     domain: normalizedDomain,
