@@ -193,7 +193,7 @@ export default function TenantDirectoryForm() {
                     <div className="directory-logo-row">
                         <div className="directory-logo-preview" aria-hidden="true">
                             {logoUrl ? (
-                                <Image src={logoUrl} alt="" width={96} height={96} sizes="96px" unoptimized />
+                                <Image src={logoUrl} alt="" width={96} height={96} sizes="96px" quality={70} />
                             ) : (
                                 <span>{getInitials(tenant?.name)}</span>
                             )}

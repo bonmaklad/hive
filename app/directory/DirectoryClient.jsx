@@ -115,7 +115,7 @@ export default function DirectoryClient({ tenants = [], error = '', totalCount }
                                                 width={72}
                                                 height={72}
                                                 sizes="72px"
-                                                unoptimized
+                                                quality={60}
                                             />
                                         ) : (
                                             <span>{initials}</span>
