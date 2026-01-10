@@ -184,6 +184,44 @@ export default function PlatformDocsPage() {
                 )
             },
             {
+                id: 'google-tag',
+                label: 'Google tag (analytics)',
+                render: () => (
+                    <>
+                        <h2 style={{ marginTop: 0 }}>Choose how to set up a Google tag</h2>
+                        <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                            Install manually (recommended)
+                        </p>
+                        <p className="platform-subtitle">
+                            Below is the Google tag for this account. Copy and paste it in the code of every page of your website, immediately after the{' '}
+                            <span className="platform-mono">&lt;head&gt;</span> element. Don't add more than one Google tag to each page.
+                        </p>
+                        <pre className="platform-code">{`<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Y3TBH9LDL0"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-Y3TBH9LDL0');
+</script>`}</pre>
+                        <h3>Use Google Tag Manager</h3>
+                        <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                            For additional features including multiple tag management and enterprise workflows, install and manage with Google Tag Manager.{' '}
+                            <a className="platform-link" href="https://tagmanager.google.com/" target="_blank" rel="noreferrer">
+                                Learn more about Google Tag Manager
+                            </a>
+                            .
+                        </p>
+                        <h3>EEA consent mode</h3>
+                        <p className="platform-subtitle" style={{ marginTop: 0 }}>
+                            If you have end users in the European Economic Area (EEA), set up consent mode so that you can continue to benefit from ads
+                            personalization and measurement.
+                        </p>
+                    </>
+                )
+            },
+            {
                 id: 'benefits',
                 label: 'Membership benefits (coming soon)',
                 render: () => (

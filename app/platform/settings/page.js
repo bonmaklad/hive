@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import UpdatePasswordForm from './update-password-form';
 import ProfileForm from './profile-form';
+import TenantDirectoryForm from './tenant-directory-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,6 +94,8 @@ export default function PlatformSettingsPage() {
                 <p className="platform-subtitle">Set your name for chat and tickets.</p>
                 <ProfileForm user={user} onUpdated={refreshUser} />
             </div>
+
+            <TenantDirectoryForm />
 
             <div className="platform-card" style={{ marginTop: '1.5rem' }}>
                 <h2>Password</h2>

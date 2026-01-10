@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 const FILTERS = [
     { id: 'desk', label: 'Desk', unitTypes: ['desk', 'desk_pod'] },
@@ -40,6 +41,28 @@ function HiveMapViewer() {
     const [isDragging, setIsDragging] = useState(false);
     const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
     const aspectRatio = 1432 / 2115.21;
+    const MAP_W = 2115.21;
+    const MAP_H = 1432;
+    const [svgMarkup, setSvgMarkup] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const res = await fetch('/HIVE.svg', { cache: 'force-cache' });
+                let text = await res.text();
+                // strip XML prolog which is invalid in HTML innerHTML context
+                text = text.replace(/<\?xml[^>]*\?>/i, '');
+                if (!cancelled) setSvgMarkup(text);
+            } catch (_) {
+                if (!cancelled) setSvgMarkup('');
+            }
+        };
+        load();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const zoomTo = (nextScale, origin) => {
         setTransform(prev => {
@@ -89,14 +112,10 @@ function HiveMapViewer() {
             const width = el.clientWidth || 0;
             const height = el.clientHeight || 0;
             if (!width || !height) return;
-            const contentWidth = Math.min(1200, width);
-            const contentHeight = contentWidth * aspectRatio;
-            setTransform(prev => ({
-                ...prev,
-                scale: 1,
-                x: Math.round((width - contentWidth) / 2),
-                y: Math.round((height - contentHeight) / 2)
-            }));
+            const scaleFit = Math.max(0.1, Math.min(width / MAP_W, height / MAP_H));
+            const x = Math.round((width - MAP_W * scaleFit) / 2);
+            const y = Math.round((height - MAP_H * scaleFit) / 2);
+            setTransform(prev => ({ ...prev, scaleFit, scale: scaleFit, x, y }));
         };
 
         const onResize = () => {
@@ -136,7 +155,20 @@ function HiveMapViewer() {
         }
     };
 
-    const reset = () => setTransform({ scale: 1, x: 0, y: 0 });
+    const reset = () => {
+        const el = containerRef.current;
+        if (!el) return;
+        const width = el.clientWidth || 0;
+        const height = el.clientHeight || 0;
+        if (!width || !height) {
+            setTransform({ scale: 1, x: 0, y: 0 });
+            return;
+        }
+        const scaleFit = Math.max(0.1, Math.min(width / MAP_W, height / MAP_H));
+        const x = Math.round((width - MAP_W * scaleFit) / 2);
+        const y = Math.round((height - MAP_H * scaleFit) / 2);
+        setTransform({ scale: scaleFit, x, y });
+    };
 
     return (
         <div className="hive-map">
@@ -155,18 +187,9 @@ function HiveMapViewer() {
                     style={{
                         transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`
                     }}
-                >
-                    <Image
-                        className="hive-map-img"
-                        src="/HIVE.svg"
-                        alt="HIVE map"
-                        width={2115}
-                        height={1432}
-                        draggable={false}
-                        sizes="(max-width: 900px) 92vw, 1200px"
-                        priority={false}
-                    />
-                </div>
+                    aria-hidden="true"
+                    dangerouslySetInnerHTML={svgMarkup ? { __html: svgMarkup } : undefined}
+                />
                 {!hasInteracted ? (
                     <div className="hive-map-hint">
                         Click and drag to pan. Scroll to zoom.
@@ -390,6 +413,12 @@ export default function HiveAvailabilitySection() {
             <section id="availability" className="section availability">
                 <div className="section-tag">Who’s here</div>
                 <h2>Who Is @ HIVE HQ?</h2>
+                <div className="availability-directory-cta">
+                    <p>Meet the founders and teams building inside HIVE HQ.</p>
+                    <Link className="btn secondary" href="/directory">
+                        Explore HIVE Directory
+                    </Link>
+                </div>
 
                 <button className="hive-map-preview" type="button" onClick={() => setMapOpen(true)}>
                     <Image

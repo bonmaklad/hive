@@ -464,6 +464,20 @@ main {
     max-width: 62ch;
 }
 
+.availability-directory-cta {
+    margin: 1rem 0 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.availability-directory-cta p {
+    margin: 0;
+    color: var(--muted);
+    max-width: 46ch;
+}
+
 .hive-map-preview {
     position: relative;
     border-radius: 24px;
@@ -538,9 +552,15 @@ main {
     position: absolute;
     top: 0;
     left: 0;
-    width: min(1200px, 100%);
+    width: 2115.21px; /* match SVG viewBox width for crisp scaling */
     transform-origin: 0 0;
     will-change: transform;
+}
+
+.hive-map-content svg {
+    width: 100%;
+    height: auto;
+    display: block;
 }
 
 .hive-map-img {
@@ -658,6 +678,334 @@ main {
 @keyframes availabilitySpin {
     to {
         transform: rotate(360deg);
+    }
+}
+
+/* Directory page */
+.directory-hero {
+    min-height: 70vh;
+    background: linear-gradient(140deg, rgba(10, 14, 20, 0.96), rgba(22, 42, 52, 0.88));
+}
+
+.directory-hero::before {
+    background: linear-gradient(120deg, rgba(9, 13, 18, 0.85), rgba(25, 50, 60, 0.7));
+}
+
+.directory-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 20% 20%, rgba(111, 255, 182, 0.18), transparent 45%),
+        radial-gradient(circle at 80% 10%, rgba(76, 201, 240, 0.12), transparent 45%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.directory-hero > :not(.hero-bg) {
+    position: relative;
+    z-index: 2;
+}
+
+.directory-hero-content {
+    align-items: center;
+}
+
+.directory-hero-copy {
+    max-width: 560px;
+}
+
+.directory-hero-media {
+    align-items: stretch;
+}
+
+.directory-hero-card {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.directory-hero-card p {
+    margin: 0;
+    color: var(--muted);
+}
+
+.directory-section {
+    position: relative;
+}
+
+.directory-header {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+}
+
+.directory-count {
+    padding: 1rem 1.5rem;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(13, 17, 22, 0.7);
+    text-align: center;
+    min-width: 160px;
+}
+
+.directory-count span {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent-contrast);
+}
+
+.directory-count p {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+}
+
+.directory-panel {
+    display: grid;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.directory-controls {
+    display: grid;
+    gap: 1rem;
+}
+
+.directory-search {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(13, 17, 22, 0.7);
+    color: var(--text);
+}
+
+.directory-search input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 1rem;
+}
+
+.directory-search input::placeholder {
+    color: var(--muted);
+}
+
+.directory-search input:focus-visible {
+    outline: none;
+}
+
+.directory-results {
+    color: var(--muted);
+}
+
+.directory-results p {
+    margin: 0;
+}
+
+.directory-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 820px) {
+    .directory-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.directory-card {
+    position: relative;
+    border-radius: 24px;
+    padding: 1.5rem;
+    background: rgba(13, 17, 22, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 18px 35px rgba(0, 0, 0, 0.35);
+    display: grid;
+    gap: 1rem;
+    overflow: hidden;
+    animation: directoryRise 0.6s ease both;
+    animation-delay: calc(var(--i) * 70ms);
+}
+
+.directory-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 10% 20%, rgba(111, 255, 182, 0.16), transparent 50%);
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.directory-card-top {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.75rem;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+
+.directory-logo {
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(18, 20, 27, 0.9);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    color: var(--text);
+    font-weight: 700;
+}
+
+.directory-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.directory-location {
+    margin: 0.15rem 0 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
+.directory-contact {
+    margin: 0.15rem 0 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
+.directory-about {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+}
+
+.directory-meta {
+    display: grid;
+    gap: 0.6rem;
+    position: relative;
+    z-index: 1;
+}
+
+.directory-meta div {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.directory-meta-label {
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-size: 0.7rem;
+    color: var(--muted);
+}
+
+.directory-meta a {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.directory-muted {
+    color: var(--muted);
+}
+
+.directory-empty {
+    text-align: center;
+    padding: 2.5rem;
+    border-radius: 24px;
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    background: rgba(18, 20, 27, 0.65);
+}
+
+.directory-profile-form {
+    max-width: 620px;
+}
+
+.directory-logo-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.directory-logo-preview {
+    width: 96px;
+    height: 96px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(18, 20, 27, 0.9);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.directory-logo-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.directory-logo-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.directory-file-btn {
+    position: relative;
+    overflow: hidden;
+}
+
+.directory-file-btn input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.directory-file-btn.is-busy {
+    opacity: 0.7;
+}
+
+@keyframes directoryRise {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .directory-card {
+        animation: none;
+    }
+}
+
+@media (max-width: 720px) {
+    .directory-count {
+        width: 100%;
+    }
+
+    .directory-hero-card .btn {
+        width: fit-content;
     }
 }
 
@@ -2163,6 +2511,20 @@ main {
 .platform-mono {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
     font-size: 0.95rem;
+}
+
+.platform-code {
+    margin: 1rem 0;
+    padding: 1rem 1.1rem;
+    border-radius: 16px;
+    background: rgba(18, 20, 27, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .badge {
