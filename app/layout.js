@@ -1,4 +1,5 @@
 ﻿import './globals.css';
+import Script from 'next/script';
 import { Space_Grotesk } from 'next/font/google';
 import AuthSessionSync from './AuthSessionSync';
 
@@ -49,6 +50,16 @@ export default function RootLayout({ children }) {
     return (
         <html lang="en">
             <body className={spaceGrotesk.className}>
+                <Script
+                    src="https://www.googletagmanager.com/gtag/js?id=G-Y3TBH9LDL0"
+                    strategy="afterInteractive"
+                />
+                <Script id="ga-init" strategy="afterInteractive">
+                    {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-Y3TBH9LDL0');`}
+                </Script>
                 <AuthSessionSync />
                 {children}
             </body>
