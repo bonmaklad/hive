@@ -207,6 +207,18 @@ export default function DashboardClient() {
                     </Link>
                 </div>
             </section>
+            <section className="platform-card span-6" aria-label="Gallery">
+                <div className="platform-kpi-row">
+                    <h2 style={{ margin: 0 }}>Gallery</h2>
+                    <span className="badge neutral">New</span>
+                </div>
+                <p className="platform-subtitle">Share photos and videos with the community.</p>
+                <div className="platform-card-actions">
+                    <Link className="btn primary" href="/platform/gallery">
+                        Open gallery
+                    </Link>
+                </div>
+            </section>
         </div>
     );
 }
