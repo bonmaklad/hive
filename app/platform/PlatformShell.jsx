@@ -224,12 +224,6 @@ export default function PlatformShell({ children }) {
                             <Link href="/platform" className="btn ghost">
                                 Dashboard
                             </Link>
-                            <Link href="/platform/chat" className="btn ghost">
-                                Chat
-                            </Link>
-                            <Link href="/platform/gallery" className="btn ghost">
-                                Gallery
-                            </Link>
                             {profile?.is_admin ? (
                                 <Link href="/platform/admin" className="btn ghost">
                                     Admin
@@ -271,9 +265,6 @@ export default function PlatformShell({ children }) {
                                 </Link>
                                 <Link href="/platform/chat" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
                                     Chat
-                                </Link>
-                                <Link href="/platform/gallery" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
-                                    Gallery
                                 </Link>
                                 {profile?.is_admin ? (
                                     <Link href="/platform/admin" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
