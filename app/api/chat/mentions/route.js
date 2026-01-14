@@ -21,21 +21,27 @@ function chunk(array, size) {
     return chunks;
 }
 
-async function listAllAuthUsers(admin) {
-    const users = [];
-    let page = 1;
+async function listAllProfiles(admin) {
+    const profiles = [];
+    const pageSize = 1000;
+    let from = 0;
 
     while (true) {
-        const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+        const to = from + pageSize - 1;
+        const { data, error } = await admin
+            .from('profiles')
+            .select('id, email, name')
+            .order('id', { ascending: true })
+            .range(from, to);
         if (error) throw error;
-        const pageUsers = data?.users || [];
-        users.push(...pageUsers);
-        if (pageUsers.length < 1000) break;
-        page += 1;
-        if (page > 50) break; // hard cap (50k users) to avoid runaway loops
+        const pageProfiles = data || [];
+        profiles.push(...pageProfiles);
+        if (pageProfiles.length < pageSize) break;
+        from += pageSize;
+        if (from >= 50000) break; // hard cap (50k profiles) to avoid runaway loops
     }
 
-    return users;
+    return profiles;
 }
 
 function escapeHtml(value) {
@@ -100,33 +106,19 @@ export async function POST(request) {
 
     let recipients = [];
     if (mentionEveryone) {
-        // Prefer Auth as the source-of-truth for emails (profiles.email may be missing/blank).
-        let authUsers = [];
+        // Use profiles as the source-of-truth for member emails.
+        let profiles = [];
         try {
-            authUsers = await listAllAuthUsers(admin);
+            profiles = await listAllProfiles(admin);
         } catch (err) {
-            return NextResponse.json({ error: err?.message || 'Could not list users.' }, { status: 500 });
+            return NextResponse.json({ error: err?.message || 'Could not list profiles.' }, { status: 500 });
         }
 
-        const authById = Object.fromEntries(authUsers.map(u => [u.id, u]));
-        const ids = authUsers.map(u => u.id).filter(Boolean);
-
-        const { data: profileRows, error: profileError } = await admin
-            .from('profiles')
-            .select('id, email, name')
-            .in('id', ids);
-
-        if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
-
-        const profileById = Object.fromEntries((profileRows || []).map(p => [p.id, p]));
-
-        recipients = ids
-            .filter(id => id && id !== user.id)
-            .map(id => {
-                const p = profileById[id] || {};
-                const a = authById[id] || {};
-                const email = (p.email || a.email || '').trim();
-                return { id, email, name: p.name || a.user_metadata?.name || '' };
+        recipients = profiles
+            .filter(p => p?.id && p.id !== user.id)
+            .map(p => {
+                const email = typeof p.email === 'string' ? p.email.trim() : '';
+                return { id: p.id, email, name: p.name || '' };
             })
             .filter(r => r.email);
     } else {
