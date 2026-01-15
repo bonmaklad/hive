@@ -5,7 +5,8 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
-import { PlatformSessionProvider } from './PlatformContext';
+import { PlatformSessionProvider, usePlatformSession } from './PlatformContext';
+import { ChatReadProvider, useChatRead } from './ChatReadContext';
 import ChatDrawer from './components/ChatDrawer';
 
 function safeLoginRedirect(pathname) {
@@ -25,7 +26,6 @@ export default function PlatformShell({ children }) {
     const [profile, setProfile] = useState(null);
     const [tenantRole, setTenantRole] = useState(null);
     const [tenantRoleError, setTenantRoleError] = useState('');
-    const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -197,105 +197,127 @@ export default function PlatformShell({ children }) {
 
     return (
         <PlatformSessionProvider value={{ user, profile, tenantRole, tenantRoleError, supabase }}>
-            <div className="platform-shell">
-                {!isChatPage ? (
-                    <header className="platform-header">
-                        <Link href="/platform" className="platform-brand">
-                            <Image
-                                src="/logo-square.png"
-                                width={36}
-                                height={36}
-                                alt="HIVE"
-                                priority
-                                className="platform-logo"
-                            />
-                            <span>Platform</span>
+            <ChatReadProvider>
+                <PlatformShellFrame isChatPage={isChatPage}>{children}</PlatformShellFrame>
+            </ChatReadProvider>
+        </PlatformSessionProvider>
+    );
+}
+
+function PlatformShellFrame({ children, isChatPage }) {
+    const { user, profile } = usePlatformSession();
+    const { unreadCount } = useChatRead();
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const unreadBadge = unreadCount > 99 ? '99+' : `${unreadCount}`;
+
+    return (
+        <div className="platform-shell">
+            {!isChatPage ? (
+                <header className="platform-header">
+                    <Link href="/platform" className="platform-brand">
+                        <Image
+                            src="/logo-square.png"
+                            width={36}
+                            height={36}
+                            alt="HIVE"
+                            priority
+                            className="platform-logo"
+                        />
+                        <span>Platform</span>
+                    </Link>
+                    <button
+                        className="btn ghost platform-nav-toggle"
+                        type="button"
+                        onClick={() => setMobileNavOpen(open => !open)}
+                        aria-expanded={mobileNavOpen}
+                        aria-controls="platform-mobile-nav"
+                    >
+                        Menu
+                    </button>
+                    <nav className="platform-nav">
+                        <Link href="/platform" className="btn ghost">
+                            Dashboard
                         </Link>
-                        <button
-                            className="btn ghost platform-nav-toggle"
-                            type="button"
-                            onClick={() => setMobileNavOpen(open => !open)}
-                            aria-expanded={mobileNavOpen}
-                            aria-controls="platform-mobile-nav"
-                        >
-                            Menu
-                        </button>
-                        <nav className="platform-nav">
-                            <Link href="/platform" className="btn ghost">
+                        {profile?.is_admin ? (
+                            <Link href="/platform/admin" className="btn ghost">
+                                Admin
+                            </Link>
+                        ) : null}
+                        <Link href="/platform/settings" className="btn ghost">
+                            Settings
+                        </Link>
+                        <Link href="/auth/signout" className="btn secondary">
+                            Sign out
+                        </Link>
+                    </nav>
+                </header>
+            ) : null}
+
+            {mobileNavOpen && !isChatPage ? (
+                <div
+                    id="platform-mobile-nav"
+                    className="platform-mobile-nav-overlay"
+                    role="presentation"
+                    onMouseDown={() => setMobileNavOpen(false)}
+                >
+                    <div className="platform-mobile-nav" role="dialog" aria-modal="true" onMouseDown={event => event.stopPropagation()}>
+                        <div className="platform-mobile-nav-header">
+                            <div>
+                                <div className="platform-mobile-nav-title">Navigation</div>
+                                <div className="platform-subtitle" style={{ marginTop: '0.25rem' }}>
+                                    {profile?.email || user?.email || ''}
+                                </div>
+                            </div>
+                            <button className="btn ghost" type="button" onClick={() => setMobileNavOpen(false)}>
+                                Close
+                            </button>
+                        </div>
+
+                        <div className="platform-mobile-nav-links">
+                            <Link href="/platform" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
                                 Dashboard
                             </Link>
+                            <Link
+                                href="/platform/chat"
+                                className="btn ghost platform-chat-link"
+                                onClick={() => setMobileNavOpen(false)}
+                            >
+                                <span>Chat</span>
+                                {unreadCount > 0 ? (
+                                    <span className="platform-chat-badge" role="status" aria-label={`${unreadCount} unread messages`}>
+                                        {unreadBadge}
+                                    </span>
+                                ) : null}
+                            </Link>
                             {profile?.is_admin ? (
-                                <Link href="/platform/admin" className="btn ghost">
+                                <Link href="/platform/admin" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
                                     Admin
                                 </Link>
                             ) : null}
-                            <Link href="/platform/settings" className="btn ghost">
+                            <Link href="/platform/tickets" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
+                                Raise a ticket
+                            </Link>
+                            <Link href="/platform/settings" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
                                 Settings
                             </Link>
-                            <Link href="/auth/signout" className="btn secondary">
+                            <Link href="/auth/signout" className="btn secondary" onClick={() => setMobileNavOpen(false)}>
                                 Sign out
                             </Link>
-                        </nav>
-                    </header>
-                ) : null}
-
-                {mobileNavOpen && !isChatPage ? (
-                    <div
-                        id="platform-mobile-nav"
-                        className="platform-mobile-nav-overlay"
-                        role="presentation"
-                        onMouseDown={() => setMobileNavOpen(false)}
-                    >
-                        <div className="platform-mobile-nav" role="dialog" aria-modal="true" onMouseDown={event => event.stopPropagation()}>
-                            <div className="platform-mobile-nav-header">
-                                <div>
-                                    <div className="platform-mobile-nav-title">Navigation</div>
-                                    <div className="platform-subtitle" style={{ marginTop: '0.25rem' }}>
-                                        {profile?.email || user?.email || ''}
-                                    </div>
-                                </div>
-                                <button className="btn ghost" type="button" onClick={() => setMobileNavOpen(false)}>
-                                    Close
-                                </button>
-                            </div>
-
-                            <div className="platform-mobile-nav-links">
-                                <Link href="/platform" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
-                                    Dashboard
-                                </Link>
-                                <Link href="/platform/chat" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
-                                    Chat
-                                </Link>
-                                {profile?.is_admin ? (
-                                    <Link href="/platform/admin" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
-                                        Admin
-                                    </Link>
-                                ) : null}
-                                <Link href="/platform/tickets" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
-                                    Raise a ticket
-                                </Link>
-                                <Link href="/platform/settings" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
-                                    Settings
-                                </Link>
-                                <Link href="/auth/signout" className="btn secondary" onClick={() => setMobileNavOpen(false)}>
-                                    Sign out
-                                </Link>
-                            </div>
                         </div>
                     </div>
-                ) : null}
-                <div className={`platform-content ${isChatPage ? 'platform-content-chat' : ''}`}>{children}</div>
+                </div>
+            ) : null}
+            <div className={`platform-content ${isChatPage ? 'platform-content-chat' : ''}`}>{children}</div>
 
-                {!isChatPage ? (
-                    <footer className="platform-footer-bar">
-                        <Link className="btn ghost" href="/platform/tickets">
-                            Raise a ticket
-                        </Link>
-                    </footer>
-                ) : null}
+            {!isChatPage ? (
+                <footer className="platform-footer-bar">
+                    <Link className="btn ghost" href="/platform/tickets">
+                        Raise a ticket
+                    </Link>
+                </footer>
+            ) : null}
 
-                {!isChatPage ? <ChatDrawer /> : null}
-            </div>
-        </PlatformSessionProvider>
+            {!isChatPage ? <ChatDrawer /> : null}
+        </div>
     );
 }

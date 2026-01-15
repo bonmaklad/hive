@@ -270,7 +270,7 @@ function AvailabilityModal({ unit, onClose }) {
     }, [unit, onClose]);
 
     useEffect(() => {
-        const initial = signedUrl || primaryUrl || '';
+        const initial = primaryUrl || signedUrl || '';
         setActiveUrl(initial);
         setImageFailed(false);
         setTriedSigned(false);
@@ -309,8 +309,8 @@ function AvailabilityModal({ unit, onClose }) {
                             src={activeUrl}
                             alt={`${title} workspace`}
                             fill
-                            unoptimized
                             sizes="(max-width: 900px) 92vw, 860px"
+                            quality={70}
                             style={{ objectFit: 'cover' }}
                             referrerPolicy="no-referrer"
                             onLoadingComplete={() => setLoading(false)}

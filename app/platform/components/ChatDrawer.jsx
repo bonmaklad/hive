@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { getDisplayName, usePlatformSession } from '../PlatformContext';
+import { useChatRead } from '../ChatReadContext';
 
 function getMentionQuery(text) {
     const value = String(text || '');
@@ -52,6 +53,7 @@ function copyToClipboard(text) {
 
 export default function ChatDrawer({ mode = 'drawer' }) {
     const { user, profile, supabase } = usePlatformSession();
+    const { unreadCount, lastReadAt, markRead } = useChatRead();
     const isPage = mode === 'page';
     const [open, setOpen] = useState(isPage);
     const [messages, setMessages] = useState([]);
@@ -69,6 +71,7 @@ export default function ChatDrawer({ mode = 'drawer' }) {
     const [showEmoji, setShowEmoji] = useState(false);
     const [reactionsByMessageId, setReactionsByMessageId] = useState({});
     const [isMobile, setIsMobile] = useState(false);
+    const [isAtBottom, setIsAtBottom] = useState(true);
 
     const listRef = useRef(null);
     const bottomRef = useRef(null);
@@ -79,6 +82,34 @@ export default function ChatDrawer({ mode = 'drawer' }) {
 
     const [now, setNow] = useState(Date.now());
     const emojis = useMemo(() => ['😀', '😂', '🥰', '😮', '😢', '😡', '👍', '👎', '🙏', '🎉', '🔥', '✅', '❤️'], []);
+    const unreadBadge = unreadCount > 99 ? '99+' : `${unreadCount}`;
+    const lastReadTs = useMemo(() => {
+        if (!lastReadAt) return 0;
+        const ts = new Date(lastReadAt).getTime();
+        return Number.isFinite(ts) ? ts : 0;
+    }, [lastReadAt]);
+
+    const unreadStartIndex = useMemo(() => {
+        if (!messages.length || unreadCount <= 0) return -1;
+        const idx = messages.findIndex(msg => {
+            if (!msg?.created_at || msg?.user_id === user?.id) return false;
+            const ts = new Date(msg.created_at).getTime();
+            return Number.isFinite(ts) && ts > lastReadTs;
+        });
+        if (idx === -1) return 0;
+        return idx;
+    }, [lastReadTs, messages, unreadCount, user?.id]);
+
+    const checkIsAtBottom = useCallback(() => {
+        const el = listRef.current;
+        if (!el) return true;
+        const threshold = 32;
+        return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+    }, []);
+
+    const handleScroll = useCallback(() => {
+        setIsAtBottom(checkIsAtBottom());
+    }, [checkIsAtBottom]);
 
     useEffect(() => {
         const id = setInterval(() => setNow(Date.now()), 60 * 1000);
@@ -262,10 +293,12 @@ export default function ChatDrawer({ mode = 'drawer' }) {
         if (bottomRef.current && typeof bottomRef.current.scrollIntoView === 'function') {
             try {
                 bottomRef.current.scrollIntoView({ block: 'end' });
+                setIsAtBottom(true);
                 return;
             } catch (_) {}
         }
         el.scrollTop = el.scrollHeight;
+        setIsAtBottom(true);
     }, [open]);
 
     useEffect(() => {
@@ -273,6 +306,23 @@ export default function ChatDrawer({ mode = 'drawer' }) {
         const id = requestAnimationFrame(scrollToBottom);
         return () => cancelAnimationFrame(id);
     }, [messages, open, showEmoji, editing, scrollToBottom]);
+
+    useEffect(() => {
+        if (!open) return;
+        setIsAtBottom(checkIsAtBottom());
+    }, [checkIsAtBottom, messages, open]);
+
+    useEffect(() => {
+        if (!open || !messages.length || !isAtBottom) return;
+        const lastMsg = messages[messages.length - 1];
+        if (!lastMsg?.created_at) return;
+        const latestTs = new Date(lastMsg.created_at).getTime();
+        if (!Number.isFinite(latestTs) || latestTs <= lastReadTs) return;
+        const timer = setTimeout(() => {
+            markRead(lastMsg.created_at);
+        }, 600);
+        return () => clearTimeout(timer);
+    }, [isAtBottom, lastReadTs, markRead, messages, open]);
 
     useEffect(() => {
         if (isPage) return;
@@ -611,10 +661,22 @@ export default function ChatDrawer({ mode = 'drawer' }) {
                     onClick={() => setOpen(v => !v)}
                 >
                     {open ? (
-                        <span className="platform-chat-toggle-arrow">→</span>
+                        <>
+                            <span className="platform-chat-toggle-arrow">→</span>
+                            {unreadCount > 0 ? (
+                                <span className="platform-chat-badge" role="status" aria-label={`${unreadCount} unread messages`}>
+                                    {unreadBadge}
+                                </span>
+                            ) : null}
+                        </>
                     ) : (
                         <>
                             <span className="platform-chat-toggle-label">Join chat</span>
+                            {unreadCount > 0 ? (
+                                <span className="platform-chat-badge" role="status" aria-label={`${unreadCount} unread messages`}>
+                                    {unreadBadge}
+                                </span>
+                            ) : null}
                             <span className="platform-chat-toggle-arrow">←</span>
                         </>
                     )}
@@ -645,73 +707,79 @@ export default function ChatDrawer({ mode = 'drawer' }) {
                     {mentionError && <p className="platform-message error">{mentionError}</p>}
                 </div>
 
-                <div className="platform-chat-list" ref={listRef}>
+                <div className="platform-chat-list" ref={listRef} onScroll={handleScroll}>
                     {messages.length ? (
-                        messages.map(msg => (
-                            <div
-                                key={msg.id}
-                                className={`platform-chat-msg ${msg.user_id === user?.id ? 'own' : ''} ${
-                                    msg.id === editing?.id ? 'editing' : ''
-                                }`}
-                                onPointerDown={() => {
-                                    beginLongPress(msg);
-                                }}
-                                onPointerUp={clearLongPress}
-                                onPointerCancel={clearLongPress}
-                                onPointerMove={clearLongPress}
-                                onContextMenu={event => {
-                                    event.preventDefault();
-                                    if (msg.user_id === user?.id) setActionMessageId(msg.id);
-                                    else setReactionMessageId(msg.id);
-                                }}
-                            >
-                                <div className="platform-chat-meta">
-                                    <span className="platform-chat-author">{msg.user_name}</span>
-                                    <span className="platform-chat-time" title={new Date(msg.created_at).toLocaleString()}>
-                                        {formatRelativeTime(msg.created_at, now)}
-                                    </span>
-                                </div>
-                                <div className="platform-chat-body">{msg.body}</div>
-                                {(reactionsByMessageId?.[msg.id] || []).length ? (
-                                    <div className="platform-chat-reactions">
-                                        {Object.entries(
-                                            (reactionsByMessageId?.[msg.id] || []).reduce((acc, r) => {
-                                                const emoji = r?.emoji;
-                                                if (!emoji) return acc;
-                                                const existing = acc[emoji] || { count: 0, mine: false };
-                                                existing.count += 1;
-                                                if (r.user_id === user?.id) existing.mine = true;
-                                                acc[emoji] = existing;
-                                                return acc;
-                                            }, {})
-                                        )
-                                            .sort((a, b) => b[1].count - a[1].count)
-                                            .slice(0, 6)
-                                            .map(([emoji, meta]) => (
-                                                <button
-                                                    key={emoji}
-                                                    type="button"
-                                                    className={`platform-chat-reaction ${meta.mine ? 'mine' : ''}`}
-                                                    onClick={() => toggleReaction(msg, emoji)}
-                                                    disabled={actionBusy}
-                                                >
-                                                    <span>{emoji}</span>
-                                                    <span className="platform-chat-reaction-count">{meta.count}</span>
-                                                </button>
-                                            ))}
+                        messages.map((msg, index) => (
+                            <Fragment key={msg.id}>
+                                {index === unreadStartIndex ? (
+                                    <div className="platform-chat-unread-divider">
+                                        <span>New messages</span>
                                     </div>
                                 ) : null}
-                                {msg.user_id === user?.id ? (
-                                    <button
-                                        type="button"
-                                        className="platform-chat-more"
-                                        aria-label="Message actions"
-                                        onClick={() => setActionMessageId(msg.id)}
-                                    >
-                                        •••
-                                    </button>
-                                ) : null}
-                            </div>
+                                <div
+                                    className={`platform-chat-msg ${msg.user_id === user?.id ? 'own' : ''} ${
+                                        msg.id === editing?.id ? 'editing' : ''
+                                    }`}
+                                    onPointerDown={() => {
+                                        beginLongPress(msg);
+                                    }}
+                                    onPointerUp={clearLongPress}
+                                    onPointerCancel={clearLongPress}
+                                    onPointerMove={clearLongPress}
+                                    onContextMenu={event => {
+                                        event.preventDefault();
+                                        if (msg.user_id === user?.id) setActionMessageId(msg.id);
+                                        else setReactionMessageId(msg.id);
+                                    }}
+                                >
+                                    <div className="platform-chat-meta">
+                                        <span className="platform-chat-author">{msg.user_name}</span>
+                                        <span className="platform-chat-time" title={new Date(msg.created_at).toLocaleString()}>
+                                            {formatRelativeTime(msg.created_at, now)}
+                                        </span>
+                                    </div>
+                                    <div className="platform-chat-body">{msg.body}</div>
+                                    {(reactionsByMessageId?.[msg.id] || []).length ? (
+                                        <div className="platform-chat-reactions">
+                                            {Object.entries(
+                                                (reactionsByMessageId?.[msg.id] || []).reduce((acc, r) => {
+                                                    const emoji = r?.emoji;
+                                                    if (!emoji) return acc;
+                                                    const existing = acc[emoji] || { count: 0, mine: false };
+                                                    existing.count += 1;
+                                                    if (r.user_id === user?.id) existing.mine = true;
+                                                    acc[emoji] = existing;
+                                                    return acc;
+                                                }, {})
+                                            )
+                                                .sort((a, b) => b[1].count - a[1].count)
+                                                .slice(0, 6)
+                                                .map(([emoji, meta]) => (
+                                                    <button
+                                                        key={emoji}
+                                                        type="button"
+                                                        className={`platform-chat-reaction ${meta.mine ? 'mine' : ''}`}
+                                                        onClick={() => toggleReaction(msg, emoji)}
+                                                        disabled={actionBusy}
+                                                    >
+                                                        <span>{emoji}</span>
+                                                        <span className="platform-chat-reaction-count">{meta.count}</span>
+                                                    </button>
+                                                ))}
+                                        </div>
+                                    ) : null}
+                                    {msg.user_id === user?.id ? (
+                                        <button
+                                            type="button"
+                                            className="platform-chat-more"
+                                            aria-label="Message actions"
+                                            onClick={() => setActionMessageId(msg.id)}
+                                        >
+                                            •••
+                                        </button>
+                                    ) : null}
+                                </div>
+                            </Fragment>
                         ))
                     ) : (
                         <p className="platform-subtitle">No messages yet.</p>

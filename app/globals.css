@@ -1626,6 +1626,28 @@ main {
     flex-wrap: wrap;
 }
 
+.platform-chat-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.platform-chat-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 800;
+    line-height: 1;
+    box-shadow: 0 0 0 2px rgba(10, 12, 18, 0.85);
+}
+
 .platform-mobile-nav-overlay {
     position: fixed;
     inset: 0;
@@ -1817,6 +1839,30 @@ main {
     border: 1px solid rgba(255, 255, 255, 0.08);
     padding: 0.75rem;
     background: rgba(255, 255, 255, 0.03);
+}
+
+.platform-chat-unread-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin: 0.75rem 0;
+    color: rgba(248, 113, 113, 0.9);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
+
+.platform-chat-unread-divider::before,
+.platform-chat-unread-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(248, 113, 113, 0.35);
+}
+
+.platform-chat-unread-divider span {
+    white-space: nowrap;
 }
 
 .platform-chat-msg {
