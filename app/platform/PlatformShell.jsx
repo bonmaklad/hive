@@ -140,21 +140,6 @@ export default function PlatformShell({ children }) {
     }, [supabase]);
 
     useEffect(() => {
-        setMobileNavOpen(false);
-    }, [pathname]);
-
-    useEffect(() => {
-        if (!mobileNavOpen) return;
-
-        const onKeyDown = event => {
-            if (event.key === 'Escape') setMobileNavOpen(false);
-        };
-
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
-    }, [mobileNavOpen]);
-
-    useEffect(() => {
         if (!ready) return;
 
         if (!user) {
@@ -198,17 +183,34 @@ export default function PlatformShell({ children }) {
     return (
         <PlatformSessionProvider value={{ user, profile, tenantRole, tenantRoleError, supabase }}>
             <ChatReadProvider>
-                <PlatformShellFrame isChatPage={isChatPage}>{children}</PlatformShellFrame>
+                <PlatformShellFrame isChatPage={isChatPage} pathname={pathname}>
+                    {children}
+                </PlatformShellFrame>
             </ChatReadProvider>
         </PlatformSessionProvider>
     );
 }
 
-function PlatformShellFrame({ children, isChatPage }) {
+function PlatformShellFrame({ children, isChatPage, pathname }) {
     const { user, profile } = usePlatformSession();
     const { unreadCount } = useChatRead();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const unreadBadge = unreadCount > 99 ? '99+' : `${unreadCount}`;
+
+    useEffect(() => {
+        setMobileNavOpen(false);
+    }, [pathname]);
+
+    useEffect(() => {
+        if (!mobileNavOpen) return;
+
+        const onKeyDown = event => {
+            if (event.key === 'Escape') setMobileNavOpen(false);
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [mobileNavOpen]);
 
     return (
         <div className="platform-shell">
