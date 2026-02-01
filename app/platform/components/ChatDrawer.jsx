@@ -79,6 +79,7 @@ export default function ChatDrawer({ mode = 'drawer' }) {
     const longPressRef = useRef(null);
     const inputRef = useRef(null);
     const loadedReactionsFor = useRef(new Set());
+    const initialReadPending = useRef(false);
 
     const [now, setNow] = useState(Date.now());
     const emojis = useMemo(() => ['😀', '😂', '🥰', '😮', '😢', '😡', '👍', '👎', '🙏', '🎉', '🔥', '✅', '❤️'], []);
@@ -133,6 +134,10 @@ export default function ChatDrawer({ mode = 'drawer' }) {
     useEffect(() => {
         if (isPage) setOpen(true);
     }, [isPage]);
+
+    useEffect(() => {
+        if (open) initialReadPending.current = true;
+    }, [open]);
     useEffect(() => {
         let cancelled = false;
 
@@ -311,6 +316,23 @@ export default function ChatDrawer({ mode = 'drawer' }) {
         if (!open) return;
         setIsAtBottom(checkIsAtBottom());
     }, [checkIsAtBottom, messages, open]);
+
+    useEffect(() => {
+        if (!open || !initialReadPending.current || !messages.length) return;
+        const lastMsg = messages[messages.length - 1];
+        if (!lastMsg?.created_at) return;
+        const latestTs = new Date(lastMsg.created_at).getTime();
+        if (!Number.isFinite(latestTs)) return;
+        if (latestTs <= lastReadTs) {
+            initialReadPending.current = false;
+            return;
+        }
+        const timer = setTimeout(() => {
+            markRead(lastMsg.created_at);
+            initialReadPending.current = false;
+        }, 200);
+        return () => clearTimeout(timer);
+    }, [lastReadTs, markRead, messages, open]);
 
     useEffect(() => {
         if (!open || !messages.length || !isAtBottom) return;

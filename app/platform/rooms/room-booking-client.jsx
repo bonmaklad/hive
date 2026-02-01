@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePlatformSession } from '../PlatformContext';
+import TokenPurchaseModal from '../components/TokenPurchaseModal';
 import { loadStripe } from '@stripe/stripe-js';
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js';
 
@@ -561,7 +562,16 @@ export default function RoomBookingClient() {
                     <h2 style={{ margin: 0 }}>Booking</h2>
                     <p className="platform-subtitle">Pick a room, date, and time.</p>
                 </div>
-                <span className="badge neutral">{tokensLeft} tokens left</span>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <span className="badge neutral">{tokensLeft} tokens left</span>
+                    <TokenPurchaseModal
+                        triggerLabel="Add tokens"
+                        triggerVariant="compact"
+                        showStatus
+                        tokensLeft={tokensLeft}
+                        returnPath="/platform/rooms"
+                    />
+                </div>
             </div>
 
             <div className="platform-room-layout">

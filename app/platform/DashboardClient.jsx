@@ -42,12 +42,6 @@ function computeNextInvoiceDateFromDay(dayOfMonth) {
     return candidate;
 }
 
-function getMonthStart(date) {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    return `${yyyy}-${mm}-01`;
-}
-
 export default function DashboardClient() {
     const { user, profile, tenantRole, tenantRoleError, supabase } = usePlatformSession();
     const canViewMembership = Boolean(profile?.is_admin) || tenantRole === 'owner';
@@ -57,14 +51,24 @@ export default function DashboardClient() {
     const [tokensLeft, setTokensLeft] = useState(0);
     const [siteCount, setSiteCount] = useState(0);
 
-    const periodStart = useMemo(() => getMonthStart(new Date()), []);
-
     useEffect(() => {
         let cancelled = false;
 
         const load = async () => {
             setLoading(true);
-            const [membershipResult, creditsResult, sitesResult] = await Promise.all([
+            const { data } = await supabase.auth.getSession();
+            const accessToken = data?.session?.access_token || '';
+            const tokensPromise = accessToken
+                ? fetch('/api/rooms/tokens', { headers: { Authorization: `Bearer ${accessToken}` } })
+                    .then(async res => {
+                        const json = await res.json().catch(() => ({}));
+                        if (!res.ok) throw new Error(json?.error || 'Failed to load tokens.');
+                        return Math.max(0, Number(json?.tokens_left || 0));
+                    })
+                    .catch(() => 0)
+                : Promise.resolve(0);
+
+            const [membershipResult, tokensLeftResult, sitesResult] = await Promise.all([
                 canViewMembership
                     ? supabase
                         .from('memberships')
@@ -74,21 +78,14 @@ export default function DashboardClient() {
                         .limit(1)
                         .maybeSingle()
                     : Promise.resolve({ data: null, error: null }),
-                supabase
-                    .from('room_credits')
-                    .select('tokens_total, tokens_used')
-                    .eq('owner_id', user.id)
-                    .eq('period_start', periodStart)
-                    .maybeSingle(),
+                tokensPromise,
                 supabase.from('sites').select('id', { count: 'exact', head: true })
             ]);
 
             if (cancelled) return;
 
             setMembership(membershipResult.data ?? null);
-            const total = creditsResult.data?.tokens_total ?? 0;
-            const used = creditsResult.data?.tokens_used ?? 0;
-            setTokensLeft(Math.max(0, total - used));
+            setTokensLeft(tokensLeftResult);
             setSiteCount(sitesResult.count || 0);
             setLoading(false);
         };
@@ -97,7 +94,7 @@ export default function DashboardClient() {
         return () => {
             cancelled = true;
         };
-    }, [canViewMembership, periodStart, supabase, user.id]);
+    }, [canViewMembership, supabase, user.id]);
 
     const membershipStatus = membership?.status || 'expired';
     const membershipBadge = membershipStatus === 'live' ? 'success' : 'error';

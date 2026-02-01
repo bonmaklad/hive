@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireTenantContext } from '../_lib/tenantBilling';
-import { computeCashDueCents, computeHours, getPricingCents, monthStart } from '../_lib/bookingMath';
+import { computeCashDueCents, computeHours, getPricingCents } from '../_lib/bookingMath';
+import { fetchCreditsSummary } from '../_lib/credits';
 import { findPromotionCode, getCouponForPromotionCode } from '../../_lib/stripe';
 
 export const runtime = 'nodejs';
@@ -87,21 +88,12 @@ export async function POST(request) {
     const tokensPerHour = toInt(space.tokens_per_hour ?? 1, 1);
     const requiredTokens = Math.max(0, hours * tokensPerHour);
 
-    const periodStart = monthStart(bookingDate);
-    if (!periodStart) return NextResponse.json({ error: 'Invalid booking_date.' }, { status: 400 });
+    const credits = await fetchCreditsSummary({ admin: ctx.admin, ownerId: ctx.tokenOwnerId });
+    if (!credits.ok) return NextResponse.json({ error: credits.error }, { status: 500 });
 
-    const { data: credits, error: creditsError } = await ctx.admin
-        .from('room_credits')
-        .select('tokens_total, tokens_used')
-        .eq('owner_id', ctx.tokenOwnerId)
-        .eq('period_start', periodStart)
-        .maybeSingle();
-
-    if (creditsError) return NextResponse.json({ error: creditsError.message }, { status: 500 });
-
-    const tokensTotal = credits?.tokens_total ?? 0;
-    const tokensUsed = credits?.tokens_used ?? 0;
-    const tokensLeft = Math.max(0, tokensTotal - tokensUsed);
+    const tokensTotal = credits.tokensTotal;
+    const tokensUsed = credits.tokensUsed;
+    const tokensLeft = credits.tokensLeft;
     const tokensApplied = Math.min(tokensLeft, requiredTokens);
 
     const pricing = getPricingCents(space, hours);
@@ -142,7 +134,7 @@ export async function POST(request) {
         room: { slug: space.slug, title: space.title },
         booking: { booking_date: bookingDate, start_time: startTime, end_time: endTime, hours },
         tokens: {
-            period_start: periodStart,
+            period_start: credits.latestRow?.period_start || null,
             tokens_per_hour: tokensPerHour,
             required_tokens: requiredTokens,
             tokens_total: tokensTotal,
@@ -167,4 +159,3 @@ export async function POST(request) {
             : null
     });
 }
-

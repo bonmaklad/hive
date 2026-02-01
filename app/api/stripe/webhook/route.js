@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '../../_lib/supabaseAuth';
 import { sendPublicRoomBookingConfirmationEmail } from '../../_lib/email';
 import { getStripeWebhookSecret, stripeRequest, verifyStripeWebhookSignature } from '../../_lib/stripe';
-import { monthStart } from '../../rooms/_lib/bookingMath';
+import { fetchCreditsSummary } from '../../rooms/_lib/credits';
 
 export const runtime = 'nodejs';
 
@@ -72,20 +72,16 @@ async function approveBookingFromSession({ admin, session }) {
 
     // Deduct tokens from the tenant token owner (only if a token owner exists).
     const tokenOwnerId = payment.token_owner_id || session?.metadata?.token_owner_id || null;
-    const periodStart = monthStart(booking.booking_date);
     const tokensToDeduct = Math.max(0, toInt(booking.tokens_used, 0));
 
-    if (tokenOwnerId && periodStart && tokensToDeduct) {
-        const { data: credits } = await admin
-            .from('room_credits')
-            .select('tokens_used')
-            .eq('owner_id', tokenOwnerId)
-            .eq('period_start', periodStart)
-            .maybeSingle();
-
-        const currentUsed = credits?.tokens_used ?? 0;
-        const newUsed = Math.max(0, toInt(currentUsed, 0) + tokensToDeduct);
-        await admin.from('room_credits').update({ tokens_used: newUsed }).eq('owner_id', tokenOwnerId).eq('period_start', periodStart);
+    if (tokenOwnerId && tokensToDeduct) {
+        const credits = await fetchCreditsSummary({ admin, ownerId: tokenOwnerId });
+        const latestPeriodStart = credits.ok ? credits.latestRow?.period_start : null;
+        if (latestPeriodStart) {
+            const currentUsed = toInt(credits.latestRow?.tokens_used, 0);
+            const newUsed = Math.max(0, currentUsed + tokensToDeduct);
+            await admin.from('room_credits').update({ tokens_used: newUsed }).eq('owner_id', tokenOwnerId).eq('period_start', latestPeriodStart);
+        }
     }
 
     // Create internal invoice record (paid) for visibility in the platform admin UI.
@@ -223,6 +219,68 @@ function toDayOfMonth(tsSeconds) {
     return d.getUTCDate();
 }
 
+function monthStartIsoLocal() {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    return `${yyyy}-${mm}-01`;
+}
+
+async function applyTokenPurchaseFromSession({ admin, session }) {
+    const isTokenPurchase = session?.metadata?.token_purchase === 'true';
+    if (!isTokenPurchase) return;
+
+    const tokenOwnerId = session?.metadata?.token_owner_id || null;
+    const quantity = Math.max(0, toInt(session?.metadata?.token_quantity, 0));
+    if (!tokenOwnerId || !quantity) return;
+
+    const periodStart = monthStartIsoLocal();
+    const { data: existing, error: existingError } = await admin
+        .from('room_credits')
+        .select('tokens_total, tokens_used')
+        .eq('owner_id', tokenOwnerId)
+        .eq('period_start', periodStart)
+        .maybeSingle();
+
+    if (existingError) return;
+
+    if (existing) {
+        const nextTotal = Math.max(0, toInt(existing.tokens_total, 0) + quantity);
+        await admin.from('room_credits').update({ tokens_total: nextTotal }).eq('owner_id', tokenOwnerId).eq('period_start', periodStart);
+    } else {
+        await admin.from('room_credits').insert({
+            owner_id: tokenOwnerId,
+            period_start: periodStart,
+            tokens_total: quantity,
+            tokens_used: 0
+        });
+    }
+
+    const invoiceId = typeof session?.invoice === 'string' ? session.invoice : session?.invoice?.id || null;
+    const amountTotal = typeof session?.amount_total === 'number' ? session.amount_total : null;
+    const currency = typeof session?.currency === 'string' ? session.currency.toUpperCase() : (session?.metadata?.currency || 'NZD');
+    const issuedOn = toIsoDate(typeof session?.created === 'number' ? session.created : NaN) || new Date().toISOString().slice(0, 10);
+    const amountFromMeta = toInt(session?.metadata?.amount_cents, 0);
+    const amountCents = Math.max(0, toInt(amountTotal !== null ? amountTotal : amountFromMeta, 0));
+
+    const invoiceNumber = invoiceId ? `stripe:${invoiceId}` : `stripe_session:${session.id}`;
+    try {
+        await admin.from('invoices').insert({
+            owner_id: tokenOwnerId,
+            membership_id: null,
+            invoice_number: invoiceNumber,
+            amount_cents: amountCents,
+            currency,
+            status: 'paid',
+            issued_on: issuedOn,
+            due_on: issuedOn,
+            paid_at: new Date().toISOString()
+        });
+    } catch {
+        // ignore duplicates
+    }
+}
+
 async function activateMembershipFromSession({ admin, session }) {
     const membershipId = session?.metadata?.membership_id;
     if (!membershipId) return;
@@ -330,6 +388,7 @@ export async function POST(request) {
         await approveBookingFromSession({ admin, session: obj });
         await confirmPublicRoomBookingFromSession({ admin, session: obj });
         await activateMembershipFromSession({ admin, session: obj });
+        await applyTokenPurchaseFromSession({ admin, session: obj });
     }
 
     if (type === 'checkout.session.async_payment_failed' || type === 'checkout.session.expired') {

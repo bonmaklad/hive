@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireTenantContext } from '../_lib/tenantBilling';
-import { computeCashDueCents, computeHours, getPricingCents, monthStart, overlaps } from '../_lib/bookingMath';
+import { computeCashDueCents, computeHours, getPricingCents, overlaps } from '../_lib/bookingMath';
 import { createCheckoutSession, ensureStripeCustomer, findPromotionCode, getCouponForPromotionCode } from '../../_lib/stripe';
+import { fetchCreditsSummary } from '../_lib/credits';
 
 export const runtime = 'nodejs';
 
@@ -151,21 +152,10 @@ export async function POST(request) {
         const tokensPerHour = toInt(space.tokens_per_hour ?? 1, 1);
         const requiredTokens = Math.max(0, hours * tokensPerHour);
 
-        const periodStart = monthStart(bookingDate);
-        if (!periodStart) return NextResponse.json({ error: 'Invalid booking_date.' }, { status: 400 });
+        const credits = await fetchCreditsSummary({ admin: ctx.admin, ownerId: ctx.tokenOwnerId });
+        if (!credits.ok) return NextResponse.json({ error: credits.error }, { status: 500 });
 
-        const { data: credits, error: creditsError } = await ctx.admin
-            .from('room_credits')
-            .select('tokens_total, tokens_used')
-            .eq('owner_id', ctx.tokenOwnerId)
-            .eq('period_start', periodStart)
-            .maybeSingle();
-
-        if (creditsError) return NextResponse.json({ error: creditsError.message }, { status: 500 });
-
-        const tokensTotal = credits?.tokens_total ?? 0;
-        const tokensUsed = credits?.tokens_used ?? 0;
-        const tokensLeft = Math.max(0, tokensTotal - tokensUsed);
+        const tokensLeft = credits.tokensLeft;
         const tokensApplied = Math.min(tokensLeft, requiredTokens);
 
         const pricing = getPricingCents(space, hours);
@@ -211,12 +201,21 @@ export async function POST(request) {
         if (bookingStatus === 'approved') {
             // Deduct tokens immediately (tenant token owner).
             if (tokensApplied > 0) {
-                const newUsed = Math.max(0, tokensUsed + tokensApplied);
+                const latestPeriodStart = credits.latestRow?.period_start || null;
+                if (!latestPeriodStart) {
+                    return NextResponse.json(
+                        { error: 'Booking created but failed to update token usage.', detail: 'No token credits found.', booking },
+                        { status: 500 }
+                    );
+                }
+
+                const currentUsed = toInt(credits.latestRow?.tokens_used, 0);
+                const newUsed = Math.max(0, currentUsed + tokensApplied);
                 const { error: updateCreditsError } = await ctx.admin
                     .from('room_credits')
                     .update({ tokens_used: newUsed })
                     .eq('owner_id', ctx.tokenOwnerId)
-                    .eq('period_start', periodStart);
+                    .eq('period_start', latestPeriodStart);
 
                 if (updateCreditsError) {
                     return NextResponse.json(

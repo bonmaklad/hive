@@ -1417,10 +1417,11 @@ export default function AdminTenantsPage() {
                         const membership = t.membership || null;
                         const invoices = Array.isArray(t.invoices) ? t.invoices : [];
 
-                        const tokenHolder = users.find(u => u.room_credits) || primary;
+                        const tokenHolder = users.find(u => u.room_credits_summary || u.room_credits) || primary;
+                        const creditsSummary = tokenHolder?.room_credits_summary || null;
                         const credits = tokenHolder?.room_credits || null;
-                        const tokensTotal = credits?.tokens_total || 0;
-                        const tokensUsed = credits?.tokens_used || 0;
+                        const tokensTotal = creditsSummary?.tokens_total ?? credits?.tokens_total ?? 0;
+                        const tokensUsed = creditsSummary?.tokens_used ?? credits?.tokens_used ?? 0;
                         const tokensLeft = Math.max(0, tokensTotal - tokensUsed);
 
                         const isOpen = openTenantId === t.id;

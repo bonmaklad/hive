@@ -94,6 +94,7 @@ export async function GET(request) {
 
     const profilesById = {};
     const creditsByOwner = {};
+    const creditsSummaryByOwner = {};
     const membershipsByOwner = {};
     const invoicesByOwner = {};
 
@@ -108,13 +109,20 @@ export async function GET(request) {
         const { data: credits, error: creditsError } = await guard.admin
             .from('room_credits')
             .select('owner_id, period_start, tokens_total, tokens_used')
-            .eq('period_start', monthStart)
             .in('owner_id', userIds);
 
         if (creditsError) return NextResponse.json({ error: creditsError.message }, { status: 500 });
 
         for (const profile of profiles || []) profilesById[profile.id] = profile;
-        for (const credit of credits || []) creditsByOwner[credit.owner_id] = credit;
+        for (const credit of credits || []) {
+            if (!credit?.owner_id) continue;
+            const ownerId = credit.owner_id;
+            const summary = creditsSummaryByOwner[ownerId] || { tokens_total: 0, tokens_used: 0 };
+            summary.tokens_total += Number(credit.tokens_total || 0);
+            summary.tokens_used += Number(credit.tokens_used || 0);
+            creditsSummaryByOwner[ownerId] = summary;
+            if (credit.period_start === monthStart) creditsByOwner[ownerId] = credit;
+        }
     }
 
     if (primaryUserIds.length) {
@@ -144,7 +152,8 @@ export async function GET(request) {
         (acc[tu.tenant_id] ||= []).push({
             ...tu,
             profile: profilesById[tu.user_id] || null,
-            room_credits: creditsByOwner[tu.user_id] || null
+            room_credits: creditsByOwner[tu.user_id] || null,
+            room_credits_summary: creditsSummaryByOwner[tu.user_id] || null
         });
         return acc;
     }, {});
