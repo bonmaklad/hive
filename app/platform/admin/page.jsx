@@ -67,6 +67,16 @@ export default function AdminHomePage() {
                         </Link>
                     </div>
                 </section>
+
+                <section className="platform-card span-6">
+                    <h2 style={{ marginTop: 0 }}>SWAG</h2>
+                    <p className="platform-subtitle">Add SWAG items members can redeem with tokens.</p>
+                    <div className="platform-card-actions">
+                        <Link className="btn primary" href="/platform/admin/swag">
+                            Manage SWAG
+                        </Link>
+                    </div>
+                </section>
             </div>
         </main>
     );

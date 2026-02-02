@@ -216,6 +216,19 @@ export default function DashboardClient() {
                     </Link>
                 </div>
             </section>
+
+            <section className="platform-card span-6" aria-label="SWAG store">
+                <div className="platform-kpi-row">
+                    <h2 style={{ margin: 0 }}>SWAG</h2>
+                    <span className="badge pending">Coming soon</span>
+                </div>
+                <p className="platform-subtitle">Spend tokens on merch, stationery, and gear.</p>
+                <div className="platform-card-actions">
+                    <Link className="btn primary" href="/platform/swag">
+                        Preview SWAG
+                    </Link>
+                </div>
+            </section>
         </div>
     );
 }
