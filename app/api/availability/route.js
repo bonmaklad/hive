@@ -100,7 +100,7 @@ export async function GET() {
         const signTasks = [];
 
         for (const u of unitsRaw || []) {
-            const isActive = u?.is_active ?? true;
+            const isActive = u?.active ?? u?.is_active ?? true;
             if (isActive === false) continue;
             const capacity = toPositiveInt(u?.capacity, 1);
             const occupiedCount = occupantsByUnitId[u.id] || 0;

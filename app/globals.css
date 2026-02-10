@@ -1403,15 +1403,57 @@ main {
 
 .membership-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1.5rem;
     align-items: stretch;
+}
+
+@media (max-width: 1020px) {
+    .membership-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .membership-grid article {
     background: rgba(20, 24, 33, 0.9);
     display: flex;
     flex-direction: column;
+}
+
+.membership-grid .day-rate-card {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem 1.5rem;
+    align-items: center;
+    background: linear-gradient(120deg, rgba(111, 255, 182, 0.14), rgba(20, 24, 33, 0.96));
+    border: 1px solid rgba(111, 255, 182, 0.35);
+}
+
+.membership-grid .day-rate-copy {
+    display: grid;
+    gap: 0.35rem;
+    align-content: center;
+}
+
+.membership-grid .day-rate-copy h3,
+.membership-grid .day-rate-copy p {
+    margin: 0;
+}
+
+.membership-grid .day-rate-copy p {
+    color: var(--muted);
+}
+
+.membership-grid .day-rate-copy .price {
+    margin: 0.1rem 0;
+}
+
+.membership-grid .day-rate-card .btn {
+    margin-top: 0;
+    justify-self: end;
+    align-self: center;
+    white-space: nowrap;
 }
 
 .membership-photo {
@@ -1449,8 +1491,209 @@ main {
     flex: 1 1 auto; /* let details grow to push CTA down */
 }
 
-.membership-grid a.btn {
+.membership-grid a.btn,
+.membership-grid button.btn {
     margin-top: auto; /* keep CTA aligned at bottom */
+}
+
+.hive-member-modal {
+    width: min(720px, 100%);
+}
+
+.hive-member-modal-overlay {
+    z-index: 2000;
+}
+
+.hive-member-workspace-picker {
+    margin-top: 1rem;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.hive-member-step-indicator {
+    margin: 0.65rem 0 0;
+    font-size: 0.82rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.hive-member-workspace-heading {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.hive-member-workspace-grid {
+    display: grid;
+    gap: 0.65rem;
+    max-height: 220px;
+    overflow: auto;
+    padding-right: 0.2rem;
+}
+
+.hive-member-workspace-option {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+    display: grid;
+    gap: 0.2rem;
+    text-align: left;
+    padding: 0.75rem 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+
+.hive-member-workspace-option:hover {
+    border-color: rgba(111, 255, 182, 0.4);
+    transform: translateY(-1px);
+}
+
+.hive-member-workspace-option.is-selected {
+    border-color: rgba(111, 255, 182, 0.7);
+    background: rgba(111, 255, 182, 0.12);
+}
+
+.hive-member-workspace-code {
+    font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 0.95rem;
+}
+
+.hive-member-workspace-type {
+    font-size: 0.86rem;
+    color: var(--muted);
+}
+
+.hive-member-workspace-price {
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+.hive-member-workspace-actions {
+    margin-top: 0.45rem;
+    display: flex;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+}
+
+.hive-member-additional-members {
+    margin-top: 1rem;
+}
+
+.hive-member-members {
+    margin-top: 1rem;
+    display: grid;
+    gap: 0.65rem;
+}
+
+.hive-member-member-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    align-items: center;
+    padding: 0.7rem 0.8rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.hive-member-member-row.is-primary {
+    border-color: rgba(111, 255, 182, 0.35);
+    background: rgba(111, 255, 182, 0.08);
+}
+
+.hive-member-member-title {
+    margin: 0;
+    font-size: 0.92rem;
+    color: var(--text);
+}
+
+.hive-member-member-subtitle {
+    margin: 0.2rem 0 0;
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
+.hive-member-member-input {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+}
+
+.hive-member-member-input span {
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
+.hive-member-add-member-btn {
+    justify-self: start;
+}
+
+.hive-member-add-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 1.3rem;
+    height: 1.3rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    font-weight: 700;
+    line-height: 1;
+}
+
+.hive-member-pricing-summary {
+    margin-top: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid rgba(111, 255, 182, 0.3);
+    border-radius: 14px;
+    background: rgba(111, 255, 182, 0.08);
+    display: grid;
+    gap: 0.35rem;
+}
+
+.hive-member-pricing-summary p {
+    margin: 0;
+    color: var(--muted);
+}
+
+.hive-member-pricing-summary strong {
+    color: var(--text);
+}
+
+.hive-member-modal-form {
+    max-width: none;
+    margin-top: 1rem;
+}
+
+.hive-member-terms {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+@media (max-width: 720px) {
+    .membership-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .membership-grid .day-rate-card {
+        grid-template-columns: 1fr;
+    }
+
+    .membership-grid .day-rate-card .btn {
+        justify-self: start;
+    }
+
+    .hive-member-terms {
+        grid-template-columns: 1fr;
+    }
+
+    .hive-member-member-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 .room-feel-grid {

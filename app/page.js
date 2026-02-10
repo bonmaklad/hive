@@ -7,6 +7,7 @@ import ContactForm from './components/ContactForm';
 import ImageCarousel from './components/ImageCarousel';
 import SiteNav from './components/SiteNav';
 import HiveAvailabilitySection from './components/HiveAvailabilitySection';
+import MembershipTierCta from './components/MembershipTierCta';
 import { events as programs } from '../lib/events';
 
 const heroStats = [
@@ -72,21 +73,26 @@ const memberships = [
         price: 125,
         image: '/office6.jpg',
         perks: ['24/7 secure access', 'Lockable Privacy', 'Priority Space Booking', 'Additional Members'],
-        cta: 'Join the waitlist'
+        availableCta: 'Secure Office Space',
+        waitlistCta: 'Join the waitlist',
+        signupPlan: 'office'
     },
     {
         title: 'Assigned desk',
         price: 50,
         image: '/desks.jpg',
         perks: ['Dedicated desk', 'Allocated Secure Storeroom', 'Event + workshop invites', 'Guest pass access'],
-        cta: 'Reserve a private desk'
+        availableCta: 'Reserve a private desk',
+        waitlistCta: 'Join the waitlist',
+        signupPlan: 'desk'
     },
     {
         title: 'Hive membership',
         price: 25,
         image: '/lounge1.jpg',
         perks: ['Drop-in lounge access', 'HIVE Event Access', 'Hot desk access', 'Coffee!'],
-        cta: 'Become a member'
+        cta: 'Become a member',
+        signupPlan: 'member'
     }
 ];
 
@@ -445,11 +451,40 @@ export default function HomePage() {
                                         <li key={perk}>{perk}</li>
                                     ))}
                                 </ul>
-                                <a className="btn secondary" href="#contact">
-                                    {tier.cta}
-                                </a>
+                                {tier.signupPlan ? (
+                                    <MembershipTierCta
+                                        plan={tier.signupPlan}
+                                        availableLabel={tier.availableCta || tier.cta}
+                                        waitlistLabel={tier.waitlistCta || 'Join the waitlist'}
+                                        memberLabel={tier.cta || 'Become a member'}
+                                    />
+                                ) : (
+                                    <a className="btn secondary" href="#contact">
+                                        {tier.cta}
+                                    </a>
+                                )}
                             </article>
                         ))}
+                        <article className="day-rate-card">
+                            <div className="day-rate-copy">
+                                <h3>Day rate</h3>
+                                <p className="price">
+                                    $25
+                                    <span>/day</span>
+                                </p>
+                                <p>
+                                    Need a single high-focus day at HIVE? Grab a day pass for lounge and hot desk access.
+                                </p>
+                            </div>
+                            <a
+                                className="btn primary"
+                                href="https://buy.stripe.com/fZu5kC7et0OPfS1cjCeME04"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                Buy a Day
+                            </a>
+                        </article>
                     </div>
                 </section>
 
