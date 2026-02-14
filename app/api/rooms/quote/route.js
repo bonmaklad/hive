@@ -47,12 +47,6 @@ export async function POST(request) {
     if (!startTime || !endTime) return NextResponse.json({ error: 'start_time and end_time required.' }, { status: 400 });
 
     // Enforce business hours rules to mirror /api/rooms/book
-    const isWeekday = (d) => {
-        const x = new Date(`${d}T00:00:00Z`);
-        if (Number.isNaN(x.getTime())) return false;
-        const day = x.getUTCDay();
-        return day >= 1 && day <= 5;
-    };
     const toMin = (t) => {
         const [h, m] = String(t || '0:0').split(':');
         return Number(h) * 60 + Number(m);
@@ -62,9 +56,6 @@ export async function POST(request) {
             return NextResponse.json({ error: 'Hive Lounge can only be quoted for 5:00pm–10:00pm.' }, { status: 400 });
         }
     } else {
-        if (!isWeekday(bookingDate)) {
-            return NextResponse.json({ error: 'Meeting rooms can only be booked Monday to Friday.' }, { status: 400 });
-        }
         const s = toMin(startTime);
         const e = toMin(endTime);
         if (!(e > s)) return NextResponse.json({ error: 'Invalid time range.' }, { status: 400 });

@@ -45,14 +45,7 @@ function timeToMinutes(value) {
     return Number(hh) * 60 + Number(mm);
 }
 
-function isWeekdayDate(dateString) {
-    const d = new Date(`${dateString}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) return false;
-    const day = d.getUTCDay();
-    return day >= 1 && day <= 5;
-}
-
-function validateBusinessHours({ spaceSlug, bookingDate, startTime, endTime }) {
+function validateBusinessHours({ spaceSlug, startTime, endTime }) {
     // Hive Lounge is after-hours fixed slot (5pm–10pm).
     if (spaceSlug === 'hive-lounge') {
         if (startTime !== '17:00' || endTime !== '22:00') {
@@ -61,10 +54,7 @@ function validateBusinessHours({ spaceSlug, bookingDate, startTime, endTime }) {
         return { ok: true };
     }
 
-    // Meeting rooms: Monday–Friday, 9am–5pm.
-    if (!isWeekdayDate(bookingDate)) {
-        return { ok: false, error: 'Meeting rooms can only be booked Monday to Friday.' };
-    }
+    // Meeting rooms: members can book any day, but only within staffed hours.
 
     const startMin = timeToMinutes(startTime);
     const endMin = timeToMinutes(endTime);
@@ -99,7 +89,7 @@ export async function POST(request) {
         }
         if (!startTime || !endTime) return NextResponse.json({ error: 'start_time and end_time required.' }, { status: 400 });
 
-        const hoursCheck = validateBusinessHours({ spaceSlug, bookingDate, startTime, endTime });
+        const hoursCheck = validateBusinessHours({ spaceSlug, startTime, endTime });
         if (!hoursCheck.ok) return NextResponse.json({ error: hoursCheck.error }, { status: 400 });
 
         const hours = computeHours({ startTime, endTime });
