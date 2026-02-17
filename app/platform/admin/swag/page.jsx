@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePlatformSession } from '../../PlatformContext';
 
 function toInt(value, fallback = 0) {
@@ -23,13 +23,15 @@ export default function AdminSwagPage() {
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [imageUrl, setImageUrl] = useState('');
+    const [imageFile, setImageFile] = useState(null);
     const [tokensCost, setTokensCost] = useState('10');
     const [stockQty, setStockQty] = useState('0');
     const [stockUnlimited, setStockUnlimited] = useState(false);
     const [isActive, setIsActive] = useState(true);
+    const imageInputRef = useRef(null);
 
     const [stockEdits, setStockEdits] = useState({});
+    const [imageEdits, setImageEdits] = useState({});
     const [orderNotesEdits, setOrderNotesEdits] = useState({});
 
     const authHeader = useCallback(async () => {
@@ -79,31 +81,37 @@ export default function AdminSwagPage() {
     const createItem = async event => {
         event.preventDefault();
         if (!title.trim()) return;
+        if (!imageFile) {
+            setError('Upload an image for this SWAG item.');
+            return;
+        }
         setBusy(true);
         setError('');
         try {
+            const formData = new FormData();
+            formData.set('title', title.trim());
+            formData.set('description', description.trim());
+            formData.set('tokens_cost', String(toInt(tokensCost, 0)));
+            formData.set('stock_qty', String(toInt(stockQty, 0)));
+            formData.set('stock_unlimited', stockUnlimited ? 'true' : 'false');
+            formData.set('is_active', isActive ? 'true' : 'false');
+            formData.set('image', imageFile);
+
             const res = await fetch('/api/admin/swag/items', {
                 method: 'POST',
-                headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: title.trim(),
-                    description: description.trim(),
-                    image_url: imageUrl.trim(),
-                    tokens_cost: toInt(tokensCost, 0),
-                    stock_qty: toInt(stockQty, 0),
-                    stock_unlimited: stockUnlimited,
-                    is_active: isActive
-                })
+                headers: await authHeader(),
+                body: formData
             });
             const json = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(json?.error || 'Failed to create SWAG item.');
             setTitle('');
             setDescription('');
-            setImageUrl('');
+            setImageFile(null);
             setTokensCost('10');
             setStockQty('0');
             setStockUnlimited(false);
             setIsActive(true);
+            if (imageInputRef.current) imageInputRef.current.value = '';
             await load();
         } catch (err) {
             setError(err?.message || 'Failed to create SWAG item.');
@@ -136,6 +144,18 @@ export default function AdminSwagPage() {
         setStockEdits(current => ({ ...(current || {}), [itemId]: { ...(current?.[itemId] || {}), ...next } }));
     };
 
+    const updateImageDraft = (itemId, file) => {
+        setImageEdits(current => ({ ...(current || {}), [itemId]: file || null }));
+    };
+
+    const clearImageDraft = itemId => {
+        setImageEdits(current => {
+            const next = { ...(current || {}) };
+            delete next[itemId];
+            return next;
+        });
+    };
+
     const getStockDraft = item => {
         const draft = stockEdits?.[item.id];
         return {
@@ -163,6 +183,35 @@ export default function AdminSwagPage() {
             await load();
         } catch (err) {
             setError(err?.message || 'Failed to update stock.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const saveImage = async item => {
+        if (!item?.id) return;
+        const file = imageEdits?.[item.id];
+        if (!file) {
+            setError('Choose an image file first.');
+            return;
+        }
+        setBusy(true);
+        setError('');
+        try {
+            const formData = new FormData();
+            formData.set('image', file);
+
+            const res = await fetch(`/api/admin/swag/items/${encodeURIComponent(item.id)}/image`, {
+                method: 'POST',
+                headers: await authHeader(),
+                body: formData
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || 'Failed to update image.');
+            clearImageDraft(item.id);
+            await load();
+        } catch (err) {
+            setError(err?.message || 'Failed to update image.');
         } finally {
             setBusy(false);
         }
@@ -261,8 +310,19 @@ export default function AdminSwagPage() {
                             <textarea value={description} onChange={e => setDescription(e.target.value)} disabled={busy} rows={4} />
                         </label>
                         <label>
-                            Image URL
-                            <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} disabled={busy} />
+                            Product image
+                            <input
+                                ref={imageInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={e => setImageFile(e.target.files?.[0] || null)}
+                                disabled={busy}
+                            />
+                            {imageFile ? (
+                                <div className="platform-subtitle" style={{ marginTop: '0.35rem' }}>
+                                    {imageFile.name}
+                                </div>
+                            ) : null}
                         </label>
                         <label>
                             Tokens cost
@@ -286,7 +346,7 @@ export default function AdminSwagPage() {
                             Active (visible to members)
                         </label>
                         <div className="platform-actions">
-                            <button className="btn primary" type="submit" disabled={busy || !title.trim()}>
+                            <button className="btn primary" type="submit" disabled={busy || !title.trim() || !imageFile}>
                                 {busy ? 'Working…' : 'Add item'}
                             </button>
                         </div>
@@ -379,18 +439,34 @@ export default function AdminSwagPage() {
                                                 </span>
                                             </td>
                                             <td>
-                                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                <div style={{ display: 'grid', gap: '0.4rem', minWidth: '220px' }}>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={e => updateImageDraft(item.id, e.target.files?.[0] || null)}
+                                                        disabled={busy}
+                                                    />
                                                     <button
                                                         className="btn ghost"
                                                         type="button"
-                                                        onClick={() => toggleActive(item)}
-                                                        disabled={busy}
+                                                        onClick={() => saveImage(item)}
+                                                        disabled={busy || !imageEdits?.[item.id]}
                                                     >
-                                                        {item.is_active ? 'Hide' : 'Show'}
+                                                        Update image
                                                     </button>
-                                                    <button className="btn ghost" type="button" onClick={() => deleteItem(item)} disabled={busy}>
-                                                        Delete
-                                                    </button>
+                                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                        <button
+                                                            className="btn ghost"
+                                                            type="button"
+                                                            onClick={() => toggleActive(item)}
+                                                            disabled={busy}
+                                                        >
+                                                            {item.is_active ? 'Hide' : 'Show'}
+                                                        </button>
+                                                        <button className="btn ghost" type="button" onClick={() => deleteItem(item)} disabled={busy}>
+                                                            Delete
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </td>
                                             </tr>
