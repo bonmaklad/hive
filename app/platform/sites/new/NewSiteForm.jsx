@@ -54,6 +54,7 @@ const FRAMEWORK_HELP = {
     node: 'Node runs your server application and serves responses directly (bring your own framework).',
     vue: 'Vue is a progressive front-end framework. Use Nuxt or a build tool to generate and serve your app.'
 };
+const SITE_HOSTING_TOKENS_PER_YEAR = 12;
 
 export default function NewSiteForm() {
     const router = useRouter();
@@ -66,6 +67,7 @@ export default function NewSiteForm() {
     const [domain, setDomain] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const [info, setInfo] = useState('');
 
     const [installationId, setInstallationId] = useState('');
     const [showGithubModal, setShowGithubModal] = useState(false);
@@ -141,8 +143,8 @@ export default function NewSiteForm() {
 
     const submit = async event => {
         event.preventDefault();
-        setBusy(true);
         setError('');
+        setInfo('');
 
         try {
             const trimmedName = String(name || '').trim();
@@ -157,45 +159,52 @@ export default function NewSiteForm() {
                 throw new Error('Framework must be next, gatsby, static, node, or vue.');
             }
 
-            const { data: authData, error: authError } = await supabase.auth.getUser();
-            if (authError || !authData?.user) throw new Error('You must be signed in to create a site.');
+            const confirmed = window.confirm(
+                `Creating this site will charge ${SITE_HOSTING_TOKENS_PER_YEAR} tokens for one year of hosting. Continue?`
+            );
+            if (!confirmed) {
+                setInfo('Site creation cancelled.');
+                return;
+            }
 
-            const { data: tenantLinks, error: tenantError } = await supabase
-                .from('tenant_users')
-                .select('tenant_id, role, created_at')
-                .eq('user_id', authData.user.id)
-                .order('created_at', { ascending: true });
+            setBusy(true);
 
-            if (tenantError) throw new Error(tenantError.message);
-            const list = Array.isArray(tenantLinks) ? tenantLinks : [];
-            const owner = list.find(item => item.role === 'owner');
-            const adminRole = list.find(item => item.role === 'admin');
-            const chosen = owner || adminRole || list[0];
-            const tenantId = chosen?.tenant_id || null;
-            if (!tenantId) throw new Error('No tenant membership found.');
-
-            const { data, error } = await supabase
-                .from('sites')
-                .insert({
+            const res = await fetch('/api/sites/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+                body: JSON.stringify({
                     name: trimmedName,
-                    owner_id: authData.user.id,
-                    tenant_id: tenantId,
                     repo: normalizedRepo,
                     framework: normalizedFramework,
                     domain: normalizedDomain,
                     github_installation_id: Number.isFinite(Number(installationId)) ? Number(installationId) : null
                 })
-                .select('id')
-                .single();
+            });
+            const json = await readJsonResponse(res);
+            if (!res.ok) {
+                const requiredTokens = Number(json?.required_tokens);
+                const tokensLeft = Number(json?.tokens_left);
+                const isInsufficient =
+                    Number.isFinite(requiredTokens) &&
+                    requiredTokens > 0 &&
+                    Number.isFinite(tokensLeft) &&
+                    tokensLeft < requiredTokens;
 
-            if (error) {
-                if (error.code === '23505') {
-                    throw new Error('That domain is already in use.');
+                if (isInsufficient) {
+                    router.push(`/platform?buy_tokens=1&tokens_required=${requiredTokens}`);
+                    return;
                 }
-                throw new Error(error.message);
+
+                throw new Error(json?.error || 'Could not create site.');
             }
 
-            router.push(`/platform/sites/${data.id}`);
+            setInfo(
+                `Site created. ${json?.tokens_charged ?? SITE_HOSTING_TOKENS_PER_YEAR} tokens charged for one year of hosting.`
+            );
+            const createdId = json?.site?.id;
+            if (!createdId) throw new Error('Site created but no site ID was returned.');
+
+            router.push(`/platform/sites/${createdId}`);
             router.refresh();
         } catch (err) {
             setError(err?.message || 'Could not create site.');
@@ -263,6 +272,18 @@ export default function NewSiteForm() {
                     </div>
                 </div>
 
+                <p className="platform-message info">
+                    Each website costs <span className="platform-mono">{SITE_HOSTING_TOKENS_PER_YEAR} tokens/year</span>. One full year of hosting is charged when you create a site.
+                </p>
+                <p className="platform-message">
+                    No AI functionality is available yet. For custom domains, email your domain to{' '}
+                    <a className="platform-link" href="mailto:info@hivehq.nz">info@hivehq.nz</a> and we will set it up.
+                </p>
+                {/* <p className="platform-message">
+                    Warning: there are flow bugs; if you find one, let us know at{' '}
+                    <a className="platform-link" href="mailto:info@hivehq.nz">info@hivehq.nz</a>.
+                </p> */}
+
                 <div style={{ display: 'grid', gap: '0.5rem' }}>
                     <label>
                         Repo
@@ -302,6 +323,7 @@ export default function NewSiteForm() {
                 </div>
 
                 {error && <p className="platform-message error">{error}</p>}
+                {info && <p className="platform-message info">{info}</p>}
 
                 <div className="platform-actions" style={{ marginTop: '1rem' }}>
                     <button className="btn primary" type="submit" disabled={busy}>

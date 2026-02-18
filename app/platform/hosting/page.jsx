@@ -57,12 +57,23 @@ export default function PlatformHostingPage() {
             <div className="platform-title-row">
                 <div>
                     <h1>Website hosting</h1>
-                    <p className="platform-subtitle">Manage your sites and view deployment history.</p>
+                    <p className="platform-subtitle">
+                        Manage your sites and view deployment history. Creating a site charges 12 tokens for one year of hosting.
+                    </p>
                 </div>
                 <Link className="btn primary" href="/platform/sites/new">
                     Create site
                 </Link>
             </div>
+
+            <p className="platform-message info">
+                No AI functionality is available yet. For custom domains, email your domain to{' '}
+                <a className="platform-link" href="mailto:info@hivehq.nz">info@hivehq.nz</a> and we will set it up.
+            </p>
+            <p className="platform-message">
+                Warning: there are flow bugs. If you come across one, let us know at{' '}
+                <a className="platform-link" href="mailto:info@hivehq.nz">info@hivehq.nz</a>.
+            </p>
 
             {error ? (
                 <p className="platform-message error">{error}</p>
@@ -125,4 +136,3 @@ export default function PlatformHostingPage() {
         </main>
     );
 }
-

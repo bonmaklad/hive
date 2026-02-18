@@ -63,6 +63,23 @@ export default function TokenPurchaseModal({
     }, [showStatus]);
 
     useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const shouldBuy = params.get('buy_tokens');
+        if (shouldBuy !== '1' && shouldBuy !== 'true') return;
+
+        const requiredRaw = params.get('tokens_required');
+        const required = parseTokenQuantity(requiredRaw);
+        if (required >= MIN_TOKENS) setTokenQty(String(required));
+
+        if (required > 0) {
+            setInfo(`You need at least ${required} token(s) to continue.`);
+        } else {
+            setInfo('Please purchase tokens to continue.');
+        }
+        setOpen(true);
+    }, []);
+
+    useEffect(() => {
         if (!open) return;
         const onKeyDown = event => {
             if (event.key === 'Escape') setOpen(false);

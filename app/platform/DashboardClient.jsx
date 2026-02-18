@@ -166,9 +166,10 @@ export default function DashboardClient() {
                 <div className="platform-kpi-row">
                     <h2 style={{ margin: 0 }}>Website hosting</h2>
                     <span className="badge neutral">{loading ? '…' : `${siteCount} site${siteCount === 1 ? '' : 's'}`}</span>
-                    <span className="badge pending">Coming soon</span>
                 </div>
-                <p className="platform-subtitle">View sites, create new ones, and track deployment status.</p>
+                <p className="platform-subtitle">
+                    Each site costs 12 tokens per year (charged upfront). No AI functionality yet. Email custom domains to info@hivehq.nz.
+                </p>
                 <div className="platform-card-actions">
                     <Link className="btn primary" href="/platform/hosting">
                         Manage hosting
@@ -182,9 +183,8 @@ export default function DashboardClient() {
             <section className="platform-card span-6" aria-label="Membership benefits">
                 <div className="platform-kpi-row">
                     <h2 style={{ margin: 0 }}>Membership benefits</h2>
-                    <span className="badge pending">Coming soon</span>
                 </div>
-                <p className="platform-subtitle">Perks, partner discounts, events, and member-only resources.</p>
+                <p className="platform-subtitle">Weekly parking and printing partner details for members.</p>
                 <div className="platform-card-actions">
                     <Link className="btn ghost" href="/platform/benefits">
                         View benefits
@@ -220,12 +220,12 @@ export default function DashboardClient() {
             <section className="platform-card span-6" aria-label="SWAG store">
                 <div className="platform-kpi-row">
                     <h2 style={{ margin: 0 }}>SWAG</h2>
-                    <span className="badge pending">Coming soon</span>
+                    {/* <span className="badge pending">Coming soon</span> */}
                 </div>
                 <p className="platform-subtitle">Spend tokens on merch, stationery, and gear.</p>
                 <div className="platform-card-actions">
                     <Link className="btn primary" href="/platform/swag">
-                        Preview SWAG
+                        Buy SWAG
                     </Link>
                 </div>
             </section>

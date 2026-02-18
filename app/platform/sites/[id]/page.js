@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import StatusBadge from '../../components/StatusBadge';
+import { usePlatformSession } from '../../PlatformContext';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,7 @@ function deriveReasonFromLogs(logs) {
 }
 
 export default function SiteDetailPage({ params }) {
+    const { profile } = usePlatformSession();
     const supabase = useMemo(() => createSupabaseBrowserClient(), []);
     const [site, setSite] = useState(null);
     const [deployments, setDeployments] = useState([]);
@@ -325,6 +327,7 @@ export default function SiteDetailPage({ params }) {
     const derivedReason = useMemo(() => deriveReasonFromLogs(depLogs), [depLogs]);
     const reasonValue = depDetail?.error_reason || depDetail?.error || depDetail?.error_message || derivedReason || '—';
     const reasonFromLogs = !depDetail?.error_reason && !depDetail?.error && !depDetail?.error_message && Boolean(derivedReason);
+    const isAdmin = Boolean(profile?.is_admin);
     const logFilters = [
         { id: 'all', label: `All (${logCounts.all})` },
         { id: 'stdout', label: `Stdout (${logCounts.stdout})` },
@@ -445,9 +448,11 @@ export default function SiteDetailPage({ params }) {
                                 <button className="btn primary" type="submit" disabled={saving}>
                                     {saving ? 'Saving…' : 'Save changes'}
                                 </button>
-                                <Link className="btn secondary" href={`/platform/sites/${params.id}/dev`}>
-                                    Dev Mode
-                                </Link>
+                                {isAdmin ? (
+                                    <Link className="btn secondary" href={`/platform/sites/${params.id}/dev`}>
+                                        Dev Mode
+                                    </Link>
+                                ) : null}
                             </div>
                         </form>
                     </section>

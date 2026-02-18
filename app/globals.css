@@ -2939,6 +2939,54 @@ main {
     margin-top: 1.25rem;
 }
 
+.benefits-grid {
+    margin-top: 0.5rem;
+}
+
+.benefit-card {
+    display: grid;
+    gap: 1rem;
+    align-content: start;
+}
+
+.benefit-icon-badge {
+    width: 4.25rem;
+    height: 4.25rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(182, 125, 88, 0.16);
+    color: var(--accent-contrast);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.benefit-icon {
+    display: block;
+}
+
+.benefit-price {
+    margin: 0.25rem 0 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--text);
+}
+
+.benefit-media {
+    position: relative;
+    min-height: 96px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(10, 12, 18, 0.6);
+    overflow: hidden;
+}
+
+.benefit-media-image {
+    object-fit: contain;
+    padding: 0.75rem;
+}
+
 .gallery-toolbar {
     display: grid;
     gap: 0.9rem;

@@ -147,17 +147,17 @@ export default function PlatformDocsPage() {
             },
             {
                 id: 'hosting',
-                label: 'Website hosting (coming soon)',
+                label: 'Website hosting',
                 render: () => (
                     <>
-                        <h2 style={{ marginTop: 0 }}>Website hosting (coming soon)</h2>
+                        <h2 style={{ marginTop: 0 }}>Website hosting</h2>
                         <p className="platform-subtitle" style={{ marginTop: 0 }}>
-                            Hosting is available in the platform and is how <span className="platform-mono">hivehq.nz</span> is run. We’re still polishing the experience and adding an AI interface to help you build and debug without needing to run anything locally.
+                            Hosting is available in the platform and is how <span className="platform-mono">hivehq.nz</span> is run. There is currently no AI functionality.
                         </p>
                         <h3>How it works</h3>
                         <ul>
                             <li>Connect your GitHub account.</li>
-                            <li>Create a site, add environment variables, and deploy.</li>
+                            <li>Create a site, add environment variables, and deploy. Each site costs <span className="platform-mono">12 tokens per year</span>.</li>
                             <li>Every push triggers a rebuild and redeploy.</li>
                             <li>You’ll see deploy status (success/failure) and logs in the platform.</li>
                         </ul>
@@ -166,24 +166,9 @@ export default function PlatformDocsPage() {
                         </p>
                         <h3>Custom domains</h3>
                         <p className="platform-subtitle" style={{ marginTop: 0 }}>
-                            Custom domains must be set up by the HIVE HQ team. Raise a ticket and we’ll configure it with Surge.
+                            Custom domains must be set up by the HIVE HQ team. Email your domain details to{' '}
+                            <a className="platform-link" href="mailto:info@hivehq.nz">info@hivehq.nz</a> and we will set this up for you.
                         </p>
-                        <ol>
-                            <li>
-                                Update your domain’s nameservers (not Cloudflare tunnel DNS) to:
-                                <ul>
-                                    <li>
-                                        <span className="platform-mono">dean.ns.cloudflare.com</span>
-                                    </li>
-                                    <li>
-                                        <span className="platform-mono">perla.ns.cloudflare.com</span>
-                                    </li>
-                                </ul>
-                            </li>
-                            <li>
-                                Once DNS is updated, raise a ticket with your domain name and the site you want it attached to.
-                            </li>
-                        </ol>
                         <h3>Multiple sites + GitHub app</h3>
                         <p className="platform-subtitle" style={{ marginTop: 0 }}>
                             The first site usually attaches automatically after you install the GitHub app. For additional sites, you may need to supply the same installation ID.
@@ -199,6 +184,10 @@ export default function PlatformDocsPage() {
                                 You can find the installation ID in GitHub under <span className="platform-mono">Settings → Installed GitHub Apps → Hive Deploy</span> (the URL ends in <span className="platform-mono">/installations/&lt;id&gt;</span>).
                             </li>
                         </ol>
+                        <p className="platform-subtitle">
+                            Warning: there are flow bugs. If you come across one, let us know at{' '}
+                            <a className="platform-link" href="mailto:info@hivehq.nz">info@hivehq.nz</a>.
+                        </p>
                     </>
                 )
             },
@@ -242,15 +231,20 @@ export default function PlatformDocsPage() {
             },
             {
                 id: 'benefits',
-                label: 'Membership benefits (coming soon)',
+                label: 'Membership benefits',
                 render: () => (
                     <>
-                        <h2 style={{ marginTop: 0 }}>Membership benefits (coming soon)</h2>
+                        <h2 style={{ marginTop: 0 }}>Membership benefits</h2>
                         <p className="platform-subtitle" style={{ marginTop: 0 }}>
-                            We’ll gather everyone’s business needs, then negotiate bulk discounts and local partner offers that genuinely help members.
+                            Member benefits now include weekly parking for <span className="platform-mono">$20/week</span> (email{' '}
+                            <a className="platform-link" href="mailto:info@hivehq.nz">info@hivehq.nz</a>) and printing support through{' '}
+                            <a className="platform-link" href="https://wphoto.nz/" target="_blank" rel="noreferrer">
+                                Whanganui Photo &amp; Print
+                            </a>.
                         </p>
                         <p className="platform-subtitle">
-                            Keep an eye on <Link href="/platform/benefits">Benefits</Link>.
+                            For printing, send files to <a className="platform-link" href="mailto:info@wphoto.nz">info@wphoto.nz</a> or call{' '}
+                            <a className="platform-link" href="tel:+6463456144">06 345 6144</a>. Full details are in <Link href="/platform/benefits">Benefits</Link>.
                         </p>
                     </>
                 )

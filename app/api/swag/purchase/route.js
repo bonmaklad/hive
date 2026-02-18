@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireTenantContext } from '../../rooms/_lib/tenantBilling';
 import { fetchCreditsSummary } from '../../rooms/_lib/credits';
+import { sendContactStyleWebhook } from '../../_lib/contactWebhook';
 
 export const runtime = 'nodejs';
 
@@ -122,6 +123,38 @@ export async function POST(request) {
         }
         return NextResponse.json({ error: orderError.message }, { status: 500 });
     }
+
+    let memberName = 'HIVE member';
+    let memberEmail = safeText(ctx.user?.email || '', 254) || 'info@hivehq.nz';
+    try {
+        const { data: profile } = await ctx.admin.from('profiles').select('name, email').eq('id', ctx.user.id).maybeSingle();
+        memberName = safeText(profile?.name || ctx.user?.user_metadata?.name || memberName, 120) || 'HIVE member';
+        memberEmail = safeText(profile?.email || memberEmail, 254) || 'info@hivehq.nz';
+    } catch {
+        // best-effort only
+    }
+
+    const webhookMessage = [
+        'Source: Platform SWAG purchase',
+        `Order ID: ${order?.id || 'n/a'}`,
+        `Member ID: ${ctx.user.id}`,
+        `Member email: ${memberEmail}`,
+        `Tenant ID: ${ctx.tenantId}`,
+        `Item: ${safeText(item.title || item.id, 200)}`,
+        `Quantity: ${quantity}`,
+        `Unit tokens: ${tokensPerItem}`,
+        `Total tokens charged: ${totalTokens}`,
+        `Token period start: ${latestPeriodStart}`,
+        `Purchased at: ${new Date().toISOString()}`
+    ].join('\n');
+
+    void sendContactStyleWebhook({
+        name: memberName,
+        email: memberEmail,
+        subject: 'Platform purchase: SWAG',
+        from: 'HIVE Platform',
+        message: webhookMessage
+    });
 
     return NextResponse.json({
         ok: true,

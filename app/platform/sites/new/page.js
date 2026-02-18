@@ -9,7 +9,9 @@ export default function NewSitePage() {
             <div className="platform-title-row">
                 <div>
                     <h1>Create a site</h1>
-                    <p className="platform-subtitle">This only stores metadata and deployment status in Supabase.</p>
+                    <p className="platform-subtitle">
+                        Creating a site charges 12 tokens for one year of hosting.
+                    </p>
                 </div>
                 <Link className="btn ghost" href="/platform/hosting">
                     Back to hosting
