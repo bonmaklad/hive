@@ -1033,6 +1033,8 @@ function UserDetailsModal({ open, tenantId, userRow, authHeader, onClose, onSave
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
     const [role, setRole] = useState('member');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
 
     useEffect(() => {
         if (!open) return;
@@ -1040,6 +1042,8 @@ function UserDetailsModal({ open, tenantId, userRow, authHeader, onClose, onSave
         setError('');
         setInfo('');
         setRole(userRow?.role || 'member');
+        setPassword('');
+        setConfirmPassword('');
     }, [open, userRow?.role]);
 
     const saveUser = async () => {
@@ -1090,6 +1094,42 @@ function UserDetailsModal({ open, tenantId, userRow, authHeader, onClose, onSave
         </>
     );
 
+    const setUserPassword = async () => {
+        if (!tenantId || !userId) return;
+
+        setBusy(true);
+        setError('');
+        setInfo('');
+        setGlobalError('');
+        try {
+            if (password.length < 8) throw new Error('Password must be at least 8 characters.');
+            if (password !== confirmPassword) throw new Error('Passwords do not match.');
+
+            const res = await fetch(`/api/admin/tenants/${tenantId}/users/password`, {
+                method: 'POST',
+                headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userId,
+                    password
+                })
+            });
+
+            const json = await readJsonResponse(res);
+            if (!res.ok) {
+                if (json?._raw) throw errorFromNonJson(res, json);
+                throw new Error(json?.error || 'Failed to set password.');
+            }
+
+            setPassword('');
+            setConfirmPassword('');
+            setInfo('Password updated.');
+        } catch (err) {
+            setError(err?.message || 'Failed to set password.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
     return (
         <Modal
             open={open}
@@ -1133,6 +1173,44 @@ function UserDetailsModal({ open, tenantId, userRow, authHeader, onClose, onSave
                         disabled={!email || busy}
                     >
                         Send magic link
+                    </button>
+                </div>
+            </div>
+
+            <div className="platform-card" style={{ marginTop: '0.75rem' }}>
+                <h3 style={{ marginTop: 0 }}>Password override</h3>
+                <p className="platform-subtitle">Use this when a user cannot sign in with magic link.</p>
+
+                <label className="platform-subtitle">New password</label>
+                <input
+                    type="password"
+                    name="admin-password"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    disabled={busy || !userId}
+                />
+
+                <label className="platform-subtitle" style={{ marginTop: '0.75rem', display: 'block' }}>
+                    Confirm password
+                </label>
+                <input
+                    type="password"
+                    name="admin-password-confirm"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    disabled={busy || !userId}
+                />
+
+                <div className="platform-card-actions">
+                    <button
+                        className="btn secondary"
+                        type="button"
+                        onClick={setUserPassword}
+                        disabled={busy || !userId || !password || !confirmPassword}
+                    >
+                        {busy ? 'Saving…' : 'Set password'}
                     </button>
                 </div>
             </div>
