@@ -396,6 +396,220 @@ main {
     color: var(--muted);
 }
 
+.community-signup-section {
+    position: relative;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at top left, rgba(111, 255, 182, 0.12), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(182, 125, 88, 0.18), transparent 42%),
+        linear-gradient(135deg, rgba(11, 12, 16, 0.92), rgba(24, 32, 43, 0.9));
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.community-signup-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.9fr);
+    gap: 2rem;
+    align-items: center;
+}
+
+.community-signup-copy {
+    max-width: 760px;
+}
+
+.community-signup-copy p {
+    max-width: 62ch;
+}
+
+.community-signup-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+.community-signup-pills span {
+    padding: 0.65rem 1rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    font-size: 0.9rem;
+    letter-spacing: 0.04em;
+}
+
+.community-signup-form {
+    display: grid;
+    gap: 0.85rem;
+    padding: 1.5rem;
+    border-radius: 28px;
+    background: rgba(13, 17, 22, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 24px 44px rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(14px);
+}
+
+.community-signup-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: stretch;
+}
+
+.community-signup-controls input {
+    min-width: 0;
+    padding: 0.95rem 1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(18, 20, 27, 0.92);
+    color: var(--text);
+    font-size: 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.community-signup-controls input::placeholder {
+    color: var(--muted);
+}
+
+.community-signup-controls input:focus-visible {
+    outline: none;
+    border-color: rgba(111, 255, 182, 0.55);
+    box-shadow: 0 0 0 4px rgba(111, 255, 182, 0.12);
+}
+
+.community-signup-controls .btn {
+    min-width: 150px;
+}
+
+.community-signup-controls .btn:disabled,
+.community-signup-controls input:disabled {
+    opacity: 0.7;
+    cursor: wait;
+}
+
+.community-signup-trust {
+    margin: 0;
+    font-size: 0.92rem;
+    color: var(--muted);
+}
+
+.community-signup-feedback {
+    margin: 0;
+    padding: 0.85rem 1rem;
+    border-radius: 16px;
+    font-weight: 600;
+}
+
+.community-signup-feedback.is-success {
+    background: rgba(111, 255, 182, 0.12);
+    border: 1px solid rgba(111, 255, 182, 0.28);
+    color: #bdf8d7;
+}
+
+.community-signup-feedback.is-error {
+    background: rgba(255, 120, 120, 0.12);
+    border: 1px solid rgba(255, 120, 120, 0.24);
+    color: #ffbeb8;
+}
+
+.community-signup-card {
+    display: grid;
+    gap: 1.25rem;
+    padding: 1.5rem;
+    border-radius: 28px;
+    background:
+        radial-gradient(circle at top left, rgba(111, 255, 182, 0.08), transparent 34%),
+        linear-gradient(135deg, rgba(13, 17, 22, 0.82), rgba(24, 32, 43, 0.82));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 24px 44px rgba(0, 0, 0, 0.28);
+    min-height: 100%;
+}
+
+.community-signup-card.is-compact .community-signup-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 1.25rem;
+    align-items: start;
+    height: 100%;
+}
+
+.community-signup-card.is-compact .community-signup-copy {
+    max-width: none;
+    display: grid;
+    gap: 0.85rem;
+}
+
+.community-signup-card.is-compact .community-signup-copy p {
+    max-width: none;
+    margin: 0;
+}
+
+.community-signup-card.is-compact .community-signup-copy h2 {
+    margin: 0;
+}
+
+.community-signup-card.is-compact .community-signup-pills {
+    margin-top: 1rem;
+}
+
+.community-signup-card.is-compact .community-signup-pills span {
+    padding: 0.55rem 0.85rem;
+    font-size: 0.82rem;
+}
+
+.community-signup-card.is-compact .community-signup-form {
+    align-self: end;
+    padding: 1.15rem;
+}
+
+.contact-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(560px, 42%);
+    gap: 1.75rem;
+    align-items: stretch;
+    margin-top: 1.25rem;
+}
+
+.contact-primary {
+    min-width: 0;
+    min-height: 100%;
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    gap: 1.25rem;
+    padding: 1.75rem;
+    border-radius: 28px;
+    background:
+        radial-gradient(circle at top right, rgba(182, 125, 88, 0.1), transparent 30%),
+        linear-gradient(135deg, rgba(13, 17, 22, 0.82), rgba(20, 27, 37, 0.82));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 24px 44px rgba(0, 0, 0, 0.28);
+}
+
+.contact-primary h2,
+.contact-primary > p {
+    margin: 0;
+}
+
+.contact-primary > p {
+    max-width: 56ch;
+}
+
+.contact-primary .contact-form {
+    width: min(100%, 38rem);
+    max-width: 38rem;
+    align-self: start;
+}
+
+.contact-shell .community-signup-card {
+    justify-self: end;
+    width: 100%;
+}
+
+.contact-primary .contact-form textarea {
+    min-height: 140px;
+}
+
 .grid {
     display: grid;
     gap: 1.5rem;
@@ -1211,6 +1425,19 @@ main {
     .program-item.left .program-copy { order: 2; }
     .program-item.left .hex-program { order: 1; }
     .hex-program { height: 260px; width: auto; margin: 0 auto; }
+
+    .community-signup-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .contact-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .contact-primary .contact-form {
+        width: 100%;
+        max-width: none;
+    }
 }
 
 /* Desktop tuning: make program images wider and pull columns closer together */
@@ -1800,8 +2027,21 @@ main {
 }
 
 .contact-meta {
-    margin-top: 1.5rem;
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem 1.25rem;
     color: var(--muted);
+}
+
+.contact-meta p {
+    margin: 0;
+    padding: 0.75rem 0.95rem;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .toast {
@@ -3488,5 +3728,25 @@ main {
         left: 1rem;
         right: 1rem;
         text-align: center;
+    }
+
+    .community-signup-form {
+        padding: 1.15rem;
+    }
+
+    .community-signup-card {
+        padding: 1.15rem;
+    }
+
+    .contact-primary {
+        padding: 1.15rem;
+    }
+
+    .community-signup-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .community-signup-controls .btn {
+        width: 100%;
     }
 }

@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import ContactForm from './components/ContactForm';
+import HomeCommunitySignup from './components/HomeCommunitySignup';
 import ImageCarousel from './components/ImageCarousel';
 import SiteNav from './components/SiteNav';
 import HiveAvailabilitySection from './components/HiveAvailabilitySection';
@@ -161,6 +162,8 @@ export default function HomePage() {
             </header>
 
             <main>
+                <HomeCommunitySignup />
+
                 {/* Spaces section moved below hero with text left and image right */}
                 <section id="spaces" className="section split">
                     <div>
@@ -502,19 +505,24 @@ export default function HomePage() {
 
                 <section id="contact" className="section contact">
                     <div className="section-tag">Connect</div>
-                    <h2>Ready to land at HIVE?</h2>
-                    <p>Book a tour, host an event, or pitch a partnership. Let us know how you would like to engage.</p>
-                    <ContactForm />
-                    <div className="contact-meta">
-                        <p>
-                            <strong>General:</strong> info@hivehq.nz
-                        </p>
-                        <p>
-                            <strong>Phone:</strong> +64 9 390 0117
-                        </p>
-                        {/* <p>
-                            <strong>Partners:</strong> partners@hivewhanganui.nz
-                        </p> */}
+                    <div className="contact-shell">
+                        <div className="contact-primary">
+                            <h2>Ready to land at HIVE?</h2>
+                            <p>Book a tour, host an event, or pitch a partnership. Let us know how you would like to engage.</p>
+                            <ContactForm />
+                            <div className="contact-meta">
+                                <p>
+                                    <strong>General:</strong> info@hivehq.nz
+                                </p>
+                                <p>
+                                    <strong>Phone:</strong> +64 9 390 0117
+                                </p>
+                                {/* <p>
+                                    <strong>Partners:</strong> partners@hivewhanganui.nz
+                                </p> */}
+                            </div>
+                        </div>
+                        <HomeCommunitySignup sectioned={false} variant="compact" />
                     </div>
                 </section>
             </main>
