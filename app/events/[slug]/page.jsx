@@ -5,8 +5,9 @@ import ContactForm from '../../components/ContactForm';
 import SiteNav from '../../components/SiteNav';
 import { getEventBySlug } from '../../../lib/events';
 
-export function generateMetadata({ params }) {
-    const event = getEventBySlug(params.slug);
+export async function generateMetadata({ params }) {
+    const { slug } = await params;
+    const event = getEventBySlug(slug);
     if (!event) return {};
 
     return {
@@ -15,8 +16,9 @@ export function generateMetadata({ params }) {
     };
 }
 
-export default function EventPage({ params }) {
-    const event = getEventBySlug(params.slug);
+export default async function EventPage({ params }) {
+    const { slug } = await params;
+    const event = getEventBySlug(slug);
     if (!event) notFound();
 
     return (
@@ -41,7 +43,7 @@ export default function EventPage({ params }) {
                         <p>{event.copy}</p>
                         <div className="hero-cta">
                             <a className="btn primary" href="#syllabus">
-                                Explore the syllabus
+                                Explore the curriculum
                             </a>
                             <a className="btn secondary" href="#get-info">
                                 Get more info
@@ -58,11 +60,11 @@ export default function EventPage({ params }) {
                         <div className="card">
                             <p>
                                 Our delivery events are built around one simple idea: momentum through making. Each program blends expert guidance,
-                                peer collaboration, and practical frameworks so you leave with tangible outcomes—not just notes.
+                                peer collaboration, and practical frameworks so you leave with tangible outcomes, not just notes.
                             </p>
                             <p>
                                 Whether you are validating a problem, building an MVP, or getting investor-ready, this {event.title.toLowerCase()} focuses on
-                                real customer learning, clear milestones, and a repeatable operating cadence you can keep using after the event.
+                                real customer learning, clear milestones, and a repeatable operating cadence you can keep using after the program.
                             </p>
                         </div>
                     </div>
@@ -71,14 +73,18 @@ export default function EventPage({ params }) {
                 <section className="section">
                     <div className="container">
                         <div className="section-tag">At a glance</div>
-                        <div className="grid grid-3">
+                        <div className="grid grid-4">
                             <article className="card">
-                                <h3>Duration</h3>
-                                <p>{event.duration}</p>
+                                <h3>Format</h3>
+                                <p>{event.format}</p>
                             </article>
                             <article className="card">
                                 <h3>Cadence</h3>
                                 <p>{event.cadence}</p>
+                            </article>
+                            <article className="card">
+                                <h3>Price</h3>
+                                <p>{event.price}</p>
                             </article>
                             <article className="card">
                                 <h3>Built for</h3>
@@ -92,9 +98,59 @@ export default function EventPage({ params }) {
                     </div>
                 </section>
 
+                <section className="section event-criteria">
+                    <div className="container">
+                        <div className="section-tag">Entry, exit, certificate</div>
+                        <h2>What you need to enter and how completion is signed off.</h2>
+                        <div className="grid grid-3">
+                            <article className="card">
+                                <h3>Entry criteria</h3>
+                                <ul className="feature-list">
+                                    {event.entryCriteria.map(item => (
+                                        <li key={item}>{item}</li>
+                                    ))}
+                                </ul>
+                            </article>
+                            <article className="card">
+                                <h3>Exit criteria</h3>
+                                <ul className="feature-list">
+                                    {event.exitCriteria.map(item => (
+                                        <li key={item}>{item}</li>
+                                    ))}
+                                </ul>
+                            </article>
+                            <article className="card">
+                                <h3>Certificate of completion</h3>
+                                <ul className="feature-list">
+                                    {event.certificate.map(item => (
+                                        <li key={item}>{item}</li>
+                                    ))}
+                                </ul>
+                            </article>
+                        </div>
+                    </div>
+                </section>
+
+                {event.schoolLink ? (
+                    <section className="section event-school-link">
+                        <div className="container">
+                            <div className="section-tag">School link</div>
+                            <h2>{event.schoolLink.title}</h2>
+                            <p className="section-lead">{event.schoolLink.copy}</p>
+                            <div className="grid grid-4">
+                                {event.schoolLink.bullets.map(item => (
+                                    <article className="card" key={item}>
+                                        <h3>{item}</h3>
+                                    </article>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+                ) : null}
+
                 <section className="section" id="syllabus">
                     <div className="container">
-                        <div className="section-tag">Syllabus</div>
+                        <div className="section-tag">Curriculum</div>
                         <h2>What you will ship</h2>
                         <div className="grid grid-3">
                             {event.syllabus.map(module => (
@@ -110,6 +166,20 @@ export default function EventPage({ params }) {
                         </div>
                     </div>
                 </section>
+
+                {event.progression ? (
+                    <section className="section">
+                        <div className="container">
+                            <div className="event-progression">
+                                <div>
+                                    <div className="section-tag">Progression</div>
+                                    <h2>Where this leads next</h2>
+                                </div>
+                                <p>{event.progression}</p>
+                            </div>
+                        </div>
+                    </section>
+                ) : null}
 
                 <section className="section">
                     <div className="container">
@@ -127,7 +197,7 @@ export default function EventPage({ params }) {
                 <section id="get-info" className="section contact">
                     <div className="container">
                         <div className="section-tag">Get more information</div>
-                        <h2>Want dates, costs, and the full outline?</h2>
+                        <h2>Want dates, pricing, and the full outline?</h2>
                         <div className="card" style={{ maxWidth: 720 }}>
                             <p>Send us a note and we will reply with the next intake and what to expect.</p>
                             <ContactForm eventName={event.title} subject={`Event enquiry: ${event.title}`} />

@@ -7,17 +7,28 @@ export default function HomePageEffects() {
         const counters = document.querySelectorAll('.stat-counter');
         if (!counters.length) return undefined;
 
+        const formatCounter = (value, element) => {
+            if (element.dataset.format === 'currency-compact') {
+                if (value >= 1000000000) return `$${Math.round(value / 1000000000)}B`;
+                if (value >= 1000000) return `$${Math.round(value / 1000000)}M`;
+                return `$${value.toLocaleString()}`;
+            }
+
+            return value.toLocaleString();
+        };
+
         const observer = new IntersectionObserver(
             entries => {
                 entries.forEach(entry => {
                     if (!entry.isIntersecting) return;
                     const target = Number(entry.target.dataset.target);
+                    const final = entry.target.dataset.final;
                     const duration = 2000;
                     const start = performance.now();
 
                     const step = now => {
                         const progress = Math.min((now - start) / duration, 1);
-                        entry.target.textContent = Math.floor(progress * target).toLocaleString();
+                        entry.target.textContent = progress === 1 && final ? final : formatCounter(Math.floor(progress * target), entry.target);
                         if (progress < 1) requestAnimationFrame(step);
                     };
 

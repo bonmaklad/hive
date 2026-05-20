@@ -8,7 +8,8 @@ import { bookingInclusions, getSpaceBySlug } from '../../../lib/spaces';
 export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({ params }) {
-    const space = await getSpaceBySlug(params.slug);
+    const { slug } = await params;
+    const space = await getSpaceBySlug(slug);
     if (!space) return {};
 
     return {
@@ -26,10 +27,12 @@ function getPricingLines(space) {
 }
 
 export default async function BookingVenuePage({ params }) {
-    const space = await getSpaceBySlug(params.slug);
+    const { slug } = await params;
+    const space = await getSpaceBySlug(slug);
     if (!space) notFound();
 
     const bookHref = `/bookings/room?room=${encodeURIComponent(space.slug)}`;
+    const photos = Array.isArray(space.images) ? space.images.filter(Boolean) : [];
 
     return (
         <>
@@ -142,14 +145,14 @@ export default async function BookingVenuePage({ params }) {
                     <div className="container">
                         <div className="section-tag">Photos</div>
                         <h2>Get a feel for the room.</h2>
-                        <div className="photo-grid" aria-label={`${space.title} photos`}>
-                            {(Array.isArray(space.images) ? space.images : []).map((src, index) => (
+                        <div className={`photo-grid ${photos.length === 1 ? 'is-single' : ''}`} aria-label={`${space.title} photos`}>
+                            {photos.map((src, index) => (
                                 <div className="photo-tile" key={src}>
                                     <Image
                                         src={src}
                                         alt={`${space.title} venue photo ${index + 1}`}
                                         fill
-                                        sizes="(max-width: 900px) 100vw, 33vw"
+                                        sizes={photos.length === 1 ? '(max-width: 900px) 100vw, 1120px' : '(max-width: 900px) 100vw, 33vw'}
                                     />
                                 </div>
                             ))}

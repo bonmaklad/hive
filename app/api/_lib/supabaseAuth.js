@@ -45,7 +45,21 @@ export async function getUserFromRequest(request) {
     if (isMissing(token)) return { user: null, error: 'Missing Authorization bearer token.' };
 
     const supabase = createSupabaseAnonClient();
-    const { data, error } = await supabase.auth.getUser(token);
+    let result;
+    try {
+        result = await supabase.auth.getUser(token);
+    } catch (error) {
+        const code = error?.cause?.code || error?.code || '';
+        const timedOut = code === 'ETIMEDOUT' || String(error?.message || '').toLowerCase().includes('fetch failed');
+        return {
+            user: null,
+            error: timedOut
+                ? 'Could not verify your login. Please try again.'
+                : error?.message || 'Could not verify your login.'
+        };
+    }
+
+    const { data, error } = result;
     if (error || !data?.user) return { user: null, error: error?.message || 'Invalid token.' };
 
     return { user: data.user, error: null };

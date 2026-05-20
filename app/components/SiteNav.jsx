@@ -38,8 +38,9 @@ export default function SiteNav({
         { label: 'Mission', href: `${hashPrefix}#why` },
         { label: 'Location', href: `${hashPrefix}#where` },
         { label: 'Pains', href: `${hashPrefix}#problems` },
-        { label: 'Events', href: `${hashPrefix}#programs` },
-        { label: 'Memberships', href: `${hashPrefix}#memberships` }
+        { label: 'Events', href: '/events' },
+        { label: 'Memberships', href: `${hashPrefix}#memberships` },
+        { label: 'Insights', href: '/insights' }
     ];
 
     return (

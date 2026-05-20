@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { usePlatformSession } from './PlatformContext';
+import ImpactStatistics from './components/ImpactStatistics';
 
 function formatNZD(cents) {
     const value = Number(cents || 0) / 100;
@@ -162,6 +163,22 @@ export default function DashboardClient() {
                 </div>
             </section>
 
+            <section className="platform-card span-6" aria-label="Events">
+                <div className="platform-kpi-row">
+                    <h2 style={{ margin: 0 }}>Events</h2>
+                    <span className="badge neutral">Calendar</span>
+                </div>
+                <p className="platform-subtitle">See what is on or add a member event.</p>
+                <div className="platform-card-actions">
+                    <Link className="btn primary" href="/platform/events">
+                        Open events
+                    </Link>
+                    <Link className="btn ghost" href="/events">
+                        Public view
+                    </Link>
+                </div>
+            </section>
+
             <section className="platform-card span-6" aria-label="Website hosting">
                 <div className="platform-kpi-row">
                     <h2 style={{ margin: 0 }}>Website hosting</h2>
@@ -229,6 +246,8 @@ export default function DashboardClient() {
                     </Link>
                 </div>
             </section>
+
+            <ImpactStatistics />
         </div>
     );
 }

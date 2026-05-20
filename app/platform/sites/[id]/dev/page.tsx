@@ -2,6 +2,7 @@
 
 import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 
@@ -241,8 +242,9 @@ function FileTree({
     return <div>{nodes.map(n => renderNode(n, 0))}</div>;
 }
 
-export default function SiteDevModePage({ params }: { params: { id: string } }) {
-    const siteId = params.id;
+export default function SiteDevModePage() {
+    const params = useParams<{ id: string }>();
+    const siteId = String(params?.id || '');
     const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
     const tokenRef = useRef('');

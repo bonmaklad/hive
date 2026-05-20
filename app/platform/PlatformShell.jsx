@@ -240,6 +240,9 @@ function PlatformShellFrame({ children, isChatPage, pathname }) {
                         <Link href="/platform" className="btn ghost">
                             Dashboard
                         </Link>
+                        <Link href="/platform/events" className="btn ghost">
+                            Events
+                        </Link>
                         {profile?.is_admin ? (
                             <Link href="/platform/admin" className="btn ghost">
                                 Admin
@@ -278,6 +281,9 @@ function PlatformShellFrame({ children, isChatPage, pathname }) {
                         <div className="platform-mobile-nav-links">
                             <Link href="/platform" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
                                 Dashboard
+                            </Link>
+                            <Link href="/platform/events" className="btn ghost" onClick={() => setMobileNavOpen(false)}>
+                                Events
                             </Link>
                             <Link
                                 href="/platform/chat"

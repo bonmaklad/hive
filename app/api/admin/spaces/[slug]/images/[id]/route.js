@@ -29,6 +29,8 @@ function serializeImage(row) {
     };
 }
 
+const IMAGE_SELECT = 'id, url, sort_order, alt, bucket, path, created_at, updated_at';
+
 export async function PATCH(request, { params }) {
     const guard = await requireAdmin(request);
     if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
@@ -54,19 +56,41 @@ export async function PATCH(request, { params }) {
         return NextResponse.json({ error: 'No updates provided.' }, { status: 400 });
     }
 
-    const { data: updated, error: updateError } = await guard.admin
+    const { data: existing, error: fetchError } = await guard.admin
         .from('space_images')
-        .update(updates)
+        .select(IMAGE_SELECT)
         .eq('id', id)
         .eq('space_slug', slug)
-        .select('id, url, sort_order, alt, bucket, path, created_at, updated_at')
-        .single();
+        .maybeSingle();
 
-    if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+    if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    if (!existing) return NextResponse.json({ error: 'Image not found for this space.' }, { status: 404 });
+
+    let updated = existing;
+    if (Object.keys(updates).length) {
+        const { data, error: updateError } = await guard.admin
+            .from('space_images')
+            .update(updates)
+            .eq('id', id)
+            .eq('space_slug', slug)
+            .select(IMAGE_SELECT)
+            .maybeSingle();
+
+        if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+        if (!data) return NextResponse.json({ error: 'Image not found for this space.' }, { status: 404 });
+        updated = data;
+    }
 
     if (payload?.make_cover === true) {
         const url = safeText(updated?.url, 2000);
-        if (url) await guard.admin.from('spaces').update({ image: url }).eq('slug', slug);
+        if (!url) return NextResponse.json({ error: 'Image has no URL to use as the cover.' }, { status: 400 });
+
+        const { error: coverError } = await guard.admin
+            .from('spaces')
+            .update({ image: url })
+            .eq('slug', slug);
+
+        if (coverError) return NextResponse.json({ error: coverError.message }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true, image: serializeImage(updated) });
@@ -118,4 +142,3 @@ export async function DELETE(request, { params }) {
 
     return NextResponse.json({ ok: true });
 }
-

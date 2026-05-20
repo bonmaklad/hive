@@ -5,16 +5,18 @@ import Link from 'next/link';
 
 import ContactForm from './components/ContactForm';
 import HomeCommunitySignup from './components/HomeCommunitySignup';
+import HomeImpactStats from './components/HomeImpactStats';
+import EventWeekStrip from './components/EventWeekStrip';
 import ImageCarousel from './components/ImageCarousel';
 import SiteNav from './components/SiteNav';
 import HiveAvailabilitySection from './components/HiveAvailabilitySection';
 import MembershipTierCta from './components/MembershipTierCta';
 import { events as programs } from '../lib/events';
 
-const heroStats = [
-    { label: 'Startups', value: 1000 },
-    { label: 'High-income jobs', value: 3000 },
-    { label: 'Additional GDP', value: 1000000000 }
+const heroGoals = [
+    { label: 'Startups', value: 1000, finalValue: '1,000' },
+    { label: 'High-income jobs', value: 3000, finalValue: '3,000' },
+    { label: 'Additional GDP', value: 1000000000, finalValue: '$1B', format: 'currency-compact' }
 ];
 
 const whoWeServe = [
@@ -33,7 +35,7 @@ const problems = [
 
 const solutionPillars = [
     { title: 'Educate & train', copy: 'Targeted youth-to-adult pipelines with coding camps, internships, and mentor office hours.' },
-    { title: 'Support & nurture', copy: 'Tri-annual incubators, 13-week accelerators, and venture studio squads keep founders shipping.' },
+    { title: 'Support & nurture', copy: 'Milestone-based incubators, accelerators, and venture studio squads keep founders shipping.' },
     { title: 'Community & collaboration', copy: 'Monthly events, design camps, and startup weekends connect founders with domain experts.' }
 ];
 
@@ -53,19 +55,35 @@ const objectives = [
     { title: 'Community & collaboration', copy: 'Peer guilds and partner showcases to keep wins visible and lessons shared.' }
 ];
 
-const metrics = [
-    { label: 'Job growth', progress: 92 },
-    { label: 'Household income', progress: 88 },
-    { label: 'GDP', progress: 95 },
-    { label: 'New companies', progress: 100 }
-];
-
 // Images now live on each event in lib/events.js (event.image)
 
 const strategy = [
     { title: 'Program design', copy: 'Structured, scalable playbooks for every phase of the startup journey powered by volunteer experts.' },
     { title: 'Partnerships & funding', copy: 'Collaboration with local agencies, tech firms, and investors plus blended grants, sponsorships, and capital.' },
     { title: 'Evaluation & marketing', copy: 'Always-on measurement with pulse dashboards and campaigns that draw diverse founders into the pipeline.' }
+];
+
+const programJourney = [
+    {
+        title: 'Discover',
+        programs: 'Hackathons, design camps, Startup Weekend, and school-linked coding camps',
+        result: 'Problem, team, prototype, and evidence'
+    },
+    {
+        title: 'Incubate',
+        programs: 'Incubators for approved scalable ideas',
+        result: 'First $1 of real revenue'
+    },
+    {
+        title: 'Accelerate',
+        programs: 'Accelerators for approved companies already making money',
+        result: 'A growth flywheel where each $1 spent returns more than $1'
+    },
+    {
+        title: 'Scale',
+        programs: 'End-of-year Dragons Den and May Whanganui Innovation Awards',
+        result: 'Investment readiness, recognition, and growth capital'
+    }
 ];
 
 const memberships = [
@@ -136,8 +154,7 @@ export default function HomePage() {
                         <p className="eyebrow">Technology Capital of Aotearoa</p>
                         <h1>Where collaboration meets momentum.</h1>
                         <p>
-                            We are the tech-focused innovation hub with a goal to power 1,000 new Whanganui businesses, $1B in regional GDP, and 3,000 high-income jobs.
-                            If you are building, scaling, or searching for a HQ where ideas turn into measurable outcomes, land at HIVE.
+                            Our goal is clear: 1,000 Whanganui startups, 3,000 high-income jobs, and $1B in additional GDP.
                         </p>
                         <div className="hero-cta">
                             <a className="btn primary" href="#memberships">
@@ -147,13 +164,14 @@ export default function HomePage() {
                                 Explore programs
                             </a>
                         </div>
-                        <div className="hero-stats">
-                            {heroStats.map(stat => (
+                        <div className="hero-goals" aria-label="HIVE regional goals">
+                            {heroGoals.map(stat => (
                                 <div key={stat.label}>
-                                    <span className="stat-counter" data-target={stat.value}>
+                                    <span className="stat-counter" data-target={stat.value} data-final={stat.finalValue} data-format={stat.format || 'number'}>
                                         0
                                     </span>
                                     <p>{stat.label}</p>
+                                    <small>Goal</small>
                                 </div>
                             ))}
                         </div>
@@ -162,6 +180,7 @@ export default function HomePage() {
             </header>
 
             <main>
+                <HomeImpactStats />
                 <HomeCommunitySignup />
 
                 {/* Spaces section moved below hero with text left and image right */}
@@ -336,8 +355,8 @@ export default function HomePage() {
                 </section>
 
                 <section className="section data">
-                    <div className="section-tag">Outcomes</div>
-                    <h2>Incubation & acceleration that compounds.</h2>
+                    <div className="section-tag">The goal</div>
+                    <h2>1,000 startups, 3,000 high-income jobs, and $1B in additional GDP.</h2>
                     <div className="data-wrap">
                         <svg className="impact-chart" viewBox="0 0 320 160" role="img" aria-label="Projected impact chart">
                             <defs>
@@ -355,34 +374,35 @@ export default function HomePage() {
                         </svg>
                         <ul className="metrics">
                             <li>
-                                <span>100</span>
-                                <p>Startups graduating yearly</p>
+                                <span>1,000</span>
+                                <p>Startups goal</p>
                             </li>
                             <li>
                                 <span>3,000</span>
-                                <p>New jobs by 2036</p>
+                                <p>High-income jobs goal</p>
                             </li>
                             <li>
                                 <span>$1B</span>
-                                <p>Local GDP unlocked</p>
+                                <p>Additional GDP goal</p>
                             </li>
                         </ul>
-                    </div>
-                    <div className="metrics-bars">
-                        {metrics.map(item => (
-                            <div className="metric" key={item.label}>
-                                <div className="metric-label">{item.label}</div>
-                                <div className="metric-track">
-                                    <div className="metric-bar" data-progress={item.progress} />
-                                </div>
-                            </div>
-                        ))}
                     </div>
                 </section>
 
                 <section id="programs" className="section programs">
                     <div className="section-tag">Delivery events</div>
-                    <h2>Year-round programming that keeps founders shipping.</h2>
+                    <h2>A clear journey from first idea to investment-ready company.</h2>
+                    <EventWeekStrip />
+                    <div className="program-journey" aria-label="HIVE founder journey">
+                        {programJourney.map((step, index) => (
+                            <div className="journey-step" key={step.title}>
+                                <span>{String(index + 1).padStart(2, '0')}</span>
+                                <h3>{step.title}</h3>
+                                <p>{step.programs}</p>
+                                <strong>{step.result}</strong>
+                            </div>
+                        ))}
+                    </div>
                     <div className="programs-list">
                         {programs.map((program, i) => (
                             <Link
@@ -407,8 +427,13 @@ export default function HomePage() {
                                     <figcaption>{program.title}</figcaption>
                                 </figure>
                                 <div className="program-copy">
+                                    <span className="program-stage">{program.stage}</span>
                                     <h3>{program.title}</h3>
                                     <p>{program.copy}</p>
+                                    <div className="program-meta">
+                                        <span>{program.format}</span>
+                                        <span>Price: {program.price}</span>
+                                    </div>
                                 </div>
                             </Link>
                         ))}
