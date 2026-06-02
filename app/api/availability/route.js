@@ -5,7 +5,6 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const DEFAULT_IMAGE_BUCKET = 'HIVE';
-const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 function toIsoDate(date) {
     return date.toISOString().slice(0, 10);
@@ -97,8 +96,6 @@ export async function GET() {
         }
 
         const units = [];
-        const signTasks = [];
-
         for (const u of unitsRaw || []) {
             const isActive = u?.active ?? u?.is_active ?? true;
             if (isActive === false) continue;
@@ -131,24 +128,7 @@ export async function GET() {
                 signed_image_url: null
             };
 
-            if (location?.bucket && location?.path && typeof admin.storage.from(location.bucket).createSignedUrl === 'function') {
-                signTasks.push({ unit, location });
-            }
-
             units.push(unit);
-        }
-
-        if (signTasks.length) {
-            await Promise.allSettled(
-                signTasks.map(async ({ unit, location }) => {
-                    try {
-                        const { data, error } = await admin.storage
-                            .from(location.bucket)
-                            .createSignedUrl(location.path, SIGNED_URL_TTL_SECONDS);
-                        if (!error) unit.signed_image_url = normalizeUrl(data?.signedUrl);
-                    } catch {}
-                })
-            );
         }
 
         const res = NextResponse.json({ units });

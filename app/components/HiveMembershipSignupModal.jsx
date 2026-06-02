@@ -103,6 +103,8 @@ function sortByBuildingAndUnit(a, b) {
 
 function WorkspaceImageModal({ unit, onClose }) {
     const [failed, setFailed] = useState(false);
+    const [activeUrl, setActiveUrl] = useState('');
+    const [triedSigned, setTriedSigned] = useState(false);
 
     useEffect(() => {
         if (!unit) return;
@@ -113,17 +115,20 @@ function WorkspaceImageModal({ unit, onClose }) {
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [onClose, unit]);
 
+    const primaryUrl = typeof unit?.image_url === 'string' ? unit.image_url.trim() : '';
+    const signedUrl = typeof unit?.signed_image_url === 'string' ? unit.signed_image_url.trim() : '';
+    const showImage = Boolean(activeUrl) && !failed;
+
     useEffect(() => {
+        const initial = primaryUrl || signedUrl || '';
+        setActiveUrl(initial);
         setFailed(false);
-    }, [unit?.id]);
+        setTriedSigned(false);
+    }, [primaryUrl, signedUrl]);
 
     if (!unit) return null;
 
     const title = toUnitCode(unit);
-    const imageUrl = typeof unit?.signed_image_url === 'string' && unit.signed_image_url
-        ? unit.signed_image_url
-        : (typeof unit?.image_url === 'string' ? unit.image_url : '');
-    const showImage = Boolean(imageUrl) && !failed;
 
     return (
         <div
@@ -151,13 +156,20 @@ function WorkspaceImageModal({ unit, onClose }) {
                 {showImage ? (
                     <div className="availability-image" aria-label={`Image for ${title}`}>
                         <Image
-                            src={imageUrl}
+                            src={activeUrl}
                             alt={`${title} workspace`}
                             fill
                             sizes="(max-width: 900px) 92vw, 860px"
                             quality={70}
                             style={{ objectFit: 'cover' }}
-                            onError={() => setFailed(true)}
+                            onError={() => {
+                                if (!triedSigned && signedUrl && activeUrl !== signedUrl) {
+                                    setTriedSigned(true);
+                                    setActiveUrl(signedUrl);
+                                    return;
+                                }
+                                setFailed(true);
+                            }}
                         />
                     </div>
                 ) : (
