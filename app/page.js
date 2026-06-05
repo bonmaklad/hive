@@ -540,7 +540,7 @@ export default function HomePage() {
                                     <strong>General:</strong> info@hivehq.nz
                                 </p>
                                 <p>
-                                    <strong>Phone:</strong> +64 9 390 0117
+                                    <strong>Phone:</strong> +64 4 390 0117
                                 </p>
                                 {/* <p>
                                     <strong>Partners:</strong> partners@hivewhanganui.nz

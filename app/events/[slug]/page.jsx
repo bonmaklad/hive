@@ -206,7 +206,7 @@ export default async function EventPage({ params }) {
                                     <strong>General:</strong> info@hivehq.nz
                                 </p>
                                 <p>
-                                    <strong>Phone:</strong> +64 9 390 0117
+                                    <strong>Phone:</strong> +64 4 390 0117
                                 </p>
                                 <p>
                                     <Link href="/#programs">Back to events</Link>
