@@ -14,7 +14,7 @@ const PLAN_META = {
         plan: 'member',
         label: 'Hive membership',
         title: 'Become a HIVE member',
-        subtitle: 'We will create your tenant, add 10 starter room tokens, and start automatic Stripe billing.',
+        subtitle: 'Pay securely with Stripe first. Once payment is confirmed, we will create your tenant and add 10 starter room tokens.',
         requiresWorkspace: false,
         allowedUnitTypes: [],
         defaultWeeklyExGstCents: HIVE_MEMBER_WEEKLY_EX_GST_CENTS,
@@ -374,7 +374,7 @@ export default function HiveMembershipSignupModal({ triggerLabel = 'Become a mem
             const checkoutUrl = typeof json?.checkout_url === 'string' ? json.checkout_url : '';
             if (!checkoutUrl) throw new Error('Stripe checkout URL is missing.');
 
-            setInfo('Account set up. Magic link sent. Redirecting to secure payment...');
+            setInfo('Redirecting to secure payment. Your HIVE tenant will be created only after Stripe confirms payment.');
             window.location.assign(checkoutUrl);
         } catch (err) {
             setError(err?.message || 'Could not start membership setup.');

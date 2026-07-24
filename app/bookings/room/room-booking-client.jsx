@@ -332,7 +332,8 @@ export default function RoomBookingClient() {
         }
 
         let cancelled = false;
-        async function loadStatus() {
+        let retryTimer = null;
+        async function loadStatus(attempt = 0) {
             try {
                 const qs = new URLSearchParams({ booking: bookingId });
                 if (sessionId) qs.set('session_id', sessionId);
@@ -360,6 +361,9 @@ export default function RoomBookingClient() {
 
                 // If we have a return from Stripe but the booking isn't confirmed yet, webhook may still be pending.
                 setReturnStatus({ kind: 'pending', booking: json?.booking || null });
+                if (attempt < 5) {
+                    retryTimer = window.setTimeout(() => loadStatus(attempt + 1), 1500);
+                }
             } catch (err) {
                 if (!cancelled) {
                     setReturnStatus({ kind: 'error', message: err?.message || 'Could not confirm booking status.' });
@@ -370,6 +374,7 @@ export default function RoomBookingClient() {
         loadStatus();
         return () => {
             cancelled = true;
+            if (retryTimer) window.clearTimeout(retryTimer);
         };
     }, [refreshAvailability, searchParams]);
 

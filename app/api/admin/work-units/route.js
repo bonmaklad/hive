@@ -230,11 +230,15 @@ async function applyOptionalWorkUnitUpdates({ guard, id, payload }) {
     return latest;
 }
 
-function serializeWorkUnit(u, { includeOccupant, occupantsByUnitId }) {
+function serializeWorkUnit(u, { includeOccupant, occupantsByUnitId, tenantNamesById = new Map() }) {
     const unitNumber = asNumber(u?.unit_number, 0);
     const code = toCode(u?.building, unitNumber);
     const capacity = toPositiveInt(u?.capacity, 1);
     const occupiedTenantIds = includeOccupant ? (occupantsByUnitId?.[u.id] || []) : [];
+    const uniqueOccupiedTenantIds = Array.isArray(occupiedTenantIds) ? Array.from(new Set(occupiedTenantIds)) : [];
+    const occupiedTenantNames = uniqueOccupiedTenantIds
+        .map(tenantId => tenantNamesById.get(tenantId))
+        .filter(Boolean);
     const occupiedCount = Array.isArray(occupiedTenantIds) ? occupiedTenantIds.length : 0;
     const isFull = occupiedCount >= capacity;
     const isOccupied = occupiedCount > 0;
@@ -268,8 +272,10 @@ function serializeWorkUnit(u, { includeOccupant, occupantsByUnitId }) {
         is_vacant: occupiedCount === 0,
         active,
         is_active: active,
-        occupied_by_tenant_id: includeOccupant && Array.isArray(occupiedTenantIds) ? (occupiedTenantIds[0] || null) : null,
-        occupied_by_tenant_ids: includeOccupant && Array.isArray(occupiedTenantIds) ? Array.from(new Set(occupiedTenantIds)) : []
+        occupied_by_tenant_id: includeOccupant ? (uniqueOccupiedTenantIds[0] || null) : null,
+        occupied_by_tenant_ids: includeOccupant ? uniqueOccupiedTenantIds : [],
+        occupied_by_tenant_name: includeOccupant ? (occupiedTenantNames[0] || null) : null,
+        occupied_by_tenant_names: includeOccupant ? occupiedTenantNames : []
     };
 }
 
@@ -294,6 +300,7 @@ export async function GET(request) {
 
     let occupantsByUnitId = {};
     let activeAllocations = [];
+    const tenantNamesById = new Map();
 
     if (includeOccupant || includeBilling) {
         const today = toIsoDate(new Date());
@@ -311,9 +318,26 @@ export async function GET(request) {
             if (!occupantsByUnitId[row.work_unit_id]) occupantsByUnitId[row.work_unit_id] = [];
             if (row.tenant_id) occupantsByUnitId[row.work_unit_id].push(row.tenant_id);
         }
+
+        const occupantTenantIds = Array.from(new Set(activeAllocations.map(row => row?.tenant_id).filter(Boolean)));
+        if (occupantTenantIds.length) {
+            const { data: tenants, error: tenantsError } = await guard.admin
+                .from('tenants')
+                .select('id, name')
+                .in('id', occupantTenantIds);
+            if (tenantsError) return NextResponse.json({ error: tenantsError.message }, { status: 500 });
+            for (const tenant of tenants || []) {
+                const name = safeText(tenant?.name, 200);
+                if (tenant?.id && name) tenantNamesById.set(tenant.id, name);
+            }
+        }
     }
 
-    const allSerialized = (unitsRaw || []).map(u => serializeWorkUnit(u, { includeOccupant: includeOccupant || includeBilling, occupantsByUnitId }));
+    const allSerialized = (unitsRaw || []).map(u => serializeWorkUnit(u, {
+        includeOccupant: includeOccupant || includeBilling,
+        occupantsByUnitId,
+        tenantNamesById
+    }));
     const unitsForResponse = allSerialized.filter(u => u && (includeInactive || (u.active ?? true) !== false));
 
     let metrics = null;

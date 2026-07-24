@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { usePlatformSession } from '../../PlatformContext';
+import HiveWorkUnitMap from './HiveWorkUnitMap';
 
 const UNIT_TYPES = ['premium_office', 'private_office', 'desk', 'desk_pod', 'small_office'];
 
@@ -161,30 +162,39 @@ export default function AdminWorkUnitsPage() {
         return { Authorization: `Bearer ${token}` };
     };
 
-    const loadUnits = async () => {
-        setLoading(true);
-        setError('');
-        setInfo('');
+    const loadUnits = async (opts = {}) => {
+        const silent = Boolean(opts.silent);
+        if (!silent) {
+            setLoading(true);
+            setError('');
+            setInfo('');
+        }
         try {
             const res = await fetch(
                 `/api/admin/work-units?includeInactive=${showInactive ? '1' : '0'}&includeOccupant=1&includeBilling=1`,
-                { headers: await authHeader() }
+                { headers: await authHeader(), cache: 'no-store' }
             );
             const json = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(json?.error || 'Failed to load work units.');
             setUnits(Array.isArray(json?.units) ? json.units : []);
             setMetrics(json?.metrics || null);
         } catch (err) {
-            setUnits([]);
-            setMetrics(null);
+            if (!silent) {
+                setUnits([]);
+                setMetrics(null);
+            }
             setError(err?.message || 'Failed to load work units.');
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
     useEffect(() => {
         loadUnits();
+        const intervalId = window.setInterval(() => {
+            loadUnits({ silent: true });
+        }, 30_000);
+        return () => window.clearInterval(intervalId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showInactive]);
 
@@ -437,6 +447,10 @@ export default function AdminWorkUnitsPage() {
 
             {error && <p className="platform-message error">{error}</p>}
             {info && <p className="platform-message success">{info}</p>}
+
+            {!loading ? (
+                <HiveWorkUnitMap units={sortedUnits} onUnitSelect={openEdit} />
+            ) : null}
 
             <Modal
                 open={modalOpen}

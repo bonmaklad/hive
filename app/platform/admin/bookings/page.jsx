@@ -21,6 +21,12 @@ function formatDateInput(value) {
     return value || `${yyyy}-${mm}-${dd}`;
 }
 
+function bookingStatusBadge(status) {
+    if (status === 'approved' || status === 'confirmed') return 'success';
+    if (status === 'cancelled' || status === 'expired') return 'error';
+    return 'pending';
+}
+
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTH_FORMAT = new Intl.DateTimeFormat('en-NZ', { month: 'long', year: 'numeric' });
 const PIN_PALETTE = ['#f6a04d', '#6fc1ff', '#7be2a8', '#c59bff', '#ff87b5', '#ffd166', '#4dd1a1', '#ffb347'];
@@ -234,7 +240,7 @@ export default function AdminBookingsPage() {
             <div className="platform-title-row">
                 <div>
                     <h1>Bookings</h1>
-                    <p className="platform-subtitle">View bookings and create bookings on behalf of members.</p>
+                    <p className="platform-subtitle">View member and public website bookings, or create a booking on behalf of a member.</p>
                 </div>
                 <Link className="btn ghost" href="/platform/admin">
                     Back to admin
@@ -394,7 +400,8 @@ export default function AdminBookingsPage() {
                                     <th>Date</th>
                                     <th>Time</th>
                                     <th>Space</th>
-                                    <th>Member</th>
+                                    <th>Customer</th>
+                                    <th>Source</th>
                                     <th>Status</th>
                                 </tr>
                             </thead>
@@ -407,15 +414,23 @@ export default function AdminBookingsPage() {
                                                 {String(b.start_time).slice(0, 5)}–{String(b.end_time).slice(0, 5)}
                                             </td>
                                             <td>{spaceBySlug[b.space_slug]?.title || b.space_slug}</td>
-                                            <td className="platform-mono">{b.owner?.email || b.owner_id}</td>
                                             <td>
-                                                <span className={`badge ${b.status === 'approved' ? 'success' : 'pending'}`}>{b.status}</span>
+                                                <div>{b.customer?.name || b.owner?.name || '—'}</div>
+                                                <div className="platform-mono">{b.customer?.email || b.owner?.email || b.owner_id || '—'}</div>
+                                            </td>
+                                            <td>
+                                                <span className={`badge ${b.source === 'public' ? 'pending' : 'neutral'}`}>
+                                                    {b.source === 'public' ? 'website' : 'member'}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span className={`badge ${bookingStatusBadge(b.status)}`}>{b.status}</span>
                                             </td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={5} className="platform-subtitle">
+                                        <td colSpan={6} className="platform-subtitle">
                                             No bookings found.
                                         </td>
                                     </tr>

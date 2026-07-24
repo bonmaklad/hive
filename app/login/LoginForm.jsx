@@ -16,6 +16,7 @@ export default function LoginForm() {
     const [info, setInfo] = useState('');
 
     const next = searchParams.get('next') || '/platform';
+    const signupStatus = searchParams.get('signup');
     const urlError = searchParams.get('error');
     const urlErrorDescription = searchParams.get('error_description');
 
@@ -66,6 +67,11 @@ export default function LoginForm() {
             {(urlError || urlErrorDescription) && !error && (
                 <p className="platform-message error">
                     {urlErrorDescription || (urlError === 'otp_expired' ? 'Email link is invalid or has expired.' : urlError)}
+                </p>
+            )}
+            {signupStatus === 'success' && !error && (
+                <p className="platform-message success">
+                    Stripe checkout completed. We will create your HIVE tenant after payment is confirmed, then email your secure sign-in link.
                 </p>
             )}
             <label>

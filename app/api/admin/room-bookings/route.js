@@ -29,29 +29,99 @@ export async function GET(request) {
     const to = parseDate(url.searchParams.get('to')) || null;
     const spaceSlug = url.searchParams.get('space_slug') || null;
 
-    let q = guard.admin
+    let memberQuery = guard.admin
         .from('room_bookings')
         .select('id, owner_id, space_slug, booking_date, start_time, end_time, hours, tokens_used, price_cents, status, created_at')
         .order('booking_date', { ascending: false })
         .order('start_time', { ascending: false })
         .limit(300);
 
-    if (from) q = q.gte('booking_date', from);
-    if (to) q = q.lte('booking_date', to);
-    if (spaceSlug) q = q.eq('space_slug', spaceSlug);
+    let publicQuery = guard.admin
+        .from('public_room_bookings')
+        .select('id, space_slug, booking_date, start_time, end_time, hours, price_cents, currency, status, customer_name, customer_email, customer_phone, created_at')
+        .order('booking_date', { ascending: false })
+        .order('start_time', { ascending: false })
+        .limit(300);
 
-    const { data, error } = await q;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (from) {
+        memberQuery = memberQuery.gte('booking_date', from);
+        publicQuery = publicQuery.gte('booking_date', from);
+    }
+    if (to) {
+        memberQuery = memberQuery.lte('booking_date', to);
+        publicQuery = publicQuery.lte('booking_date', to);
+    }
+    if (spaceSlug) {
+        memberQuery = memberQuery.eq('space_slug', spaceSlug);
+        publicQuery = publicQuery.eq('space_slug', spaceSlug);
+    }
 
-    const ownerIds = Array.from(new Set((data || []).map(b => b.owner_id).filter(Boolean)));
-    const { data: owners } = await guard.admin.from('profiles').select('id, name, email').in('id', ownerIds);
+    const [memberResult, publicResult] = await Promise.all([memberQuery, publicQuery]);
+    if (memberResult.error) return NextResponse.json({ error: memberResult.error.message }, { status: 500 });
+    if (publicResult.error && publicResult.error.code !== '42P01') {
+        return NextResponse.json({ error: publicResult.error.message }, { status: 500 });
+    }
+
+    const memberBookings = memberResult.data || [];
+    const publicBookings = publicResult.error?.code === '42P01' ? [] : (publicResult.data || []);
+
+    const ownerIds = Array.from(new Set(memberBookings.map(b => b.owner_id).filter(Boolean)));
+    let owners = [];
+    if (ownerIds.length) {
+        const ownersResult = await guard.admin.from('profiles').select('id, name, email').in('id', ownerIds);
+        if (ownersResult.error) return NextResponse.json({ error: ownersResult.error.message }, { status: 500 });
+        owners = ownersResult.data || [];
+    }
     const ownersById = Object.fromEntries((owners || []).map(p => [p.id, p]));
 
-    return NextResponse.json({
-        bookings: (data || []).map(b => ({
-            ...b,
-            owner: ownersById[b.owner_id] || null
+    const publicBookingIds = publicBookings.map(b => b.id);
+    const paymentsByBookingId = {};
+    if (publicBookingIds.length) {
+        const { data: payments, error: paymentsError } = await guard.admin
+            .from('public_room_booking_payments')
+            .select('public_room_booking_id, status, amount_cents, currency, stripe_checkout_session_id, stripe_payment_intent_id, created_at')
+            .in('public_room_booking_id', publicBookingIds)
+            .order('created_at', { ascending: false });
+        if (paymentsError && paymentsError.code !== '42P01') {
+            return NextResponse.json({ error: paymentsError.message }, { status: 500 });
+        }
+        for (const payment of payments || []) {
+            if (!paymentsByBookingId[payment.public_room_booking_id]) {
+                paymentsByBookingId[payment.public_room_booking_id] = payment;
+            }
+        }
+    }
+
+    const bookings = [
+        ...memberBookings.map(booking => ({
+            ...booking,
+            source: 'member',
+            owner: ownersById[booking.owner_id] || null,
+            customer: ownersById[booking.owner_id] || null,
+            payment: null
+        })),
+        ...publicBookings.map(booking => ({
+            ...booking,
+            source: 'public',
+            owner_id: null,
+            owner: null,
+            customer: {
+                name: booking.customer_name,
+                email: booking.customer_email,
+                phone: booking.customer_phone
+            },
+            payment: paymentsByBookingId[booking.id] || null
         }))
+    ]
+        .sort((a, b) => {
+            const dateOrder = String(b.booking_date).localeCompare(String(a.booking_date));
+            if (dateOrder) return dateOrder;
+            return String(b.start_time).localeCompare(String(a.start_time));
+        })
+        .slice(0, 300);
+
+    return NextResponse.json({
+        bookings
     });
 }
 
@@ -93,16 +163,34 @@ export async function POST(request) {
 
     const hours = Math.ceil((endMin - startMin) / 60);
 
-    const { data: conflicts, error: conflictError } = await guard.admin
-        .from('room_bookings')
-        .select('id, start_time, end_time, status')
-        .eq('space_slug', spaceSlug)
-        .eq('booking_date', date)
-        .in('status', ['requested', 'approved']);
+    const [memberConflictsResult, publicConflictsResult] = await Promise.all([
+        guard.admin
+            .from('room_bookings')
+            .select('id, start_time, end_time, status')
+            .eq('space_slug', spaceSlug)
+            .eq('booking_date', date)
+            .in('status', ['requested', 'approved']),
+        guard.admin
+            .from('public_room_bookings')
+            .select('id, start_time, end_time, status')
+            .eq('space_slug', spaceSlug)
+            .eq('booking_date', date)
+            .in('status', ['pending_payment', 'confirmed'])
+    ]);
 
-    if (conflictError) return NextResponse.json({ error: conflictError.message }, { status: 500 });
+    if (memberConflictsResult.error) {
+        return NextResponse.json({ error: memberConflictsResult.error.message }, { status: 500 });
+    }
+    if (publicConflictsResult.error && publicConflictsResult.error.code !== '42P01') {
+        return NextResponse.json({ error: publicConflictsResult.error.message }, { status: 500 });
+    }
 
-    const hasOverlap = (conflicts || []).some(b => {
+    const conflicts = [
+        ...(memberConflictsResult.data || []),
+        ...(publicConflictsResult.error?.code === '42P01' ? [] : (publicConflictsResult.data || []))
+    ];
+
+    const hasOverlap = conflicts.some(b => {
         const s = timeToMinutes(b.start_time);
         const e = timeToMinutes(b.end_time);
         return startMin < e && endMin > s;
@@ -131,4 +219,3 @@ export async function POST(request) {
     if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
     return NextResponse.json({ booking: inserted });
 }
-

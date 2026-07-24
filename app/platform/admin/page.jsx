@@ -49,6 +49,16 @@ export default function AdminHomePage() {
                 </section>
 
                 <section className="platform-card span-6">
+                    <h2 style={{ marginTop: 0 }}>Income</h2>
+                    <p className="platform-subtitle">Track membership and office billing, member counts, and 116 vs 122 income.</p>
+                    <div className="platform-card-actions">
+                        <Link className="btn primary" href="/platform/admin/financials">
+                            Open income
+                        </Link>
+                    </div>
+                </section>
+
+                <section className="platform-card span-6">
                     <h2 style={{ marginTop: 0 }}>Spaces</h2>
                     <p className="platform-subtitle">Update room names, pricing, tokens/hour, and images used across the site.</p>
                     <div className="platform-card-actions">

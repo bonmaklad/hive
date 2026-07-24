@@ -28,10 +28,7 @@ async function fetchStripeSession(checkoutSessionId) {
 }
 
 function sessionIsPaid(session) {
-    if (!session) return false;
-    if (session?.payment_status === 'paid') return true;
-    if (session?.status === 'complete' && session?.amount_total >= 0) return true;
-    return false;
+    return session?.payment_status === 'paid' || session?.payment_status === 'no_payment_required';
 }
 
 function sessionInvoiceInfo(session) {
@@ -75,6 +72,7 @@ export async function GET(request) {
     }
 
     let reconciled = false;
+    let reconciledSession = null;
     let invoiceUrl = null;
     let email = { ok: false, skipped: true, error: null };
 
@@ -82,12 +80,10 @@ export async function GET(request) {
     if (booking.status === 'pending_payment' && payment?.stripe_checkout_session_id) {
         const session = await fetchStripeSession(sessionIdFromReturn || payment.stripe_checkout_session_id);
         if (session && sessionIsPaid(session)) {
-            reconciled = true;
-
             const { invoiceId, hostedInvoiceUrl, invoicePdf } = sessionInvoiceInfo(session);
             invoiceUrl = hostedInvoiceUrl || invoicePdf || null;
 
-            await admin.from('public_room_booking_payments')
+            const { error: paymentUpdateError } = await admin.from('public_room_booking_payments')
                 .update({
                     status: 'paid',
                     stripe_invoice_id: invoiceId || (typeof session?.invoice === 'string' ? session.invoice : null),
@@ -97,10 +93,19 @@ export async function GET(request) {
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', payment.id);
+            if (paymentUpdateError) {
+                return NextResponse.json({ error: paymentUpdateError.message }, { status: 500 });
+            }
 
-            await admin.from('public_room_bookings')
+            const { error: bookingUpdateError } = await admin.from('public_room_bookings')
                 .update({ status: 'confirmed', updated_at: new Date().toISOString() })
                 .eq('id', bookingId);
+            if (bookingUpdateError) {
+                return NextResponse.json({ error: bookingUpdateError.message }, { status: 500 });
+            }
+
+            reconciled = true;
+            reconciledSession = session;
 
             let spaceTitle = booking.space_slug;
             try {
@@ -144,12 +149,26 @@ export async function GET(request) {
         },
         payment: payment
             ? {
-                  status: payment.status,
-                  currency: payment.currency,
-                  amount_cents: payment.amount_cents,
+                  status: reconciled ? 'paid' : payment.status,
+                  currency:
+                      reconciled && typeof reconciledSession?.currency === 'string'
+                          ? reconciledSession.currency.toUpperCase()
+                          : payment.currency,
+                  amount_cents:
+                      reconciled && typeof reconciledSession?.amount_total === 'number'
+                          ? reconciledSession.amount_total
+                          : payment.amount_cents,
                   stripe_checkout_session_id: payment.stripe_checkout_session_id,
-                  stripe_invoice_id: payment.stripe_invoice_id,
-                  stripe_payment_intent_id: payment.stripe_payment_intent_id
+                  stripe_invoice_id: reconciled
+                      ? (typeof reconciledSession?.invoice === 'string'
+                          ? reconciledSession.invoice
+                          : reconciledSession?.invoice?.id || null)
+                      : payment.stripe_invoice_id,
+                  stripe_payment_intent_id: reconciled
+                      ? (typeof reconciledSession?.payment_intent === 'string'
+                          ? reconciledSession.payment_intent
+                          : reconciledSession?.payment_intent?.id || null)
+                      : payment.stripe_payment_intent_id
               }
             : null,
         reconciled,
@@ -157,4 +176,3 @@ export async function GET(request) {
         email
     });
 }
-

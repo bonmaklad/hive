@@ -1,0 +1,1456 @@
+{
+  "schemaVersion": "1.0.0",
+  "document": {
+    "title": "Home Vault High-Level Features, Requirements and BDD Acceptance Specification",
+    "productName": "Home Vault",
+    "productNameStatus": "Working title - client approval required",
+    "version": "0.1",
+    "status": "Draft for client approval",
+    "preparedBy": "Surge Technology",
+    "preparedFor": "Home Vault product owner",
+    "preparedDate": "2026-07-15",
+    "market": "New Zealand",
+    "source": {
+      "type": "Workshop transcript",
+      "file": "Client workshop transcript supplied for requirements analysis",
+      "workshopDate": "2026-07-15",
+      "duration": "40 minutes 52 seconds"
+    }
+  },
+  "executiveSummary": "Home Vault is a proposed mobile-first web service that gives New Zealand homeowners, renovators and small property investors one visual, structured place to retain the information, documents, reminders, tasks, assets and costs associated with each property. The initial proposition replaces fragmented spreadsheets, email, calendar entries, paper receipts, informal contact names and physical reminders such as retained paint cans. A free one-property record is intended to build reach, while a paid plan adds active property, maintenance, renovation, financial and reporting tools. The longer-term opportunity is a buyer-safe property passport and ownership transfer experience that preserves useful property knowledge without disclosing a seller's confidential renovation economics.",
+  "customerSegments": [
+    {
+      "id": "SEG-01",
+      "name": "Small-portfolio residential property investors",
+      "priority": "Primary",
+      "definition": "New Zealand owners with more than one property, typically two to nine properties, who manage property knowledge themselves rather than using specialist portfolio software.",
+      "needs": [
+        "A reliable record for each property and room",
+        "Maintenance and warranty reminders",
+        "Asset, invoice, expense and renovation-cost visibility",
+        "Information and exports suitable for accountants"
+      ]
+    },
+    {
+      "id": "SEG-02",
+      "name": "Renovators and property flippers",
+      "priority": "Primary adjacent",
+      "definition": "People actively improving and reselling property who need room-level photos, tasks, budgets, costs, assets and before-and-after records.",
+      "needs": [
+        "Room-level renovation records",
+        "Budget and actual-cost tracking",
+        "Before-and-after imagery",
+        "A future buyer-safe handover that protects margin and cost details"
+      ]
+    },
+    {
+      "id": "SEG-03",
+      "name": "Owner-occupiers",
+      "priority": "Reach and future conversion",
+      "definition": "Single-property homeowners who need a simple home information record and may later renovate, acquire another property or upgrade to active management tools.",
+      "needs": [
+        "One place for paint colours, photos and property documents",
+        "A simple, low-friction free experience",
+        "A path to paid reminders, assets and reporting when needs grow"
+      ]
+    },
+    {
+      "id": "SEG-04",
+      "name": "Property collaborators",
+      "priority": "Supporting",
+      "definition": "Partners, family members and other trusted people invited by an owner to help view or manage property information.",
+      "needs": [
+        "Clear admin and read-only permissions",
+        "Shared notes and consistent information",
+        "Controlled access to sensitive financial records"
+      ]
+    },
+    {
+      "id": "SEG-05",
+      "name": "Property buyers, sellers and agents",
+      "priority": "Future",
+      "definition": "Participants in a property sale who may use a paid property passport and ownership-claim process.",
+      "needs": [
+        "Useful room, asset and warranty information",
+        "Clear provenance and ownership transfer",
+        "Protection of the seller's confidential renovation and purchase economics"
+      ]
+    }
+  ],
+  "marketPosition": {
+    "geography": "New Zealand",
+    "currentAlternatives": [
+      "Memory and informal knowledge",
+      "Physical reminders such as retained paint cans and paper receipts",
+      "Email and text-message search",
+      "Personal calendars",
+      "Google Docs, PDFs and spreadsheets",
+      "Generic CRM tools",
+      "Specialist property-management software used by larger portfolios"
+    ],
+    "positioning": "Home Vault sits between unstructured personal tools and professional property-management platforms. It is intended to be easier and more valuable than a spreadsheet for self-managing owners, without requiring the complexity of enterprise or agency property-management software.",
+    "differentiators": [
+      "Property-to-room-to-asset information hierarchy",
+      "Image-rich, mobile-first experience",
+      "Documents, tasks, reminders and financial records in one place",
+      "Owner and accountant reporting",
+      "Future privacy-aware property passport and transfer"
+    ],
+    "experienceReference": "A familiar modern New Zealand property-platform experience, with Homes.co.nz used only as a usability reference. No third-party branding or protected visual design is to be copied."
+  },
+  "problemsToSolve": [
+    {
+      "id": "PROB-01",
+      "problem": "Property information is fragmented across memory, paper, email, texts, documents, spreadsheets and calendars.",
+      "impact": "Owners waste time searching and cannot rely on a complete record."
+    },
+    {
+      "id": "PROB-02",
+      "problem": "Owners lose practical knowledge such as paint colours, product details and which trade completed work.",
+      "impact": "Maintenance and repeat work are slower, less accurate and more expensive."
+    },
+    {
+      "id": "PROB-03",
+      "problem": "Warranties, servicing dates and recurring maintenance are easy to miss.",
+      "impact": "Owners may lose warranty value, defer maintenance or incur avoidable costs."
+    },
+    {
+      "id": "PROB-04",
+      "problem": "Asset, invoice and depreciation information is difficult to assemble for accountants.",
+      "impact": "Financial reporting is incomplete and owners may miss legitimate depreciation information."
+    },
+    {
+      "id": "PROB-05",
+      "problem": "Renovation costs and ongoing property expenses are maintained in separate spreadsheets or not tracked consistently.",
+      "impact": "Owners cannot easily understand spend by property, room, category or period."
+    },
+    {
+      "id": "PROB-06",
+      "problem": "Existing tools are either too manual or designed for larger professional property operations.",
+      "impact": "Small-portfolio owners lack a right-sized product that is worth paying for."
+    },
+    {
+      "id": "PROB-07",
+      "problem": "Useful knowledge is lost when a property is sold, while sellers do not want to disclose confidential renovation economics.",
+      "impact": "Buyers receive an incomplete handover and sellers face privacy and commercial concerns."
+    },
+    {
+      "id": "PROB-08",
+      "problem": "Property records are often text-heavy and administrative rather than visual and engaging.",
+      "impact": "Owners are less likely to keep records current or celebrate and share renovation progress."
+    }
+  ],
+  "desiredOutcomes": [
+    "Create one trusted source of property knowledge for each owner.",
+    "Reduce the time and effort needed to find property, room, asset, trade and document information.",
+    "Protect value by keeping warranties, service dates and recurring maintenance visible.",
+    "Make renovation and ownership costs understandable by property, room, category and period.",
+    "Make accountant handover and asset/depreciation preparation easier.",
+    "Provide an image-rich experience that encourages regular use and supports before-and-after storytelling.",
+    "Build a large free-user base with a credible path to paid subscriptions and a future strategic property-platform partnership or acquisition."
+  ],
+  "productPrinciples": [
+    "The product must provide clearer value and be easier to use than a spreadsheet.",
+    "The information hierarchy must remain intuitive: portfolio, property, room, asset or record.",
+    "Capturing a photo or document should be fast on a mobile browser.",
+    "The free experience must be genuinely useful for one property; paid value must come from active management, automation and reporting.",
+    "The design must be visual, modern and mobile-first while remaining a responsive web service for the initial release.",
+    "Customer behaviour will inform later changes; the scope is expected to adapt after real-world validation.",
+    "Private financial information must not be exposed through collaboration or future ownership transfer."
+  ],
+  "informationModel": {
+    "hierarchy": [
+      "Account",
+      "Portfolio",
+      "Property",
+      "Room",
+      "Asset or information record"
+    ],
+    "propertyRelatedRecords": [
+      "Rooms",
+      "Property photos and documents",
+      "Property-level assets",
+      "Tasks and reminders",
+      "Renovation costs and budgets",
+      "Ongoing expenses and bills",
+      "Reports",
+      "Collaborator memberships",
+      "Future ownership-transfer record"
+    ],
+    "roomRelatedRecords": [
+      "Photos and before/after history",
+      "Paint and finish details",
+      "Assets",
+      "Invoices and documents",
+      "Tasks and reminders",
+      "Renovation labour and material costs",
+      "Comments"
+    ],
+    "supportingRecords": [
+      "User profile",
+      "Subscription and entitlement",
+      "Role or membership",
+      "Warranty",
+      "Service history",
+      "Depreciation input",
+      "Recurring-task rule",
+      "Notification",
+      "Expense category",
+      "Generated report",
+      "Future transfer claim"
+    ]
+  },
+  "actors": [
+    {
+      "id": "ACT-01",
+      "name": "Visitor",
+      "description": "A prospective customer viewing the public website."
+    },
+    {
+      "id": "ACT-02",
+      "name": "Free owner",
+      "description": "A registered customer maintaining one property's core information."
+    },
+    {
+      "id": "ACT-03",
+      "name": "Paid owner or portfolio administrator",
+      "description": "A subscriber managing active property, asset, task, cost and reporting features."
+    },
+    {
+      "id": "ACT-04",
+      "name": "Invited administrator",
+      "description": "A trusted user allowed to manage the owner's permitted property information."
+    },
+    {
+      "id": "ACT-05",
+      "name": "Read-only collaborator",
+      "description": "A trusted user allowed to view but not change permitted property information."
+    },
+    {
+      "id": "ACT-06",
+      "name": "Future buyer or new owner",
+      "description": "A recipient of a buyer-safe property passport who may claim transferred property information."
+    }
+  ],
+  "userFlows": [
+    {
+      "id": "FLOW-01",
+      "name": "Discover, register and start",
+      "phase": "MVP",
+      "actorRefs": ["ACT-01", "ACT-02"],
+      "trigger": "A visitor wants a better way to retain home or property information.",
+      "steps": [
+        "View the public proposition and compare the free and paid value.",
+        "Create an account or sign in.",
+        "Complete a basic profile.",
+        "Start the guided add-property flow."
+      ],
+      "outcome": "The customer reaches a usable first-property record with minimal friction.",
+      "featureRefs": ["F-01", "F-02", "F-03"]
+    },
+    {
+      "id": "FLOW-02",
+      "name": "Add a property and its rooms",
+      "phase": "MVP",
+      "actorRefs": ["ACT-02", "ACT-03", "ACT-04"],
+      "trigger": "A registered owner wants to establish a property record.",
+      "steps": [
+        "Enter or look up the property address.",
+        "Confirm available property details or enter them manually.",
+        "Classify the property, including whether it is the owner's home or a rental/investment property.",
+        "Accept suggested standard rooms and add, rename or remove rooms."
+      ],
+      "outcome": "A structured property-and-room record is ready for content.",
+      "featureRefs": ["F-03", "F-04"]
+    },
+    {
+      "id": "FLOW-03",
+      "name": "Build the visual room record",
+      "phase": "MVP",
+      "actorRefs": ["ACT-02", "ACT-03", "ACT-04"],
+      "trigger": "An owner wants to remember what is in a room and how it has changed.",
+      "steps": [
+        "Open a room within a property.",
+        "Upload current or before-and-after photos.",
+        "Record paint colours, finishes and room notes.",
+        "Add related assets, documents, costs or tasks where the owner's plan permits."
+      ],
+      "outcome": "The room becomes a useful, visual source of truth.",
+      "featureRefs": ["F-04", "F-05", "F-06", "F-07"]
+    },
+    {
+      "id": "FLOW-04",
+      "name": "Record an asset, invoice and warranty",
+      "phase": "MVP",
+      "actorRefs": ["ACT-03", "ACT-04"],
+      "trigger": "An appliance, fixture or other depreciable/maintainable item is purchased or identified.",
+      "steps": [
+        "Select the property and, where relevant, the room.",
+        "Create the asset with purchase, supplier/trade and product details.",
+        "Upload the invoice, receipt and warranty documents.",
+        "Record warranty expiry and service information."
+      ],
+      "outcome": "The asset and its supporting evidence can be found, maintained and reported.",
+      "featureRefs": ["F-05", "F-06", "F-08"]
+    },
+    {
+      "id": "FLOW-05",
+      "name": "Plan and complete property work",
+      "phase": "MVP",
+      "actorRefs": ["ACT-03", "ACT-04"],
+      "trigger": "Maintenance or renovation work needs to be planned or repeated.",
+      "steps": [
+        "Create a task against a property, room or asset.",
+        "Set a due date and optional recurrence.",
+        "Review tasks in calendar or Kanban-style views.",
+        "Receive an email reminder and complete or reschedule the task."
+      ],
+      "outcome": "Important work is visible and less likely to be missed.",
+      "featureRefs": ["F-06"]
+    },
+    {
+      "id": "FLOW-06",
+      "name": "Track costs, expenses and renovation budget",
+      "phase": "MVP",
+      "actorRefs": ["ACT-03", "ACT-04"],
+      "trigger": "The owner receives a bill, incurs a renovation cost or wants to understand household operating costs.",
+      "steps": [
+        "Choose asset, renovation cost or ongoing expense.",
+        "Assign the record to a property and optionally a room.",
+        "Categorise the record, including electricity, gas, rates, cleaning or maintenance.",
+        "Upload the bill or invoice and review totals by period, category, property or room."
+      ],
+      "outcome": "The owner can understand property cost and budget performance, including a twelve-month utility view.",
+      "featureRefs": ["F-07", "F-08"]
+    },
+    {
+      "id": "FLOW-07",
+      "name": "Review and export property information",
+      "phase": "MVP",
+      "actorRefs": ["ACT-03", "ACT-04", "ACT-05"],
+      "trigger": "The owner needs a consolidated view or information for an accountant.",
+      "steps": [
+        "Select portfolio, property or room scope.",
+        "Review assets, tasks, costs, expenses, photos and relevant documents.",
+        "Generate a Property Information Report or accountant-focused export.",
+        "Download or share the permitted output."
+      ],
+      "outcome": "Useful property knowledge is available without rebuilding a spreadsheet.",
+      "featureRefs": ["F-08"]
+    },
+    {
+      "id": "FLOW-08",
+      "name": "Invite and collaborate",
+      "phase": "MVP",
+      "actorRefs": ["ACT-03", "ACT-04", "ACT-05"],
+      "trigger": "An owner wants a partner or trusted person to help manage or view information.",
+      "steps": [
+        "Invite the person by email.",
+        "Assign administrator or read-only access.",
+        "The invitee accepts and accesses only permitted information.",
+        "Authorised users add or review comments at property or room level."
+      ],
+      "outcome": "Property knowledge can be shared without surrendering control.",
+      "featureRefs": ["F-09"]
+    },
+    {
+      "id": "FLOW-09",
+      "name": "Upgrade for active management",
+      "phase": "MVP",
+      "actorRefs": ["ACT-02", "ACT-03"],
+      "trigger": "A free owner needs another property or a paid feature.",
+      "steps": [
+        "Select a paid feature or attempt to add another property.",
+        "Review paid-plan value and the current monthly/annual price.",
+        "Complete subscription checkout.",
+        "Return to the original action with paid access enabled."
+      ],
+      "outcome": "The customer converts without losing existing property information.",
+      "featureRefs": ["F-02"]
+    },
+    {
+      "id": "FLOW-10",
+      "name": "Create a buyer-safe passport and transfer ownership",
+      "phase": "Future",
+      "actorRefs": ["ACT-03", "ACT-06"],
+      "trigger": "A recorded property is being sold.",
+      "steps": [
+        "The seller generates a buyer-safe Property Passport.",
+        "The seller reviews the included rooms, assets and warranty information.",
+        "The service excludes confidential renovation labour, material costs and seller-only financial records.",
+        "Following sale, the new owner claims the property and receives the approved transferable record."
+      ],
+      "outcome": "Useful property knowledge survives a sale without exposing the seller's confidential economics.",
+      "featureRefs": ["F-11"]
+    }
+  ],
+  "features": [
+    {
+      "id": "F-01",
+      "name": "Public website, account access and profile",
+      "phase": "MVP",
+      "access": "Public and all registered users",
+      "summary": "Explain the proposition, convert visitors to a free account and provide secure access to a personal profile.",
+      "sourceTrace": ["19:49-20:09", "32:52-34:11", "36:01-37:26"],
+      "requirements": [
+        {
+          "id": "REQ-01.1",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "The public website shall explain the one-place property record proposition, the free one-property offer and the additional value of the paid plan, with a clear registration call to action.",
+          "bddTests": [
+            {
+              "id": "BDD-01.1-A",
+              "title": "Visitor understands the proposition and starts registration",
+              "given": ["A visitor is not signed in", "The visitor is on the public website"],
+              "when": ["The visitor reviews the offer", "The visitor selects the free-account call to action"],
+              "then": ["The free one-property entitlement is visible", "Paid-plan value is distinguishable", "The registration flow opens"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-01.2",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "The service shall support account registration, sign-in, sign-out and password recovery using an email address.",
+          "bddTests": [
+            {
+              "id": "BDD-01.2-A",
+              "title": "Registered customer recovers account access",
+              "given": ["A registered customer cannot remember the password"],
+              "when": ["The customer requests password recovery", "The customer completes the emailed recovery process"],
+              "then": ["The customer can set a new password", "The customer can sign in without losing property data"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-01.3",
+          "priority": "Should",
+          "phase": "MVP",
+          "statement": "A registered customer shall be able to maintain a personal profile, including display name and profile photo.",
+          "bddTests": [
+            {
+              "id": "BDD-01.3-A",
+              "title": "Customer updates profile details",
+              "given": ["A customer is signed in"],
+              "when": ["The customer updates the display name and profile photo", "The customer saves the profile"],
+              "then": ["The saved profile is shown on the next visit", "The updated identity is used in collaborative views"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F-02",
+      "name": "Plans, subscription and access",
+      "phase": "MVP",
+      "access": "Free and paid customers",
+      "summary": "Provide a genuinely useful free record and a clear paid path for active property management.",
+      "sourceTrace": ["7:00-10:40", "12:00-13:48", "29:33-33:52"],
+      "requirements": [
+        {
+          "id": "REQ-02.1",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "The free plan shall allow one property and its rooms to retain core information, photos, paint details and documents.",
+          "bddTests": [
+            {
+              "id": "BDD-02.1-A",
+              "title": "Free customer builds one useful property record",
+              "given": ["A free customer has no property"],
+              "when": ["The customer adds one property", "The customer adds rooms, photos, paint details and documents"],
+              "then": ["The information is saved", "The customer can return to and view the property record", "No paid subscription is required for the core record"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-02.2",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "The paid plan shall unlock additional properties and active tools including assets, automated or recurring tasks, reminders, calendars, financial tracking and reporting.",
+          "bddTests": [
+            {
+              "id": "BDD-02.2-A",
+              "title": "Paid customer receives active management tools",
+              "given": ["A free customer has an existing property record"],
+              "when": ["The customer completes a paid subscription"],
+              "then": ["The existing record is preserved", "Paid features become available", "The customer can add another property"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-02.3",
+          "priority": "Should",
+          "phase": "MVP",
+          "statement": "The launch checkout shall support the approved pricing options; the workshop hypothesis is NZD 19 per month or NZD 199 per year, subject to client and market validation.",
+          "bddTests": [
+            {
+              "id": "BDD-02.3-A",
+              "title": "Customer chooses an approved billing period",
+              "given": ["Monthly and annual prices have been approved and configured"],
+              "when": ["A customer chooses a billing period and completes checkout"],
+              "then": ["The selected price and renewal period are confirmed before payment", "The subscription reflects the selected billing period"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F-03",
+      "name": "Property portfolio and setup",
+      "phase": "MVP",
+      "access": "Free for one property; paid for multiple properties",
+      "summary": "Create and manage structured property records without requiring specialist property-management knowledge.",
+      "sourceTrace": ["3:12-6:18", "19:49-21:35", "29:33-33:52"],
+      "requirements": [
+        {
+          "id": "REQ-03.1",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "A customer shall be able to add, view, edit and archive a property record, subject to the customer's plan limit.",
+          "bddTests": [
+            {
+              "id": "BDD-03.1-A",
+              "title": "Customer adds a property within the plan limit",
+              "given": ["A signed-in customer is below the plan's property limit"],
+              "when": ["The customer enters the required property details and saves"],
+              "then": ["The property appears in the portfolio", "The customer can reopen and edit it"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-03.2",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "The property setup shall capture the address and owner-selected property context, including whether the property is the customer's home or a rental/investment property.",
+          "bddTests": [
+            {
+              "id": "BDD-03.2-A",
+              "title": "Customer classifies a new property",
+              "given": ["A customer is adding a property"],
+              "when": ["The customer enters an address and selects the property context"],
+              "then": ["The classification is stored", "The property displays the selected context"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-03.3",
+          "priority": "Should",
+          "phase": "MVP subject to integration feasibility",
+          "statement": "Where a lawful and commercially available property-data source is approved, the setup shall pre-populate available property information and allow the customer to confirm or correct it; manual entry shall always remain available.",
+          "bddTests": [
+            {
+              "id": "BDD-03.3-A",
+              "title": "Property lookup fails without blocking setup",
+              "given": ["A customer enters an address", "No approved lookup result is available"],
+              "when": ["The customer continues with setup"],
+              "then": ["Manual entry is offered", "The property can be completed without external data"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-03.4",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "New properties shall offer a practical default set of rooms, and authorised customers shall be able to add, rename, reorder and remove rooms.",
+          "bddTests": [
+            {
+              "id": "BDD-03.4-A",
+              "title": "Customer tailors the room list",
+              "given": ["A property has been created with suggested rooms"],
+              "when": ["The customer adds a custom room and renames an existing room"],
+              "then": ["The revised room list is saved", "Room-specific records use the revised names"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F-04",
+      "name": "Rooms and visual home record",
+      "phase": "MVP with post-MVP sharing",
+      "access": "All registered users within plan limits",
+      "summary": "Make each room an engaging, image-rich record of finishes, history and related property information.",
+      "sourceTrace": ["22:05-26:26", "32:52-35:01", "36:01-37:26"],
+      "requirements": [
+        {
+          "id": "REQ-04.1",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "An authorised customer shall be able to upload and organise multiple photos against a room.",
+          "bddTests": [
+            {
+              "id": "BDD-04.1-A",
+              "title": "Customer uploads room photos from a mobile browser",
+              "given": ["An authorised customer is viewing a room on a mobile browser"],
+              "when": ["The customer selects and uploads multiple photos"],
+              "then": ["Upload progress and completion are clear", "The photos appear in the room record", "The photos remain available after the customer signs in again"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-04.2",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "A room record shall support practical finish information, including wall or surface paint colour, brand or reference details and free-text notes.",
+          "bddTests": [
+            {
+              "id": "BDD-04.2-A",
+              "title": "Customer retrieves a saved paint reference",
+              "given": ["A room has a saved paint colour and brand reference"],
+              "when": ["The customer opens the room record"],
+              "then": ["The paint information is visible with the room photos", "The customer can edit the information"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-04.3",
+          "priority": "Should",
+          "phase": "MVP",
+          "statement": "Room photos shall be capable of being labelled or ordered to show before-and-after renovation states.",
+          "bddTests": [
+            {
+              "id": "BDD-04.3-A",
+              "title": "Customer creates a before-and-after view",
+              "given": ["A room has at least one pre-renovation and one post-renovation photo"],
+              "when": ["The customer labels the photos as before and after"],
+              "then": ["The room presents the images as a clear comparison"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-04.4",
+          "priority": "Could",
+          "phase": "Post-MVP",
+          "statement": "A customer should be able to create a privacy-checked social-ready before-and-after image or link without exposing private property or financial information.",
+          "bddTests": [
+            {
+              "id": "BDD-04.4-A",
+              "title": "Social share excludes private information",
+              "given": ["A room has a before-and-after comparison", "The property also contains private financial records"],
+              "when": ["The customer creates a social-ready share"],
+              "then": ["Only the selected images and approved caption are included", "No address or financial information is included unless explicitly selected"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F-05",
+      "name": "Assets, invoices, warranties and trade records",
+      "phase": "MVP",
+      "access": "Paid customers and authorised collaborators",
+      "summary": "Retain the evidence and dates needed to own, maintain and report on items within a property.",
+      "sourceTrace": ["4:34-5:14", "10:43-11:51", "23:40-26:26"],
+      "requirements": [
+        {
+          "id": "REQ-05.1",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "An authorised paid user shall be able to create an asset at property or room level with description, product details, purchase date and optional supplier or trade contact.",
+          "bddTests": [
+            {
+              "id": "BDD-05.1-A",
+              "title": "Customer records a room asset",
+              "given": ["A paid customer is viewing a room"],
+              "when": ["The customer records an appliance and purchase details"],
+              "then": ["The asset appears in both the room and property asset views", "The saved details can be edited"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-05.2",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "An asset shall support attached invoices, receipts, warranty documents and relevant photos.",
+          "bddTests": [
+            {
+              "id": "BDD-05.2-A",
+              "title": "Customer finds an asset warranty document",
+              "given": ["An asset has an attached warranty document"],
+              "when": ["The customer opens the asset"],
+              "then": ["The document name and type are visible", "The authorised customer can view or download it"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-05.3",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "An asset shall support warranty expiry, recommended service date and service history information that can create related reminders or tasks.",
+          "bddTests": [
+            {
+              "id": "BDD-05.3-A",
+              "title": "Warranty date creates a reminder",
+              "given": ["An asset has a future warranty expiry", "The customer has reminder access"],
+              "when": ["The customer enables a pre-expiry reminder"],
+              "then": ["A dated reminder is created against the asset", "The reminder appears in the property calendar"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-05.4",
+          "priority": "Should",
+          "phase": "MVP",
+          "statement": "The service shall maintain an asset register with purchase-value and depreciation-input fields suitable for review or export to an accountant; the service shall not present itself as tax advice.",
+          "bddTests": [
+            {
+              "id": "BDD-05.4-A",
+              "title": "Customer prepares asset information for an accountant",
+              "given": ["A property contains assets with purchase details"],
+              "when": ["The customer requests the accountant asset export"],
+              "then": ["The export includes the recorded asset and purchase fields", "The output clearly indicates that accounting treatment requires professional confirmation"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F-06",
+      "name": "Tasks, reminders and calendar",
+      "phase": "MVP",
+      "access": "Paid customers and authorised administrators",
+      "summary": "Make maintenance and renovation work visible, repeatable and less likely to be missed.",
+      "sourceTrace": ["10:58-11:56", "21:35-23:21", "29:33-33:52", "35:29-35:59"],
+      "requirements": [
+        {
+          "id": "REQ-06.1",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "An authorised paid user shall be able to create a dated task against a property, room or asset and assign notes and status.",
+          "bddTests": [
+            {
+              "id": "BDD-06.1-A",
+              "title": "Customer creates a room maintenance task",
+              "given": ["A paid customer is viewing a room"],
+              "when": ["The customer adds a dated maintenance task"],
+              "then": ["The task is linked to the room and property", "The task appears in open-task views"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-06.2",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "A task or reminder shall support recurrence, including monthly and annual patterns, and shall create the next occurrence without duplicating completed history.",
+          "bddTests": [
+            {
+              "id": "BDD-06.2-A",
+              "title": "Recurring task advances after completion",
+              "given": ["A monthly cleaning task is due"],
+              "when": ["The customer marks the occurrence complete"],
+              "then": ["The completed occurrence remains in history", "The next occurrence is scheduled one month later"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-06.3",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "Paid customers shall be able to review work in calendar and Kanban-style task views, with filters for portfolio, property, room, asset, status and date.",
+          "bddTests": [
+            {
+              "id": "BDD-06.3-A",
+              "title": "Customer filters work to one property",
+              "given": ["A paid customer has tasks across multiple properties"],
+              "when": ["The customer filters the calendar to one property"],
+              "then": ["Only tasks for that property are shown", "The same task records remain available in the Kanban view"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-06.4",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "The service shall send scheduled email reminders for enabled due dates, including examples such as heat-pump servicing, filter or UV-lamp replacement and smoke-alarm testing.",
+          "bddTests": [
+            {
+              "id": "BDD-06.4-A",
+              "title": "Customer receives a due-date email reminder",
+              "given": ["A reminder is enabled", "The configured notification time has arrived"],
+              "when": ["The scheduled reminder process runs"],
+              "then": ["An email is sent to the authorised recipient", "The email identifies the property, item and due action", "The send outcome is recorded"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F-07",
+      "name": "Costs, expenses and renovation budgets",
+      "phase": "MVP",
+      "access": "Paid customers and authorised administrators",
+      "summary": "Provide a consistent financial record for assets, renovations and ongoing property ownership.",
+      "sourceTrace": ["23:49-25:11", "28:18-29:18", "31:34-32:52"],
+      "requirements": [
+        {
+          "id": "REQ-07.1",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "The service shall distinguish asset purchases, renovation costs and ongoing property expenses as separate financial record types.",
+          "bddTests": [
+            {
+              "id": "BDD-07.1-A",
+              "title": "Customer records different financial types",
+              "given": ["A paid customer is adding a financial record"],
+              "when": ["The customer selects asset purchase, renovation cost or ongoing expense"],
+              "then": ["Fields and reporting classification match the selected type", "The record is not double-counted across types"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-07.2",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "A financial record shall be assignable to a property and, where relevant, a room, with amount, date, category, notes and supporting bill, receipt or invoice.",
+          "bddTests": [
+            {
+              "id": "BDD-07.2-A",
+              "title": "Customer uploads a room renovation invoice",
+              "given": ["A paid customer is viewing a room"],
+              "when": ["The customer enters a renovation cost and uploads its invoice"],
+              "then": ["The cost appears in room and property totals", "The invoice is accessible to authorised users"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-07.3",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "Ongoing expense categories shall include, at minimum, electricity, gas, rates, cleaning and maintenance, with customer-defined categories available where required.",
+          "bddTests": [
+            {
+              "id": "BDD-07.3-A",
+              "title": "Customer categorises a utility bill",
+              "given": ["A paid customer has an electricity bill"],
+              "when": ["The customer records the amount and selects electricity"],
+              "then": ["The expense is included in electricity totals", "The uploaded bill remains linked to the record"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-07.4",
+          "priority": "Should",
+          "phase": "MVP",
+          "statement": "The service shall support renovation budgets and actual-cost comparison, plus period views that can show at least twelve months of household operating expenses by property and category.",
+          "bddTests": [
+            {
+              "id": "BDD-07.4-A",
+              "title": "Customer reviews twelve months of electricity cost",
+              "given": ["A property has twelve months of electricity expenses"],
+              "when": ["The customer selects the property, electricity category and twelve-month period"],
+              "then": ["The service shows the total and period breakdown", "The figures reconcile to the underlying expense records"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F-08",
+      "name": "Property reporting and exports",
+      "phase": "MVP with future sale report",
+      "access": "Paid customers and permitted collaborators",
+      "summary": "Turn the retained information into useful owner, renovation and accountant views.",
+      "sourceTrace": ["24:39-26:59", "29:33-33:52", "36:01-37:26"],
+      "requirements": [
+        {
+          "id": "REQ-08.1",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "Paid customers shall be able to review assets, tasks, costs, expenses and relevant documents at portfolio, property and room scope.",
+          "bddTests": [
+            {
+              "id": "BDD-08.1-A",
+              "title": "Customer moves from property to room reporting",
+              "given": ["A property contains records across multiple rooms"],
+              "when": ["The customer changes report scope from property to one room"],
+              "then": ["Totals and lists update to the selected room", "The property-level source records remain unchanged"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-08.2",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "The service shall generate a client-approved Property Information Report containing the selected property's room photos, finish information, assets, warranties, maintenance and permitted supporting records.",
+          "bddTests": [
+            {
+              "id": "BDD-08.2-A",
+              "title": "Customer generates a property information report",
+              "given": ["A paid customer's property contains room and asset information"],
+              "when": ["The customer selects the report sections and generates the report"],
+              "then": ["The output contains only the selected and permitted information", "The report identifies the property and generation date"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-08.3",
+          "priority": "Should",
+          "phase": "MVP",
+          "statement": "The service shall provide downloadable accountant-focused exports for asset/depreciation inputs and property or room spend, with clear date and category fields.",
+          "bddTests": [
+            {
+              "id": "BDD-08.3-A",
+              "title": "Accountant export reconciles to recorded spend",
+              "given": ["A property has dated assets, renovation costs and expenses"],
+              "when": ["The customer exports the selected financial period"],
+              "then": ["Each exported row identifies its record type and source scope", "Exported totals reconcile to the in-service report"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F-09",
+      "name": "Users, permissions and collaboration",
+      "phase": "MVP",
+      "access": "Paid owners and invited users",
+      "summary": "Allow trusted people to participate without weakening the owner's control or confidentiality.",
+      "sourceTrace": ["29:18-29:33", "32:52-34:22", "37:26-38:20"],
+      "requirements": [
+        {
+          "id": "REQ-09.1",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "A paid owner shall be able to invite another user and assign administrator or read-only access.",
+          "bddTests": [
+            {
+              "id": "BDD-09.1-A",
+              "title": "Owner invites a read-only collaborator",
+              "given": ["A paid owner has a property"],
+              "when": ["The owner invites a user with read-only access", "The invitee accepts"],
+              "then": ["The invitee can view permitted information", "The invitee cannot create, edit or delete records"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-09.2",
+          "priority": "Must",
+          "phase": "MVP",
+          "statement": "Only an owner or authorised administrator shall be able to change shared property information, and only the owner shall be able to manage ownership, subscription and transfer settings.",
+          "bddTests": [
+            {
+              "id": "BDD-09.2-A",
+              "title": "Administrator cannot transfer ownership",
+              "given": ["An invited administrator is signed in"],
+              "when": ["The administrator opens property settings"],
+              "then": ["The administrator can manage permitted content", "Ownership, subscription and transfer controls are unavailable"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-09.3",
+          "priority": "Should",
+          "phase": "MVP",
+          "statement": "Authorised users shall be able to add and review timestamped comments or notes at property and room level.",
+          "bddTests": [
+            {
+              "id": "BDD-09.3-A",
+              "title": "Collaborator adds a room comment",
+              "given": ["An authorised administrator is viewing a room"],
+              "when": ["The administrator adds a comment"],
+              "then": ["The comment shows its author and time", "Permitted users can view the comment in the room record"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F-10",
+      "name": "Preferences and display",
+      "phase": "MVP",
+      "access": "All registered users",
+      "summary": "Give each customer a comfortable and consistent personal experience.",
+      "sourceTrace": ["32:52-34:11"],
+      "requirements": [
+        {
+          "id": "REQ-10.1",
+          "priority": "Should",
+          "phase": "MVP",
+          "statement": "A registered customer shall be able to select light or dark display mode, and the preference shall persist across sessions on supported devices.",
+          "bddTests": [
+            {
+              "id": "BDD-10.1-A",
+              "title": "Display preference persists",
+              "given": ["A signed-in customer selects dark mode"],
+              "when": ["The customer signs out and later signs in again"],
+              "then": ["The service opens using dark mode", "All primary workflows remain readable and usable"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-10.2",
+          "priority": "Should",
+          "phase": "MVP",
+          "statement": "A customer shall be able to manage email-reminder preferences without deleting the underlying tasks or dates.",
+          "bddTests": [
+            {
+              "id": "BDD-10.2-A",
+              "title": "Customer pauses reminder emails but retains tasks",
+              "given": ["A customer has scheduled tasks and email reminders"],
+              "when": ["The customer disables email reminders"],
+              "then": ["No new reminder emails are sent while disabled", "The tasks and due dates remain visible in the service"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F-11",
+      "name": "Property Passport and ownership transfer",
+      "phase": "Future",
+      "access": "Future paid add-on or approved entitlement",
+      "summary": "Support a sale-time information product and controlled handover to the new owner.",
+      "sourceTrace": ["25:11-29:21"],
+      "requirements": [
+        {
+          "id": "REQ-11.1",
+          "priority": "Could",
+          "phase": "Future",
+          "statement": "A seller shall be able to generate a separately chargeable buyer-safe Property Passport for an eligible property.",
+          "bddTests": [
+            {
+              "id": "BDD-11.1-A",
+              "title": "Seller creates a passport preview",
+              "given": ["A property has sufficient room and asset information", "The seller has the required entitlement"],
+              "when": ["The seller creates a Property Passport preview"],
+              "then": ["The preview lists included information", "The seller can review it before sharing or transfer"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-11.2",
+          "priority": "Must for future release",
+          "phase": "Future",
+          "statement": "The transferable record shall include approved room, asset, warranty and maintenance information but exclude seller-only renovation labour, material costs, margin and other confidential financial records.",
+          "bddTests": [
+            {
+              "id": "BDD-11.2-A",
+              "title": "Buyer-safe output protects seller economics",
+              "given": ["A property contains assets, warranty documents and confidential renovation costs"],
+              "when": ["The seller generates the buyer-safe passport"],
+              "then": ["Approved asset and warranty information is included", "Renovation labour, material cost and seller margin information is excluded"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-11.3",
+          "priority": "Must for future release",
+          "phase": "Future",
+          "statement": "Following an authorised property sale, the seller shall be able to initiate transfer and the new owner shall be able to claim the approved transferable record.",
+          "bddTests": [
+            {
+              "id": "BDD-11.3-A",
+              "title": "New owner claims a transferred property",
+              "given": ["The seller has initiated transfer to the buyer's verified account"],
+              "when": ["The buyer accepts and claims the property"],
+              "then": ["The buyer becomes the owner of the transferable record", "The former owner loses ongoing management access unless separately invited", "Seller-only records remain private and retained according to policy"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-11.4",
+          "priority": "Must for future release",
+          "phase": "Future",
+          "statement": "The service shall present the seller with an explicit inclusion and exclusion summary before any passport is shared or ownership is transferred.",
+          "bddTests": [
+            {
+              "id": "BDD-11.4-A",
+              "title": "Transfer requires informed confirmation",
+              "given": ["A seller has prepared a transfer"],
+              "when": ["The seller reaches final confirmation"],
+              "then": ["Included and excluded information is summarised", "The transfer cannot proceed without explicit confirmation"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F-12",
+      "name": "Smart capture and proactive guidance",
+      "phase": "Future",
+      "access": "To be confirmed",
+      "summary": "Reduce manual data entry and help owners identify useful maintenance or improvement actions.",
+      "sourceTrace": ["10:43-11:10", "21:35-22:05", "23:40-24:24", "32:36-35:59"],
+      "requirements": [
+        {
+          "id": "REQ-12.1",
+          "priority": "Could",
+          "phase": "Future",
+          "statement": "The service may support barcode or QR-code capture to look up product details from an approved data source, while allowing customer correction and manual entry.",
+          "bddTests": [
+            {
+              "id": "BDD-12.1-A",
+              "title": "Barcode lookup remains editable",
+              "given": ["A customer is adding an asset", "An approved product lookup source is available"],
+              "when": ["The customer scans a supported barcode"],
+              "then": ["Matched product details are proposed", "The customer can correct the details before saving", "Manual entry remains available if no match is found"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-12.2",
+          "priority": "Could",
+          "phase": "Future",
+          "statement": "The service may analyse an uploaded image to propose metadata such as a paint colour or product reference, subject to customer confirmation.",
+          "bddTests": [
+            {
+              "id": "BDD-12.2-A",
+              "title": "Image analysis never silently overwrites customer data",
+              "given": ["A customer uploads a room or product image"],
+              "when": ["The service proposes detected metadata"],
+              "then": ["The proposal is labelled as an estimate", "No metadata is saved until the customer confirms or edits it"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-12.3",
+          "priority": "Could",
+          "phase": "Future",
+          "statement": "The service may provide configurable maintenance prompts for common property needs, including heat-pump servicing, filter and UV-lamp replacement, smoke-alarm testing, annual checks and relevant council changes.",
+          "bddTests": [
+            {
+              "id": "BDD-12.3-A",
+              "title": "Customer controls a suggested maintenance task",
+              "given": ["The service identifies a relevant maintenance suggestion"],
+              "when": ["The suggestion is shown to the customer"],
+              "then": ["The reason and proposed timing are clear", "The customer can accept, edit or dismiss it", "A task is created only after acceptance"]
+            }
+          ]
+        },
+        {
+          "id": "REQ-12.4",
+          "priority": "Could",
+          "phase": "Future",
+          "statement": "The service may offer contextual improvement insights and approved supplier referrals, such as a solar opportunity based on recorded energy costs, with commercial relationships disclosed.",
+          "bddTests": [
+            {
+              "id": "BDD-12.4-A",
+              "title": "Commercial referral is transparent",
+              "given": ["A customer is eligible for a contextual supplier suggestion"],
+              "when": ["The suggestion is displayed"],
+              "then": ["Any commercial relationship is disclosed", "The customer can dismiss the suggestion", "No contact details are shared without consent"]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "nonFunctionalRequirements": [
+    {
+      "id": "NFR-01",
+      "category": "Privacy and legal readiness",
+      "requirement": "Before public launch, the service shall have client-approved terms of use and privacy information that accurately describes data collection, use, storage, sharing and customer choices, supported by appropriate New Zealand legal review.",
+      "acceptanceEvidence": ["Approved terms of use", "Approved privacy notice", "Recorded consent/version", "Launch legal-readiness sign-off"]
+    },
+    {
+      "id": "NFR-02",
+      "category": "Security and access control",
+      "requirement": "Property, document and financial information shall be accessible only to authenticated and authorised users, with role and ownership rules enforced on the server side.",
+      "acceptanceEvidence": ["Authorisation test suite", "Cross-account access tests", "Role-permission tests", "Security review before public launch"]
+    },
+    {
+      "id": "NFR-03",
+      "category": "Security assurance",
+      "requirement": "The release process shall include security, penetration and data-access testing proportionate to the sensitivity and nationwide ambition of the service, with critical findings resolved before public launch.",
+      "acceptanceEvidence": ["Test scope", "Findings register", "Remediation evidence", "Release sign-off"]
+    },
+    {
+      "id": "NFR-04",
+      "category": "Responsive experience",
+      "requirement": "All MVP workflows shall operate in supported modern mobile and desktop browsers; a native mobile application is not required for the initial release.",
+      "acceptanceEvidence": ["Mobile browser test evidence", "Desktop browser test evidence", "Photo/document upload verification", "No native-app dependency"]
+    },
+    {
+      "id": "NFR-05",
+      "category": "Usability and accessibility",
+      "requirement": "The experience shall use clear language, visible status and accessible interaction patterns so customers can complete core flows without specialist property or accounting knowledge.",
+      "acceptanceEvidence": ["Usability review", "Keyboard and focus review", "Colour-contrast review", "Client-approved terminology"]
+    },
+    {
+      "id": "NFR-06",
+      "category": "Document and image reliability",
+      "requirement": "Uploads shall show status, reject unsupported or unsafe files clearly, preserve authorised access and prevent an apparent success when storage fails.",
+      "acceptanceEvidence": ["Success/failure upload tests", "File-type and size tests", "Authorised retrieval tests", "Storage failure handling"]
+    },
+    {
+      "id": "NFR-07",
+      "category": "Reminder reliability",
+      "requirement": "Scheduled reminder processing shall be observable and retryable, with send outcomes recorded so the service can identify failures without creating duplicate notices.",
+      "acceptanceEvidence": ["Scheduled-job test", "Retry test", "Duplicate-prevention test", "Send-status evidence"]
+    },
+    {
+      "id": "NFR-08",
+      "category": "Performance and scale",
+      "requirement": "The architecture shall support progressive growth from early customers to nationwide use without redesigning the core property-room-asset model; measurable performance targets shall be agreed before build completion.",
+      "acceptanceEvidence": ["Approved performance targets", "Representative data-volume test", "Load-test plan", "Monitoring plan"]
+    },
+    {
+      "id": "NFR-09",
+      "category": "Data integrity and reporting",
+      "requirement": "Reports and exports shall reconcile to source records, retain their scope and date context and apply permission and transfer-exclusion rules consistently.",
+      "acceptanceEvidence": ["Reconciliation tests", "Permission tests", "Transfer-exclusion tests", "Export snapshot tests"]
+    },
+    {
+      "id": "NFR-10",
+      "category": "Customer trust",
+      "requirement": "Automated or AI-assisted suggestions shall be distinguishable from customer-confirmed facts and shall not silently change property records or share customer information.",
+      "acceptanceEvidence": ["Confirmation tests", "Suggestion-labelling review", "Consent tests", "Audit evidence"]
+    }
+  ],
+  "commercialModel": {
+    "freePlan": "One property with core information, rooms, photos, paint/finish details and documents.",
+    "paidPlan": "Multiple properties plus active asset, task, reminder, calendar, expense, cost, budget and reporting tools.",
+    "pricingHypothesis": {
+      "currency": "NZD",
+      "monthly": 19,
+      "annual": 199,
+      "status": "Workshop hypothesis requiring approval and market validation"
+    },
+    "sustainabilityObjective": "Subscription revenue should first cover platform, support and marketing costs and then support a sustainable owner-operated business.",
+    "growthObjective": "Use a genuinely valuable free plan to build adoption, learn from customer behaviour and create an ethical path to paid conversion when customers need active management tools."
+  },
+  "experienceDirection": {
+    "style": [
+      "Modern New Zealand residential-property experience",
+      "Image-led and engaging",
+      "Excellent mobile-browser usability",
+      "Clear property, room and record navigation",
+      "Original product identity",
+      "Optional light and dark display modes"
+    ],
+    "referenceBoundaries": [
+      "Homes.co.nz is a familiarity and usability reference only.",
+      "Instagram-like visual engagement may inform photo interactions, but the product must retain its own identity and privacy controls.",
+      "No third-party brand, interface or protected design is to be copied."
+    ],
+    "clientInputs": [
+      "Final product name",
+      "Logo and brand mark",
+      "Colour palette",
+      "Typography and visual direction",
+      "Domain preference",
+      "Public website tone and approved copy",
+      "Instagram, Facebook and X/Twitter handle decisions"
+    ]
+  },
+  "solutionAssumptions": [
+    "The initial product is one responsive web application; there is no native mobile application in the initial scope.",
+    "The experience will be image-rich and optimised for frequent mobile-browser capture.",
+    "The workshop proposed Next.js for the web application and server-side functions, Supabase for the database and document storage, scheduled jobs for reminders and SendGrid for initial email delivery; final technology choices remain subject to technical validation.",
+    "Homes.co.nz is an experience-category reference only and does not grant access to its data, branding, layouts or interfaces.",
+    "Any third-party property or product lookup requires a lawful, approved and commercially viable data source.",
+    "The final product name, logo, domain, colour palette and social handles remain client decisions.",
+    "Delivery timing will be agreed after requirements approval and MVP sizing."
+  ],
+  "initialScope": [
+    "Public website, registration, authentication and profile",
+    "Free and paid access model",
+    "Property and room setup",
+    "Room photos, paint/finish records and documents",
+    "Assets, invoices, warranties and service information",
+    "Tasks, recurring reminders, email notifications, calendar and Kanban views",
+    "Renovation costs, ongoing expenses, categories, budgets and twelve-month views",
+    "Property, room and accountant reporting/exports",
+    "Admin/read-only invitations, comments and preferences",
+    "Responsive mobile-first web experience",
+    "Terms, privacy, access control and pre-launch security assurance"
+  ],
+  "postMvpScope": [
+    "Social-ready before-and-after sharing",
+    "Expanded system-generated maintenance prompts",
+    "Further reporting refinements based on customer behaviour",
+    "Additional approved integrations"
+  ],
+  "futureScope": [
+    "Separately chargeable buyer-safe Property Passport",
+    "Ownership transfer and new-owner claim",
+    "Barcode and QR-code product capture",
+    "AI-assisted paint, image and product metadata",
+    "Council-change and annual-audit prompts",
+    "Energy and solar insights with transparent supplier referrals",
+    "Invitations or workflows for trades"
+  ],
+  "outOfInitialScope": [
+    "Native iOS or Android applications",
+    "Trade-user invitations and trade workflow",
+    "Automated legal, tax, depreciation or accounting advice",
+    "Automatic direct import of utility, gas or rates data; the workshop agreed document upload for the initial concept",
+    "Buyer-facing ownership transfer and Property Passport release",
+    "AI image analysis, barcode/QR lookup and product-price lookup",
+    "Automatic council-change monitoring and supplier referral marketplace",
+    "Company formation, shareholding arrangements and social-account administration",
+    "A committed delivery date before approval and sizing"
+  ],
+  "openDecisions": [
+    {
+      "id": "OD-01",
+      "decision": "Confirm the final product name and whether Home Vault remains the launch name.",
+      "owner": "Client",
+      "neededBy": "Branding and public website design"
+    },
+    {
+      "id": "OD-02",
+      "decision": "Approve the free-plan boundary and confirm whether any document or storage limits are required.",
+      "owner": "Client and delivery partner",
+      "neededBy": "MVP scope lock"
+    },
+    {
+      "id": "OD-03",
+      "decision": "Approve or revise the NZD 19 monthly and NZD 199 annual launch-price hypothesis.",
+      "owner": "Client",
+      "neededBy": "Checkout build"
+    },
+    {
+      "id": "OD-04",
+      "decision": "Confirm whether property-data pre-population has an approved data source and sufficient MVP value; otherwise retain manual entry only.",
+      "owner": "Client and delivery partner",
+      "neededBy": "Property setup design"
+    },
+    {
+      "id": "OD-05",
+      "decision": "Approve the customer-facing report name; Property Information Report is proposed instead of the workshop acronym HIM.",
+      "owner": "Client",
+      "neededBy": "Content design"
+    },
+    {
+      "id": "OD-06",
+      "decision": "Confirm the exact information that administrators and read-only collaborators may see, particularly financial records.",
+      "owner": "Client",
+      "neededBy": "Permission design"
+    },
+    {
+      "id": "OD-07",
+      "decision": "Approve the future Property Passport confidentiality rule and whether the feature is a separate paid add-on.",
+      "owner": "Client",
+      "neededBy": "Future roadmap commitment"
+    },
+    {
+      "id": "OD-08",
+      "decision": "Provide the product brand pack: logo, palette, typography direction, domain preference and social handle decisions.",
+      "owner": "Client",
+      "neededBy": "Visual design start"
+    },
+    {
+      "id": "OD-09",
+      "decision": "Agree measurable launch targets for activation, record completion, paid conversion, reminder use, retention and support cost after baseline research.",
+      "owner": "Client and delivery partner",
+      "neededBy": "Delivery measurement plan"
+    },
+    {
+      "id": "OD-10",
+      "decision": "Confirm delivery sequencing and target dates after requirements approval and solution sizing.",
+      "owner": "Client and delivery partner",
+      "neededBy": "Delivery plan"
+    }
+  ],
+  "detailedQuestionsForDiscovery": [
+    "Is the preferred core portfolio description two to nine residential properties, or should no numeric range be published?",
+    "Are renovators and property flippers a co-primary segment or a secondary segment?",
+    "Exactly which records can a free customer create, upload and retain, and what storage limit applies?",
+    "How many properties are included in the paid plan?",
+    "Are basic manual tasks available on the free plan, or are all tasks a paid capability?",
+    "Can a free customer record a simple appliance, or is the asset register entirely paid?",
+    "Are user invitations and comments required in the MVP?",
+    "Is collaboration account-wide, portfolio-wide or property-specific?",
+    "Which financial records can administrators and read-only collaborators see?",
+    "What authentication, email verification and password policy will apply?",
+    "Which payment service will be used, and what are the trial, cancellation, refund, tax and failed-payment rules?",
+    "Which New Zealand property-data source, licence and fallback behaviour are approved?",
+    "Will external calendar synchronisation be required, or will the MVP use only the Home Vault calendar?",
+    "What reminder lead times, recurrence rules, recipient controls, timezone behaviour and escalation rules are required?",
+    "Which file types, size limits, storage limits, retention, deletion, export and backup rules are required?",
+    "Will uploaded bills be stored only, manually transcribed or processed using OCR in a later release?",
+    "Which IRD-aligned asset and depreciation fields are required, and what accounting disclaimer is approved?",
+    "Should accountant output be CSV, spreadsheet, PDF or multiple formats?",
+    "Is before-and-after social sharing included in the initial release, and which privacy controls are required?",
+    "Which warranty documents can transfer to a buyer, and how are confidential prices redacted if the document is needed as evidence?",
+    "Does a former owner retain an immutable historical accounting record after transfer?",
+    "How will a future buyer's right to claim a property be verified?",
+    "What data-hosting location, monitoring, analytics, recovery and support expectations apply?",
+    "Which security, privacy and legal reviews are mandatory release gates?",
+    "What accessibility standard and supported-browser matrix will be approved?"
+  ],
+  "sourceTraceability": [
+    {
+      "topic": "Customer segment and current alternatives",
+      "workshopTime": "03:12-06:18"
+    },
+    {
+      "topic": "Core problems, value and reminder examples",
+      "workshopTime": "06:26-11:56"
+    },
+    {
+      "topic": "Free/paid model and pricing hypothesis",
+      "workshopTime": "07:19-12:59 and 30:58-33:52"
+    },
+    {
+      "topic": "Property onboarding and user-flow start",
+      "workshopTime": "19:49-21:35"
+    },
+    {
+      "topic": "Rooms, photos, tasks, reminders and calendar",
+      "workshopTime": "21:35-23:40"
+    },
+    {
+      "topic": "Assets, invoices, depreciation, budgets and reporting",
+      "workshopTime": "23:40-26:59"
+    },
+    {
+      "topic": "Property Passport and transfer confidentiality",
+      "workshopTime": "27:19-29:18"
+    },
+    {
+      "topic": "Roles, expenses, plans, comments and preferences",
+      "workshopTime": "29:21-34:22"
+    },
+    {
+      "topic": "Image-led mobile web, technology and reminder delivery",
+      "workshopTime": "34:22-35:59"
+    },
+    {
+      "topic": "Requirements recap, privacy, terms, security and no native app",
+      "workshopTime": "36:01-38:33"
+    },
+    {
+      "topic": "Brand inputs and delivery timing",
+      "workshopTime": "38:33-40:03"
+    }
+  ],
+  "successMeasuresToDefine": [
+    "Visitor-to-free-account conversion",
+    "First-property and first-room completion",
+    "Percentage of active customers retaining photos, paint details or documents",
+    "Paid conversion when a customer reaches an active-management need",
+    "Task/reminder creation and completion",
+    "Asset and expense record completion",
+    "Report/export use",
+    "Customer retention and support cost",
+    "Evidence that customers find the product easier and more valuable than their previous spreadsheet or ad-hoc process"
+  ],
+  "approvalChecklist": [
+    "Customer segmentation and New Zealand market position",
+    "Problems, outcomes and value proposition",
+    "Free and paid commercial model",
+    "MVP user flows and feature requirements",
+    "Post-MVP and future scope boundaries",
+    "Buyer-safe transfer confidentiality principle",
+    "Privacy, security and quality expectations",
+    "Open decisions, dependencies and next steps"
+  ],
+  "markdownFiles": [
+    "README.md",
+    "01-product-brief.md",
+    "02-scope-and-roadmap.md",
+    "03-user-flows.md",
+    "04-feature-requirements.md",
+    "05-bdd-acceptance-map.md",
+    "06-information-and-permissions.md",
+    "07-non-functional-requirements.md",
+    "08-decisions-assumptions-open-questions.md",
+    "09-client-approval.md",
+    "10-delivery-readiness.md",
+    "11-workshop-traceability.md",
+    "12-glossary.md"
+  ]
+}
