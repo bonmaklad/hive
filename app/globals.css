@@ -6633,6 +6633,7 @@ main {
 
 @media (max-width: 860px) {
     .room-sticky-cta {
+        display: block;
         position: fixed;
         left: 0;
         right: 0;
