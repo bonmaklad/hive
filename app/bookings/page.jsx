@@ -3,6 +3,7 @@ import ImageCarousel from '../components/ImageCarousel';
 
 import SiteNav from '../components/SiteNav';
 import { bookingInclusions, getSpaces } from '../../lib/spaces';
+import RoomBookingModalButton from './RoomBookingModalButton';
 
 export const metadata = {
     title: 'Bookings | HIVE Whanganui',
@@ -41,9 +42,7 @@ export default async function BookingsPage() {
                             great experience end-to-end.
                         </p>
                         <div className="hero-cta">
-                            <a className="btn primary" href="#venues">
-                                Explore venues
-                            </a>
+                            <RoomBookingModalButton />
                             <a className="btn secondary" href="#included">
                                 What is included
                             </a>
