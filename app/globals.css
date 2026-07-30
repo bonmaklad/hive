@@ -6646,9 +6646,125 @@ main {
     gap: 1rem;
 }
 
+.room-date-help {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.room-calendar {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 18px;
+    background: rgba(18, 20, 27, 0.55);
+}
+
+.room-calendar-header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.room-calendar-header strong {
+    text-align: center;
+}
+
+.room-calendar-header .btn {
+    min-width: 42px;
+    padding: 0.55rem 0.7rem;
+}
+
+.room-calendar-weekdays,
+.room-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.35rem;
+}
+
+.room-calendar-weekdays span {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.room-calendar-day,
+.room-calendar-blank {
+    min-width: 0;
+    aspect-ratio: 1;
+}
+
+.room-calendar-day {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.88rem;
+    transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.room-calendar-day:hover:not(:disabled),
+.room-calendar-day:focus-visible {
+    border-color: rgba(111, 255, 182, 0.6);
+    background: rgba(111, 255, 182, 0.1);
+    outline: none;
+}
+
+.room-calendar-day.is-selected {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #07110c;
+    font-weight: 800;
+}
+
+.room-calendar-day:disabled {
+    border-color: transparent;
+    background: transparent;
+    color: rgba(226, 231, 236, 0.28);
+    cursor: not-allowed;
+}
+
+.room-date-shortcuts {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.room-date-shortcuts > span {
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.room-date-shortcuts > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 @media (max-width: 600px) {
     .room-form-grid {
         grid-template-columns: 1fr;
+    }
+
+    .room-calendar {
+        margin-inline: -0.35rem;
+        padding: 0.7rem;
+    }
+
+    .room-calendar-weekdays,
+    .room-calendar-grid {
+        gap: 0.25rem;
+    }
+
+    .room-calendar-day {
+        border-radius: 8px;
+        font-size: 0.82rem;
     }
 }
 

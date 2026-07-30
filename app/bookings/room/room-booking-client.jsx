@@ -73,6 +73,45 @@ function formatDateChip(dateString) {
     return `${weekday} ${day}`;
 }
 
+function monthStartFromDateString(dateString) {
+    const d = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return '';
+    d.setDate(1);
+    return yyyyMmDdFromDate(d);
+}
+
+function addMonthsLocal(dateString, months) {
+    const d = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateString;
+    d.setDate(1);
+    d.setMonth(d.getMonth() + Number(months || 0));
+    return yyyyMmDdFromDate(d);
+}
+
+function formatMonthLabel(dateString) {
+    const d = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateString;
+    return d.toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' });
+}
+
+function calendarDaysForMonth(dateString) {
+    const first = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(first.getTime())) return [];
+
+    first.setDate(1);
+    const year = first.getFullYear();
+    const month = first.getMonth();
+    const leadingBlanks = (first.getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells = Array.from({ length: leadingBlanks }, () => null);
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+        cells.push(yyyyMmDdFromDate(new Date(year, month, day)));
+    }
+
+    return cells;
+}
+
 function parseTimeToMinutes(value) {
     const [hh, mm] = String(value || '0:0').split(':').map(v => Number(v));
     return (Number.isFinite(hh) ? hh : 0) * 60 + (Number.isFinite(mm) ? mm : 0);
@@ -162,6 +201,7 @@ export default function RoomBookingClient() {
     const [loadingRooms, setLoadingRooms] = useState(true);
     const [roomSlug, setRoomSlug] = useState('');
     const [date, setDate] = useState(() => minDate);
+    const [calendarMonth, setCalendarMonth] = useState(() => monthStartFromDateString(minDate));
     const [startIndex, setStartIndex] = useState(null);
     const [endIndex, setEndIndex] = useState(null);
     const [slotStatus, setSlotStatus] = useState(() => new Map());
@@ -199,6 +239,8 @@ export default function RoomBookingClient() {
         }
         return chips;
     }, [isLounge, minDate]);
+    const calendarDays = useMemo(() => calendarDaysForMonth(calendarMonth), [calendarMonth]);
+    const minCalendarMonth = useMemo(() => monthStartFromDateString(minDate), [minDate]);
 
     const selection = useMemo(() => {
         if (!room) return null;
@@ -211,6 +253,22 @@ export default function RoomBookingClient() {
         if (!key) return null;
         return loadStripe(key);
     }, []);
+
+    const chooseDate = useCallback(
+        value => {
+            if (!value) return;
+            const clamped = value < minDate ? minDate : value;
+            const nextDate = isLounge ? clamped : nextWeekdayOnOrAfter(clamped);
+            setDate(nextDate);
+            setCalendarMonth(monthStartFromDateString(nextDate));
+            setStartIndex(null);
+            setEndIndex(null);
+            setQuote(null);
+            setInfo('');
+            setError('');
+        },
+        [isLounge, minDate]
+    );
 
     const refreshAvailability = useCallback(async () => {
         if (!roomSlug || !date) return;
@@ -305,12 +363,14 @@ export default function RoomBookingClient() {
     useEffect(() => {
         if (!roomSlug) return;
         // Enforce next-day minimum and (for meeting rooms) weekdays only.
-        setDate(current => {
-            const base = current && current >= minDate ? current : minDate;
-            if (roomSlug === 'hive-lounge') return base;
-            return nextWeekdayOnOrAfter(base);
-        });
-    }, [minDate, roomSlug]);
+        const base = date && date >= minDate ? date : minDate;
+        const nextDate = roomSlug === 'hive-lounge' ? base : nextWeekdayOnOrAfter(base);
+        if (nextDate !== date) setDate(nextDate);
+        setCalendarMonth(monthStartFromDateString(nextDate));
+        setStartIndex(null);
+        setEndIndex(null);
+        setQuote(null);
+    }, [date, minDate, roomSlug]);
 
     useEffect(() => {
         if (!roomSlug) return;
@@ -485,32 +545,87 @@ export default function RoomBookingClient() {
                                 </select>
                             </label>
                             <label>
-                                Date
+                                Choose any future date
                                 <input
                                     className="platform-date-input"
                                     type="date"
                                     min={minDate}
                                     value={date}
-                                    onChange={e => {
-                                        const v = e.target.value;
-                                        if (!v) return;
-                                        const clamped = v < minDate ? minDate : v;
-                                        setDate(roomSlug === 'hive-lounge' ? clamped : nextWeekdayOnOrAfter(clamped));
-                                    }}
+                                    onChange={e => chooseDate(e.target.value)}
                                 />
                             </label>
                         </div>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                            {dateChips.map(d => (
+                        <p className="room-date-help">
+                            Book weeks or months ahead using the calendar. Meeting rooms are available Monday–Friday.
+                        </p>
+                        <div className="room-calendar">
+                            <div className="room-calendar-header">
                                 <button
-                                    key={d}
                                     type="button"
-                                    className={`btn ${d === date ? 'primary' : 'ghost'}`}
-                                    onClick={() => setDate(d)}
+                                    className="btn ghost"
+                                    disabled={calendarMonth <= minCalendarMonth}
+                                    onClick={() => setCalendarMonth(current => addMonthsLocal(current, -1))}
+                                    aria-label="Show previous month"
                                 >
-                                    {formatDateChip(d)}
+                                    ←
                                 </button>
-                            ))}
+                                <strong aria-live="polite">{formatMonthLabel(calendarMonth)}</strong>
+                                <button
+                                    type="button"
+                                    className="btn ghost"
+                                    onClick={() => setCalendarMonth(current => addMonthsLocal(current, 1))}
+                                    aria-label="Show next month"
+                                >
+                                    →
+                                </button>
+                            </div>
+                            <div className="room-calendar-weekdays" aria-hidden="true">
+                                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                                    <span key={day}>{day}</span>
+                                ))}
+                            </div>
+                            <div className="room-calendar-grid">
+                                {calendarDays.map((calendarDate, index) => {
+                                    if (!calendarDate) {
+                                        return <span className="room-calendar-blank" key={`blank-${index}`} aria-hidden="true" />;
+                                    }
+                                    const unavailableDay = calendarDate < minDate || (!isLounge && !isWeekday(calendarDate));
+                                    const selected = calendarDate === date;
+                                    return (
+                                        <button
+                                            key={calendarDate}
+                                            type="button"
+                                            className={`room-calendar-day${selected ? ' is-selected' : ''}`}
+                                            disabled={unavailableDay}
+                                            onClick={() => chooseDate(calendarDate)}
+                                            aria-label={new Date(`${calendarDate}T00:00:00`).toLocaleDateString('en-NZ', {
+                                                weekday: 'long',
+                                                day: 'numeric',
+                                                month: 'long',
+                                                year: 'numeric'
+                                            })}
+                                            aria-pressed={selected}
+                                        >
+                                            {Number(calendarDate.slice(-2))}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <div className="room-date-shortcuts">
+                            <span>Next available dates</span>
+                            <div>
+                                {dateChips.map(d => (
+                                    <button
+                                        key={d}
+                                        type="button"
+                                        className={`btn ${d === date ? 'primary' : 'ghost'}`}
+                                        onClick={() => chooseDate(d)}
+                                    >
+                                        {formatDateChip(d)}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </form>
                 )}
