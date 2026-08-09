@@ -497,20 +497,30 @@ export default function MembershipClient() {
             if (!canView) {
                 throw new Error('You do not have permission to manage membership.');
             }
-            const ok = window.confirm('Cancel your membership? This will stop future billing after approval.');
+            const ok = window.confirm('Cancel your membership? Your membership will be cancelled immediately and future automatic payments will be stopped.');
             if (!ok) return;
 
-            const { error: insertError } = await supabase.from('membership_change_requests').insert({
-                owner_id: user.id,
-                membership_id: membership?.id ?? null,
-                requested_plan: null,
-                requested_office_id: null,
-                requested_donation_cents: donationCents,
-                requested_fridge_enabled: fridge,
-                note: 'Cancel membership'
+            const { data } = await supabase.auth.getSession();
+            const token = data?.session?.access_token || '';
+            if (!token) throw new Error('Please sign in again.');
+
+            const res = await fetch('/api/membership/cancel-subscription', {
+                method: 'POST',
+                headers: {
+                    accept: 'application/json',
+                    'content-type': 'application/json',
+                    authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ cancel_membership: true })
             });
-            if (insertError) throw insertError;
-            setInfo('Cancellation request submitted for approval.');
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || 'Could not cancel membership.');
+
+            setMembership(json?.membership || { ...membership, status: 'cancelled', payment_terms: 'invoice', stripe_subscription_id: null });
+            setStatus('cancelled');
+            setPaymentTerms('invoice');
+            setPaymentTermsDraft('invoice');
+            setInfo('Membership cancelled. Automatic payments have been stopped.');
         } catch (err) {
             setError(err?.message || 'Could not cancel membership.');
         } finally {

@@ -20,6 +20,9 @@ export async function POST(request) {
     const { user, error } = await getUserFromRequest(request);
     if (!user) return NextResponse.json({ error }, { status: 401 });
 
+    const payload = await request.json().catch(() => ({}));
+    const cancelMembership = payload?.cancel_membership === true;
+
     const admin = createSupabaseAdminClient();
     const isAdmin = await isAdminUser(admin, user.id);
     const isOwner = await isTenantOwner(admin, user.id);
@@ -49,6 +52,7 @@ export async function POST(request) {
     const { data: updated, error: updateError } = await admin
         .from('memberships')
         .update({
+            ...(cancelMembership ? { status: 'cancelled' } : {}),
             payment_terms: 'invoice',
             stripe_subscription_id: null,
             updated_at: new Date().toISOString()
@@ -58,5 +62,10 @@ export async function POST(request) {
         .single();
 
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
-    return NextResponse.json({ ok: true, membership: updated, cancelled: Boolean(subId) });
+    return NextResponse.json({
+        ok: true,
+        membership: updated,
+        cancelled: Boolean(subId),
+        membership_cancelled: cancelMembership
+    });
 }
