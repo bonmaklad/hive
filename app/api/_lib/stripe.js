@@ -72,6 +72,21 @@ export async function stripeRequest(method, path, params, { idempotencyKey } = {
     return json;
 }
 
+export async function cancelStripeSubscription(subscriptionId) {
+    const id = typeof subscriptionId === 'string' ? subscriptionId.trim() : '';
+    if (!id) return false;
+
+    try {
+        await stripeRequest('DELETE', `/v1/subscriptions/${encodeURIComponent(id)}`, {});
+        return true;
+    } catch (err) {
+        // Treat an already-removed subscription as cancelled so retries can still
+        // clear the local billing state safely.
+        if (err?.status === 404 || err?.code === 'resource_missing') return false;
+        throw err;
+    }
+}
+
 export async function ensureStripeCustomer({ tenant, tenantId, email }) {
     const existing = typeof tenant?.stripe_customer_id === 'string' ? tenant.stripe_customer_id.trim() : '';
     const cleanEmail = typeof email === 'string' ? email.trim() : '';

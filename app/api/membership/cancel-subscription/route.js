@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient, getUserFromRequest } from '../../_lib/supabaseAuth';
-import { stripeRequest } from '../../_lib/stripe';
+import { cancelStripeSubscription } from '../../_lib/stripe';
 
 export const runtime = 'nodejs';
 
@@ -40,10 +40,11 @@ export async function POST(request) {
     if (!membership) return NextResponse.json({ error: 'Membership not found.' }, { status: 404 });
 
     const subId = typeof membership?.stripe_subscription_id === 'string' ? membership.stripe_subscription_id.trim() : '';
+    let stripeSubscriptionCancelled = false;
 
     if (subId) {
         try {
-            await stripeRequest('DELETE', `/v1/subscriptions/${encodeURIComponent(subId)}`, {});
+            stripeSubscriptionCancelled = await cancelStripeSubscription(subId);
         } catch (err) {
             return NextResponse.json({ error: err?.message || 'Failed to cancel subscription.' }, { status: 500 });
         }
@@ -66,6 +67,7 @@ export async function POST(request) {
         ok: true,
         membership: updated,
         cancelled: Boolean(subId),
+        stripe_subscription_cancelled: stripeSubscriptionCancelled,
         membership_cancelled: cancelMembership
     });
 }

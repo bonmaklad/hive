@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient, getUserFromRequest } from '../../../_lib/supabaseAuth';
-import { stripeRequest } from '../../../_lib/stripe';
+import { cancelStripeSubscription, stripeRequest } from '../../../_lib/stripe';
 
 export const runtime = 'nodejs';
 
@@ -61,6 +61,15 @@ export async function POST(request) {
 
     const stripeSubscriptionId = typeof session?.subscription === 'string' ? session.subscription : session?.subscription?.id;
     if (!stripeSubscriptionId) return NextResponse.json({ error: 'Stripe subscription id missing on session.' }, { status: 400 });
+
+    if (membership.status !== 'live') {
+        try {
+            await cancelStripeSubscription(stripeSubscriptionId);
+        } catch (e) {
+            return NextResponse.json({ error: e?.message || 'Failed to cancel Stripe subscription.' }, { status: 502 });
+        }
+        return NextResponse.json({ error: 'Membership is no longer live. The Stripe subscription was cancelled.' }, { status: 409 });
+    }
 
     let nextInvoiceAt = null;
     try {

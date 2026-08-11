@@ -85,6 +85,9 @@ export async function POST(request) {
 
         if (membershipError) return NextResponse.json({ error: membershipError.message }, { status: 500 });
         if (!membership) return NextResponse.json({ error: 'Membership not found.' }, { status: 404 });
+        if (membership.status !== 'live') {
+            return NextResponse.json({ error: 'Automatic payments require a live membership.' }, { status: 409 });
+        }
 
         const monthlyAmountCents = Math.max(0, toInt(membership.monthly_amount_cents, 0));
         if (monthlyAmountCents <= 0) {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../_lib/adminGuard';
+import { cancelStripeSubscription } from '../../../_lib/stripe';
 
 export const runtime = 'nodejs';
 
@@ -52,28 +53,55 @@ export async function POST(request, { params }) {
     if (reqError) return NextResponse.json({ error: reqError.message }, { status: 404 });
     if (reqRow.status !== 'pending') return NextResponse.json({ error: 'Request is not pending.' }, { status: 400 });
 
-    const { error: updateReqError } = await guard.admin
+    const finalizeRequest = async status => guard.admin
         .from('membership_change_requests')
         .update({
-            status: action === 'approve' ? 'approved' : 'rejected',
+            status,
             decided_at: new Date().toISOString(),
             decided_by: guard.user.id,
             decision_note: decisionNote
         })
         .eq('id', id);
 
-    if (updateReqError) return NextResponse.json({ error: updateReqError.message }, { status: 500 });
-
     if (action === 'reject') {
+        const { error: rejectError } = await finalizeRequest('rejected');
+        if (rejectError) return NextResponse.json({ error: rejectError.message }, { status: 500 });
         return NextResponse.json({ ok: true });
     }
 
     const note = String(reqRow.note || '').toLowerCase();
     if (note.includes('cancel')) {
-        await guard.admin
+        const { data: membership, error: membershipError } = await guard.admin
             .from('memberships')
-            .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+            .select('id, stripe_subscription_id')
+            .eq('owner_id', reqRow.owner_id)
+            .maybeSingle();
+        if (membershipError) return NextResponse.json({ error: membershipError.message }, { status: 500 });
+
+        if (membership?.stripe_subscription_id) {
+            try {
+                await cancelStripeSubscription(membership.stripe_subscription_id);
+            } catch (stripeError) {
+                return NextResponse.json(
+                    { error: stripeError?.message || 'Failed to cancel Stripe subscription.' },
+                    { status: 502 }
+                );
+            }
+        }
+
+        const { error: cancelError } = await guard.admin
+            .from('memberships')
+            .update({
+                status: 'cancelled',
+                payment_terms: 'invoice',
+                stripe_subscription_id: null,
+                updated_at: new Date().toISOString()
+            })
             .eq('owner_id', reqRow.owner_id);
+        if (cancelError) return NextResponse.json({ error: cancelError.message }, { status: 500 });
+
+        const { error: approveError } = await finalizeRequest('approved');
+        if (approveError) return NextResponse.json({ error: approveError.message }, { status: 500 });
         return NextResponse.json({ ok: true });
     }
 
@@ -115,5 +143,7 @@ export async function POST(request, { params }) {
         if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
+    const { error: approveError } = await finalizeRequest('approved');
+    if (approveError) return NextResponse.json({ error: approveError.message }, { status: 500 });
     return NextResponse.json({ ok: true });
 }

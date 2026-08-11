@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../../_lib/adminGuard';
+import { cancelStripeSubscription } from '../../../../_lib/stripe';
 
 export const runtime = 'nodejs';
 
@@ -147,14 +148,31 @@ export async function POST(request, { params }) {
         membershipPayload.paid_till = paymentTerms === 'advanced' ? paidTill : null;
     }
 
+    const shouldStopAutomaticBilling = status !== 'live' || (paymentTerms && paymentTerms !== 'auto_card');
+    if (shouldStopAutomaticBilling) {
+        membershipPayload.payment_terms = 'invoice';
+        membershipPayload.stripe_subscription_id = null;
+    }
+
     const { data: existingMembership, error: findError } = await guard.admin
         .from('memberships')
-        .select('id')
+        .select('id, stripe_subscription_id')
         .eq('owner_id', resolvedOwnerId)
         .maybeSingle();
     if (findError) return NextResponse.json({ error: findError.message }, { status: 500 });
 
     if (existingMembership?.id) {
+        if (shouldStopAutomaticBilling && existingMembership.stripe_subscription_id) {
+            try {
+                await cancelStripeSubscription(existingMembership.stripe_subscription_id);
+            } catch (stripeError) {
+                return NextResponse.json(
+                    { error: stripeError?.message || 'Failed to cancel Stripe subscription.' },
+                    { status: 502 }
+                );
+            }
+        }
+
         const { error: updateError } = await guard.admin
             .from('memberships')
             .update(membershipPayload)

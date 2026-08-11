@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '../../_lib/supabaseAuth';
 import { sendPublicRoomBookingConfirmationEmail } from '../../_lib/email';
-import { getStripeWebhookSecret, stripeRequest, verifyStripeWebhookSignature } from '../../_lib/stripe';
+import { cancelStripeSubscription, getStripeWebhookSecret, stripeRequest, verifyStripeWebhookSignature } from '../../_lib/stripe';
 import { provisionPaidPublicMembershipSignup } from '../../membership/_lib/publicSignup';
 import { fetchCreditsSummary } from '../../rooms/_lib/credits';
 
@@ -351,10 +351,19 @@ async function activateMembershipFromSession({ admin, session }) {
 
     const { data: membership, error: membershipError } = await admin
         .from('memberships')
-        .select('id, owner_id, currency')
+        .select('id, owner_id, currency, status')
         .eq('id', membershipId)
         .maybeSingle();
-    if (membershipError || !membership) return;
+    if (membershipError) throw new Error(membershipError.message);
+    if (!membership) {
+        await cancelStripeSubscription(stripeSubscriptionId);
+        return;
+    }
+
+    if (membership.status !== 'live') {
+        await cancelStripeSubscription(stripeSubscriptionId);
+        return;
+    }
 
     let nextInvoiceAt = null;
     try {
