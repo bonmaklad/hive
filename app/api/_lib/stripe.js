@@ -87,6 +87,46 @@ export async function cancelStripeSubscription(subscriptionId) {
     }
 }
 
+export async function expireStripeCheckoutSession(sessionId) {
+    const id = typeof sessionId === 'string' ? sessionId.trim() : '';
+    if (!id) return false;
+
+    try {
+        await stripeRequest('POST', `/v1/checkout/sessions/${encodeURIComponent(id)}/expire`, {});
+        return true;
+    } catch (err) {
+        // A completed or already-expired session cannot be expired again. The
+        // caller still updates the local booking/payment state idempotently.
+        if (err?.code === 'checkout_session_not_open' || err?.code === 'resource_missing' || err?.status === 404) return false;
+        throw err;
+    }
+}
+
+export async function refundStripePayment({ paymentIntentId, idempotencyKey, metadata = {} }) {
+    const id = typeof paymentIntentId === 'string' ? paymentIntentId.trim() : '';
+    if (!id) throw new Error('The paid booking has no Stripe payment intent to refund.');
+
+    const params = {
+        payment_intent: id,
+        reason: 'requested_by_customer'
+    };
+    for (const [key, value] of Object.entries(metadata)) {
+        if (value === null || value === undefined || value === '') continue;
+        params[`metadata[${key}]`] = String(value);
+    }
+
+    try {
+        return await stripeRequest('POST', '/v1/refunds', params, { idempotencyKey });
+    } catch (err) {
+        // Allow recovery when an operator already refunded the payment in
+        // Stripe but the local booking still needs to be cancelled.
+        if (err?.code === 'charge_already_refunded') {
+            return { id: null, status: 'succeeded', already_refunded: true };
+        }
+        throw err;
+    }
+}
+
 export async function ensureStripeCustomer({ tenant, tenantId, email }) {
     const existing = typeof tenant?.stripe_customer_id === 'string' ? tenant.stripe_customer_id.trim() : '';
     const cleanEmail = typeof email === 'string' ? email.trim() : '';

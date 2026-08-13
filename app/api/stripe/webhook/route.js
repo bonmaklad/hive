@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '../../_lib/supabaseAuth';
 import { sendPublicRoomBookingConfirmationEmail } from '../../_lib/email';
-import { cancelStripeSubscription, getStripeWebhookSecret, stripeRequest, verifyStripeWebhookSignature } from '../../_lib/stripe';
+import { cancelStripeSubscription, getStripeWebhookSecret, refundStripePayment, stripeRequest, verifyStripeWebhookSignature } from '../../_lib/stripe';
 import { provisionPaidPublicMembershipSignup } from '../../membership/_lib/publicSignup';
-import { fetchCreditsSummary } from '../../rooms/_lib/credits';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +20,79 @@ function databaseError(context, error) {
 
 function sessionIsPaid(session) {
     return session?.payment_status === 'paid' || session?.payment_status === 'no_payment_required';
+}
+
+async function refundCancelledBookingSession({ admin, session, payment, source }) {
+    if (!sessionIsPaid(session)) return;
+    if (payment?.status === 'refunded' || payment?.status === 'refund_pending') return;
+
+    const amountCents = Math.max(0, toInt(session?.amount_total ?? payment?.amount_cents, 0));
+    const paymentIntentId =
+        typeof session?.payment_intent === 'string' ? session.payment_intent : session?.payment_intent?.id || payment?.stripe_payment_intent_id || null;
+    const paymentTable = source === 'public' ? 'public_room_booking_payments' : 'room_booking_payments';
+    let refund = null;
+    let refundStatus = 'refunded';
+
+    if (amountCents > 0) {
+        refund = await refundStripePayment({
+            paymentIntentId,
+            idempotencyKey: `cancelled-room-booking-refund-${source}-${payment.id}-${payment.stripe_refund_id || 'initial'}`,
+            metadata: {
+                booking_id: source === 'member' ? session?.metadata?.booking_id : null,
+                public_room_booking_id: source === 'public' ? session?.metadata?.public_room_booking_id : null,
+                source,
+                initiated_by: 'stripe_webhook_after_cancellation'
+            }
+        });
+        if (refund?.status === 'failed' || refund?.failure_reason) {
+            const { error } = await admin
+                .from(paymentTable)
+                .update({
+                    status: 'paid',
+                    stripe_payment_intent_id: paymentIntentId,
+                    stripe_refund_id: refund?.id || payment.stripe_refund_id || null,
+                    refunded_at: null,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', payment.id);
+            if (error) throw databaseError('Failed to record failed booking refund', error);
+            throw new Error(refund?.failure_reason || 'Stripe could not refund the cancelled booking payment.');
+        }
+        refundStatus = refund?.status === 'succeeded' || refund?.already_refunded ? 'refunded' : 'refund_pending';
+    }
+
+    const { error } = await admin
+        .from(paymentTable)
+        .update({
+            status: refundStatus,
+            stripe_payment_intent_id: paymentIntentId,
+            stripe_refund_id: refund?.id || payment?.stripe_refund_id || null,
+            refunded_at: refundStatus === 'refunded' ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', payment.id);
+    if (error) throw databaseError('Failed to record cancelled booking refund', error);
+}
+
+async function syncBookingRefund({ admin, refund }) {
+    const refundId = typeof refund?.id === 'string' ? refund.id : null;
+    if (!refundId) return;
+
+    let status = 'refund_pending';
+    if (refund.status === 'succeeded') status = 'refunded';
+    if (refund.status === 'failed' || refund.status === 'canceled') status = 'paid';
+    const updates = {
+        status,
+        refunded_at: status === 'refunded' ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString()
+    };
+
+    const [memberResult, publicResult] = await Promise.all([
+        admin.from('room_booking_payments').update(updates).eq('stripe_refund_id', refundId),
+        admin.from('public_room_booking_payments').update(updates).eq('stripe_refund_id', refundId)
+    ]);
+    if (memberResult.error) throw databaseError('Failed to sync member room booking refund', memberResult.error);
+    if (publicResult.error) throw databaseError('Failed to sync public room booking refund', publicResult.error);
 }
 
 async function claimEvent(admin, eventId) {
@@ -48,7 +120,7 @@ async function approveBookingFromSession({ admin, session }) {
 
     const { data: booking, error: bookingError } = await admin
         .from('room_bookings')
-        .select('id, status, booking_date, tokens_used, price_cents')
+        .select('id, status, booking_date, token_owner_id, token_period_start, tokens_used, price_cents')
         .eq('id', bookingId)
         .maybeSingle();
 
@@ -57,12 +129,17 @@ async function approveBookingFromSession({ admin, session }) {
 
     const { data: payment, error: paymentError } = await admin
         .from('room_booking_payments')
-        .select('id, token_owner_id, amount_cents, discount_cents, currency, status')
+        .select('id, token_owner_id, amount_cents, discount_cents, currency, status, stripe_payment_intent_id, stripe_refund_id')
         .eq('stripe_checkout_session_id', session.id)
         .maybeSingle();
 
     if (paymentError) throw databaseError('Failed to load member room booking payment', paymentError);
     if (!payment) throw new Error(`Member room booking payment for Stripe session ${session.id} was not found.`);
+
+    if (booking.status === 'cancelled') {
+        await refundCancelledBookingSession({ admin, session, payment, source: 'member' });
+        return;
+    }
 
     const invoiceId = session?.invoice || null;
     const paymentIntentId = session?.payment_intent || null;
@@ -87,36 +164,14 @@ async function approveBookingFromSession({ admin, session }) {
         if (paymentUpdateError) throw databaseError('Failed to mark member room booking payment paid', paymentUpdateError);
     }
 
-    const bookingTransitioned = booking.status !== 'approved';
-    if (bookingTransitioned) {
-        const { error: bookingUpdateError } = await admin.from('room_bookings').update({ status: 'approved' }).eq('id', bookingId);
-        if (bookingUpdateError) throw databaseError('Failed to approve member room booking', bookingUpdateError);
-    }
-
-    // Deduct tokens from the tenant token owner (only if a token owner exists).
-    const tokenOwnerId = payment.token_owner_id || session?.metadata?.token_owner_id || null;
-    const tokensToDeduct = Math.max(0, toInt(booking.tokens_used, 0));
-
-    if (bookingTransitioned && tokenOwnerId && tokensToDeduct) {
-        const credits = await fetchCreditsSummary({ admin, ownerId: tokenOwnerId });
-        const latestPeriodStart = credits.ok ? credits.latestRow?.period_start : null;
-        if (latestPeriodStart) {
-            const currentUsed = toInt(credits.latestRow?.tokens_used, 0);
-            const newUsed = Math.max(0, currentUsed + tokensToDeduct);
-            const { error: creditsError } = await admin
-                .from('room_credits')
-                .update({ tokens_used: newUsed })
-                .eq('owner_id', tokenOwnerId)
-                .eq('period_start', latestPeriodStart);
-            if (creditsError) {
-                console.error('Failed to update room credits after paid booking.', {
-                    bookingId,
-                    code: creditsError.code,
-                    message: creditsError.message
-                });
-            }
-        }
-    }
+    // Approve the booking and debit tokens atomically so webhook retries cannot
+    // charge the same tokens twice.
+    const tokenOwnerId = booking.token_owner_id || payment.token_owner_id || session?.metadata?.token_owner_id || null;
+    const { data: bookingTransitioned, error: finalizeError } = await admin.rpc('finalize_paid_room_booking', {
+        p_booking_id: bookingId,
+        p_token_owner_id: tokenOwnerId
+    });
+    if (finalizeError) throw databaseError('Failed to approve member room booking', finalizeError);
 
     // Create internal invoice record (paid) for visibility in the platform admin UI.
     const ownerId = payment.token_owner_id || session?.metadata?.token_owner_id || null;
@@ -160,12 +215,17 @@ async function confirmPublicRoomBookingFromSession({ admin, session }) {
 
     const { data: payment, error: paymentError } = await admin
         .from('public_room_booking_payments')
-        .select('id, amount_cents, currency, status')
+        .select('id, amount_cents, currency, status, stripe_payment_intent_id, stripe_refund_id')
         .eq('stripe_checkout_session_id', session.id)
         .maybeSingle();
 
     if (paymentError) throw databaseError('Failed to load public room booking payment', paymentError);
     if (!payment) throw new Error(`Public room booking payment for Stripe session ${session.id} was not found.`);
+
+    if (booking.status === 'cancelled' || booking.status === 'expired') {
+        await refundCancelledBookingSession({ admin, session, payment, source: 'public' });
+        return;
+    }
 
     const invoiceId = session?.invoice || null;
     const paymentIntentId = session?.payment_intent || null;
@@ -242,7 +302,10 @@ async function confirmPublicRoomBookingFromSession({ admin, session }) {
 async function cancelBookingFromSession({ admin, session }) {
     const bookingId = session?.metadata?.booking_id;
     if (!bookingId) return;
-    const { error: bookingError } = await admin.from('room_bookings').update({ status: 'cancelled' }).eq('id', bookingId);
+    const { error: bookingError } = await admin
+        .from('room_bookings')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('id', bookingId);
     if (bookingError) throw databaseError('Failed to cancel member room booking', bookingError);
 
     const { error: paymentError } = await admin
@@ -256,7 +319,10 @@ async function cancelPublicRoomBookingFromSession({ admin, session, status }) {
     const bookingId = session?.metadata?.public_room_booking_id;
     if (!bookingId) return;
     const nextStatus = status || 'expired';
-    const { error: bookingError } = await admin.from('public_room_bookings').update({ status: nextStatus }).eq('id', bookingId);
+    const { error: bookingError } = await admin
+        .from('public_room_bookings')
+        .update({ status: nextStatus, cancelled_at: new Date().toISOString() })
+        .eq('id', bookingId);
     if (bookingError) throw databaseError('Failed to expire public room booking', bookingError);
 
     const { error: paymentError } = await admin
@@ -476,6 +542,10 @@ export async function POST(request) {
         if (type === 'checkout.session.async_payment_failed' || type === 'checkout.session.expired') {
             await cancelBookingFromSession({ admin, session: obj });
             await cancelPublicRoomBookingFromSession({ admin, session: obj, status: 'expired' });
+        }
+
+        if (type === 'refund.updated') {
+            await syncBookingRefund({ admin, refund: obj });
         }
 
         if (type === 'customer.subscription.deleted') {

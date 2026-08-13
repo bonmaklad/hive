@@ -31,14 +31,18 @@ export async function GET(request) {
 
     let memberQuery = guard.admin
         .from('room_bookings')
-        .select('id, owner_id, space_slug, booking_date, start_time, end_time, hours, tokens_used, price_cents, status, created_at')
+        .select(
+            'id, owner_id, token_owner_id, token_period_start, space_slug, booking_date, start_time, end_time, hours, tokens_used, tokens_refunded_at, price_cents, currency, status, cancelled_at, created_at, updated_at'
+        )
         .order('booking_date', { ascending: false })
         .order('start_time', { ascending: false })
         .limit(300);
 
     let publicQuery = guard.admin
         .from('public_room_bookings')
-        .select('id, space_slug, booking_date, start_time, end_time, hours, price_cents, currency, status, customer_name, customer_email, customer_phone, created_at')
+        .select(
+            'id, space_slug, booking_date, start_time, end_time, hours, price_cents, currency, status, customer_name, customer_email, customer_phone, cancelled_at, created_at, updated_at'
+        )
         .order('booking_date', { ascending: false })
         .order('start_time', { ascending: false })
         .limit(300);
@@ -74,22 +78,41 @@ export async function GET(request) {
     }
     const ownersById = Object.fromEntries((owners || []).map(p => [p.id, p]));
 
+    const memberBookingIds = memberBookings.map(b => b.id);
     const publicBookingIds = publicBookings.map(b => b.id);
-    const paymentsByBookingId = {};
-    if (publicBookingIds.length) {
-        const { data: payments, error: paymentsError } = await guard.admin
-            .from('public_room_booking_payments')
-            .select('public_room_booking_id, status, amount_cents, currency, stripe_checkout_session_id, stripe_payment_intent_id, created_at')
-            .in('public_room_booking_id', publicBookingIds)
-            .order('created_at', { ascending: false });
-        if (paymentsError && paymentsError.code !== '42P01') {
-            return NextResponse.json({ error: paymentsError.message }, { status: 500 });
-        }
-        for (const payment of payments || []) {
-            if (!paymentsByBookingId[payment.public_room_booking_id]) {
-                paymentsByBookingId[payment.public_room_booking_id] = payment;
-            }
-        }
+    const memberPaymentsByBookingId = {};
+    const publicPaymentsByBookingId = {};
+    const [memberPaymentsResult, publicPaymentsResult] = await Promise.all([
+        memberBookingIds.length
+            ? guard.admin
+                .from('room_booking_payments')
+                .select(
+                    'room_booking_id, status, amount_cents, currency, stripe_checkout_session_id, stripe_payment_intent_id, stripe_refund_id, refunded_at, created_at'
+                )
+                .in('room_booking_id', memberBookingIds)
+                .order('created_at', { ascending: false })
+            : Promise.resolve({ data: [], error: null }),
+        publicBookingIds.length
+            ? guard.admin
+                .from('public_room_booking_payments')
+                .select(
+                    'public_room_booking_id, status, amount_cents, currency, stripe_checkout_session_id, stripe_payment_intent_id, stripe_refund_id, refunded_at, created_at'
+                )
+                .in('public_room_booking_id', publicBookingIds)
+                .order('created_at', { ascending: false })
+            : Promise.resolve({ data: [], error: null })
+    ]);
+    if (memberPaymentsResult.error && memberPaymentsResult.error.code !== '42P01') {
+        return NextResponse.json({ error: memberPaymentsResult.error.message }, { status: 500 });
+    }
+    if (publicPaymentsResult.error && publicPaymentsResult.error.code !== '42P01') {
+        return NextResponse.json({ error: publicPaymentsResult.error.message }, { status: 500 });
+    }
+    for (const payment of memberPaymentsResult.data || []) {
+        if (!memberPaymentsByBookingId[payment.room_booking_id]) memberPaymentsByBookingId[payment.room_booking_id] = payment;
+    }
+    for (const payment of publicPaymentsResult.data || []) {
+        if (!publicPaymentsByBookingId[payment.public_room_booking_id]) publicPaymentsByBookingId[payment.public_room_booking_id] = payment;
     }
 
     const bookings = [
@@ -98,7 +121,7 @@ export async function GET(request) {
             source: 'member',
             owner: ownersById[booking.owner_id] || null,
             customer: ownersById[booking.owner_id] || null,
-            payment: null
+            payment: memberPaymentsByBookingId[booking.id] || null
         })),
         ...publicBookings.map(booking => ({
             ...booking,
@@ -110,7 +133,7 @@ export async function GET(request) {
                 email: booking.customer_email,
                 phone: booking.customer_phone
             },
-            payment: paymentsByBookingId[booking.id] || null
+            payment: publicPaymentsByBookingId[booking.id] || null
         }))
     ]
         .sort((a, b) => {
@@ -142,13 +165,16 @@ export async function POST(request) {
     if (!spaceSlug || !date || !startTime || !endTime) {
         return NextResponse.json({ error: 'Missing space_slug, booking_date, start_time, end_time' }, { status: 400 });
     }
+    if (!['approved', 'requested'].includes(status)) {
+        return NextResponse.json({ error: 'status must be approved or requested' }, { status: 400 });
+    }
 
     let resolvedOwnerId = ownerId;
     if (!resolvedOwnerId && ownerEmail) {
         const { data: profile, error: profileError } = await guard.admin
             .from('profiles')
             .select('id')
-            .eq('email', ownerEmail)
+            .ilike('email', ownerEmail)
             .maybeSingle();
         if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
         if (!profile?.id) return NextResponse.json({ error: 'No user found for that email.' }, { status: 404 });
@@ -204,6 +230,7 @@ export async function POST(request) {
         .from('room_bookings')
         .insert({
             owner_id: resolvedOwnerId,
+            token_owner_id: resolvedOwnerId,
             space_slug: spaceSlug,
             booking_date: date,
             start_time: startTime,

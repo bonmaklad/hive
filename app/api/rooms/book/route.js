@@ -147,6 +147,7 @@ export async function POST(request) {
 
         const tokensLeft = credits.tokensLeft;
         const tokensApplied = Math.min(tokensLeft, requiredTokens);
+        const tokenPeriodStart = tokensApplied > 0 ? credits.latestRow?.period_start || null : null;
 
         const pricing = getPricingCents(space, hours);
         const basePriceCents = toInt(pricing.amount, 0);
@@ -168,10 +169,12 @@ export async function POST(request) {
         // Create booking. If payment required, keep status requested until webhook marks it approved.
         const bookingStatus = finalCashDueCents === 0 ? 'approved' : 'requested';
 
-        const { data: booking, error: bookingError } = await ctx.admin
+        const { data: createdBooking, error: bookingError } = await ctx.admin
             .from('room_bookings')
             .insert({
                 owner_id: ctx.user.id,
+                token_owner_id: ctx.tokenOwnerId,
+                token_period_start: tokenPeriodStart,
                 space_slug: spaceSlug,
                 booking_date: bookingDate,
                 start_time: startTime,
@@ -180,40 +183,37 @@ export async function POST(request) {
                 // Always record the tokens actually applied (can be partial if a coupon covers the remainder).
                 tokens_used: tokensApplied,
                 price_cents: bookingStatus === 'approved' ? 0 : finalCashDueCents,
-                status: bookingStatus
+                status: 'requested'
             })
-            .select('id, owner_id, space_slug, booking_date, start_time, end_time, hours, tokens_used, price_cents, status')
+            .select('id, owner_id, token_owner_id, token_period_start, space_slug, booking_date, start_time, end_time, hours, tokens_used, price_cents, status')
             .single();
 
         if (bookingError) return NextResponse.json({ error: bookingError.message }, { status: 500 });
+        let booking = createdBooking;
         bookingId = booking.id;
 
         if (bookingStatus === 'approved') {
-            // Deduct tokens immediately (tenant token owner).
-            if (tokensApplied > 0) {
-                const latestPeriodStart = credits.latestRow?.period_start || null;
-                if (!latestPeriodStart) {
-                    return NextResponse.json(
-                        { error: 'Booking created but failed to update token usage.', detail: 'No token credits found.', booking },
-                        { status: 500 }
-                    );
-                }
-
-                const currentUsed = toInt(credits.latestRow?.tokens_used, 0);
-                const newUsed = Math.max(0, currentUsed + tokensApplied);
-                const { error: updateCreditsError } = await ctx.admin
-                    .from('room_credits')
-                    .update({ tokens_used: newUsed })
-                    .eq('owner_id', ctx.tokenOwnerId)
-                    .eq('period_start', latestPeriodStart);
-
-                if (updateCreditsError) {
-                    return NextResponse.json(
-                        { error: 'Booking created but failed to update token usage.', detail: updateCreditsError.message, booking },
-                        { status: 500 }
-                    );
-                }
+            const { error: finalizeError } = await ctx.admin.rpc('finalize_paid_room_booking', {
+                p_booking_id: booking.id,
+                p_token_owner_id: ctx.tokenOwnerId
+            });
+            if (finalizeError) {
+                await ctx.admin.from('room_bookings').update({ status: 'cancelled' }).eq('id', booking.id);
+                return NextResponse.json(
+                    { error: 'Booking created but failed to update token usage.', detail: finalizeError.message, booking },
+                    { status: 500 }
+                );
             }
+
+            const { data: approvedBooking, error: approvedBookingError } = await ctx.admin
+                .from('room_bookings')
+                .select('id, owner_id, token_owner_id, token_period_start, space_slug, booking_date, start_time, end_time, hours, tokens_used, price_cents, status')
+                .eq('id', booking.id)
+                .single();
+            if (approvedBookingError) {
+                return NextResponse.json({ error: approvedBookingError.message }, { status: 500 });
+            }
+            booking = approvedBooking;
 
             return NextResponse.json({
                 ok: true,

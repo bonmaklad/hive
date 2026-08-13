@@ -27,6 +27,57 @@ function bookingStatusBadge(status) {
     return 'pending';
 }
 
+function bookingCanChange(booking) {
+    return !['cancelled', 'expired', 'rejected'].includes(booking?.status);
+}
+
+function bookingCanCancel(booking) {
+    return bookingCanChange(booking) || booking?.payment?.status === 'paid';
+}
+
+function bookingPaymentSummary(booking) {
+    const parts = [];
+    const tokens = Math.max(0, Number(booking?.tokens_used || 0));
+    const paymentAmount = Math.max(0, Number(booking?.payment?.amount_cents || 0));
+    if (tokens) parts.push(`${tokens} token${tokens === 1 ? '' : 's'}`);
+    if (paymentAmount) parts.push(`Stripe ${formatNZD(paymentAmount)}`);
+    if (!parts.length && booking?.payment?.status === 'requires_payment') return 'Stripe pending';
+    const summary = parts.length ? parts.join(' + ') : 'No charge';
+    if (booking?.payment?.status === 'refunded') return `${summary} (refunded)`;
+    if (booking?.payment?.status === 'refund_pending') return `${summary} (refund pending)`;
+    return summary;
+}
+
+function bookingRefundDescription(booking) {
+    const paymentSummary = bookingPaymentSummary(booking);
+    if (booking?.payment?.status === 'requires_payment') {
+        return 'The open Stripe checkout will be cancelled. No settled Stripe payment has been recorded.';
+    }
+    if (paymentSummary === 'No charge') {
+        return 'No payment was recorded, so no refund will be issued.';
+    }
+    return `${paymentSummary} will be returned to the customer.`;
+}
+
+function EditIcon() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z" />
+            <path d="m13.5 6.5 4 4" />
+        </svg>
+    );
+}
+
+function RefundIcon() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M4 9V4m0 0h5M4 4l4 4" />
+            <path d="M5.7 15.5A8 8 0 1 0 6.4 7" />
+            <path d="M12 8v8m2-6.2c-.5-.5-1.2-.8-2-.8-1.1 0-2 .7-2 1.6 0 2.4 4 1.1 4 3.6 0 1-.9 1.8-2 1.8-.9 0-1.7-.3-2.3-.9" />
+        </svg>
+    );
+}
+
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTH_FORMAT = new Intl.DateTimeFormat('en-NZ', { month: 'long', year: 'numeric' });
 const PIN_PALETTE = ['#f6a04d', '#6fc1ff', '#7be2a8', '#c59bff', '#ff87b5', '#ffd166', '#4dd1a1', '#ffb347'];
@@ -73,18 +124,23 @@ export default function AdminBookingsPage() {
     const [calendarBookings, setCalendarBookings] = useState([]);
     const [error, setError] = useState('');
     const [calendarError, setCalendarError] = useState('');
+    const [notice, setNotice] = useState('');
     const [loading, setLoading] = useState(true);
     const [calendarLoading, setCalendarLoading] = useState(true);
     const [spacesLoading, setSpacesLoading] = useState(true);
     const [busy, setBusy] = useState(false);
 
     const [spaceSlug, setSpaceSlug] = useState('');
+    const [createSpaceSlug, setCreateSpaceSlug] = useState('');
     const [date, setDate] = useState(() => formatDateInput(''));
 
     const [ownerEmail, setOwnerEmail] = useState('');
     const [startTime, setStartTime] = useState('09:00');
     const [endTime, setEndTime] = useState('10:00');
     const [status, setStatus] = useState('approved');
+    const [editForm, setEditForm] = useState(null);
+    const [cancelBookingTarget, setCancelBookingTarget] = useState(null);
+    const [actionBusyId, setActionBusyId] = useState('');
 
     const authHeader = useCallback(async () => {
         const { data } = await supabase.auth.getSession();
@@ -106,7 +162,9 @@ export default function AdminBookingsPage() {
             const spacesRes = await fetch('/api/admin/spaces', { headers: await authHeader() });
             const spacesJson = await spacesRes.json();
             if (!spacesRes.ok) throw new Error(spacesJson?.error || 'Failed to load spaces.');
-            setSpaces(Array.isArray(spacesJson?.spaces) ? spacesJson.spaces : []);
+            const loadedSpaces = Array.isArray(spacesJson?.spaces) ? spacesJson.spaces : [];
+            setSpaces(loadedSpaces);
+            setCreateSpaceSlug(current => (loadedSpaces.some(space => space.slug === current) ? current : loadedSpaces[0]?.slug || ''));
         } catch (err) {
             setError(err?.message || 'Failed to load spaces.');
         } finally {
@@ -178,13 +236,14 @@ export default function AdminBookingsPage() {
         event.preventDefault();
         setBusy(true);
         setError('');
+        setNotice('');
         try {
             const res = await fetch('/api/admin/room-bookings', {
                 method: 'POST',
                 headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     owner_email: ownerEmail,
-                    space_slug: spaceSlug,
+                    space_slug: createSpaceSlug,
                     booking_date: date,
                     start_time: startTime,
                     end_time: endTime,
@@ -194,11 +253,96 @@ export default function AdminBookingsPage() {
             const json = await res.json();
             if (!res.ok) throw new Error(json?.error || 'Failed to create booking.');
             setOwnerEmail('');
+            setNotice('Booking created.');
             await Promise.all([loadBookingsForDay(), loadBookingsForMonth()]);
         } catch (err) {
             setError(err?.message || 'Failed to create booking.');
         } finally {
             setBusy(false);
+        }
+    };
+
+    const beginEdit = booking => {
+        setError('');
+        setNotice('');
+        setEditForm({
+            id: booking.id,
+            source: booking.source,
+            space_slug: booking.space_slug,
+            booking_date: booking.booking_date,
+            start_time: String(booking.start_time).slice(0, 5),
+            end_time: String(booking.end_time).slice(0, 5),
+            payment_summary: bookingPaymentSummary(booking)
+        });
+    };
+
+    const saveBooking = async event => {
+        event.preventDefault();
+        if (!editForm) return;
+        setActionBusyId(editForm.id);
+        setError('');
+        setNotice('');
+        try {
+            const res = await fetch(`/api/admin/room-bookings/${encodeURIComponent(editForm.id)}?source=${encodeURIComponent(editForm.source)}`, {
+                method: 'PATCH',
+                headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    space_slug: editForm.space_slug,
+                    booking_date: editForm.booking_date,
+                    start_time: editForm.start_time,
+                    end_time: editForm.end_time
+                })
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error || 'Failed to edit booking.');
+            setDate(editForm.booking_date);
+            setEditForm(null);
+            setNotice('Booking updated. Its original payment and token charge were kept unchanged.');
+            await Promise.all([loadBookingsForDay(), loadBookingsForMonth()]);
+        } catch (err) {
+            setError(err?.message || 'Failed to edit booking.');
+        } finally {
+            setActionBusyId('');
+        }
+    };
+
+    const requestBookingCancellation = booking => {
+        setError('');
+        setNotice('');
+        setCancelBookingTarget(booking);
+    };
+
+    const cancelBooking = async booking => {
+        setActionBusyId(booking.id);
+        setError('');
+        setNotice('');
+        try {
+            const res = await fetch(`/api/admin/room-bookings/${encodeURIComponent(booking.id)}?source=${encodeURIComponent(booking.source)}`, {
+                method: 'DELETE',
+                headers: await authHeader()
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error || 'Failed to cancel booking.');
+
+            const refundParts = [];
+            const refundedTokens = Math.max(0, Number(json?.refund?.tokens || 0));
+            const stripeRefund = json?.refund?.stripe;
+            if (refundedTokens) refundParts.push(`${refundedTokens} token${refundedTokens === 1 ? '' : 's'} returned`);
+            if (stripeRefund?.method === 'stripe' && stripeRefund?.amount_cents > 0) {
+                refundParts.push(
+                    stripeRefund.status === 'refund_pending'
+                        ? `${formatNZD(stripeRefund.amount_cents)} Stripe refund pending`
+                        : `${formatNZD(stripeRefund.amount_cents)} refunded through Stripe`
+                );
+            }
+            setNotice(refundParts.length ? `Booking cancelled: ${refundParts.join(' and ')}.` : 'Booking cancelled. No paid amount was recorded.');
+            if (editForm?.id === booking.id) setEditForm(null);
+            setCancelBookingTarget(null);
+            await Promise.all([loadBookingsForDay(), loadBookingsForMonth()]);
+        } catch (err) {
+            setError(err?.message || 'Failed to cancel booking.');
+        } finally {
+            setActionBusyId('');
         }
     };
 
@@ -248,6 +392,7 @@ export default function AdminBookingsPage() {
             </div>
 
             {error && <p className="platform-message error">{error}</p>}
+            {notice && <p className="platform-message success">{notice}</p>}
 
             <div className="platform-grid">
                 <section className="platform-card span-6">
@@ -354,8 +499,23 @@ export default function AdminBookingsPage() {
                     <h2 style={{ marginTop: 0 }}>Book on behalf</h2>
                     <form className="contact-form" onSubmit={createBooking}>
                         <label>
+                            Room
+                            <select value={createSpaceSlug} onChange={e => setCreateSpaceSlug(e.target.value)} disabled={busy || spacesLoading}>
+                                {spaces.length ? null : <option value="">No rooms available</option>}
+                                {spaces.map(space => (
+                                    <option key={space.slug} value={space.slug}>
+                                        {space.title}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label>
                             Member email
-                            <input value={ownerEmail} onChange={e => setOwnerEmail(e.target.value)} disabled={busy} />
+                            <input type="email" value={ownerEmail} onChange={e => setOwnerEmail(e.target.value)} disabled={busy} required />
+                        </label>
+                        <label>
+                            Date
+                            <input type="date" value={date} onChange={e => setDate(e.target.value)} disabled={busy} required />
                         </label>
                         <label>
                             Start
@@ -373,20 +533,157 @@ export default function AdminBookingsPage() {
                             </select>
                         </label>
                         <div className="platform-actions">
-                            <button className="btn primary" type="submit" disabled={busy || !ownerEmail.trim() || !spaceSlug}>
+                            <button className="btn primary" type="submit" disabled={busy || !ownerEmail.trim() || !createSpaceSlug}>
                                 {busy ? 'Working…' : 'Create booking'}
                             </button>
                         </div>
                     </form>
-                    {spaceSlug && spaceBySlug[spaceSlug] ? (
+                    {createSpaceSlug && spaceBySlug[createSpaceSlug] ? (
                         <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
-                            Tokens/hr: {spaceBySlug[spaceSlug].tokens_per_hour} • Half day:{' '}
-                            {spaceBySlug[spaceSlug].pricing_half_day_cents ? formatNZD(spaceBySlug[spaceSlug].pricing_half_day_cents) : '—'} • Full day:{' '}
-                            {spaceBySlug[spaceSlug].pricing_full_day_cents ? formatNZD(spaceBySlug[spaceSlug].pricing_full_day_cents) : '—'}
+                            Tokens/hr: {spaceBySlug[createSpaceSlug].tokens_per_hour} • Half day:{' '}
+                            {spaceBySlug[createSpaceSlug].pricing_half_day_cents
+                                ? formatNZD(spaceBySlug[createSpaceSlug].pricing_half_day_cents)
+                                : '—'}{' '}
+                            • Full day:{' '}
+                            {spaceBySlug[createSpaceSlug].pricing_full_day_cents
+                                ? formatNZD(spaceBySlug[createSpaceSlug].pricing_full_day_cents)
+                                : '—'}
                         </p>
                     ) : null}
                 </section>
             </div>
+
+            {editForm ? (
+                <div className="platform-modal-overlay" role="presentation">
+                    <section className="platform-modal admin-booking-modal" role="dialog" aria-modal="true" aria-labelledby="edit-booking-title">
+                        <div className="platform-modal-header">
+                            <div>
+                                <h2 id="edit-booking-title" style={{ marginTop: 0 }}>
+                                    Edit booking
+                                </h2>
+                                <p className="platform-subtitle">
+                                    Change the room, date, or time. The existing charge ({editForm.payment_summary}) stays unchanged.
+                                </p>
+                            </div>
+                            <button className="btn ghost" type="button" onClick={() => setEditForm(null)} disabled={actionBusyId === editForm.id}>
+                                Close
+                            </button>
+                        </div>
+                        {error ? <p className="platform-message error">{error}</p> : null}
+                        <form className="contact-form admin-booking-edit-form" onSubmit={saveBooking}>
+                            <label>
+                                Room
+                                <select
+                                    value={editForm.space_slug}
+                                    onChange={e => setEditForm(current => ({ ...current, space_slug: e.target.value }))}
+                                    disabled={actionBusyId === editForm.id}
+                                >
+                                    {spaces.map(space => (
+                                        <option key={space.slug} value={space.slug}>
+                                            {space.title}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                            <label>
+                                Date
+                                <input
+                                    type="date"
+                                    value={editForm.booking_date}
+                                    onChange={e => setEditForm(current => ({ ...current, booking_date: e.target.value }))}
+                                    disabled={actionBusyId === editForm.id}
+                                    required
+                                />
+                            </label>
+                            <label>
+                                Start
+                                <input
+                                    type="time"
+                                    value={editForm.start_time}
+                                    onChange={e => setEditForm(current => ({ ...current, start_time: e.target.value }))}
+                                    disabled={actionBusyId === editForm.id}
+                                    required
+                                />
+                            </label>
+                            <label>
+                                End
+                                <input
+                                    type="time"
+                                    value={editForm.end_time}
+                                    onChange={e => setEditForm(current => ({ ...current, end_time: e.target.value }))}
+                                    disabled={actionBusyId === editForm.id}
+                                    required
+                                />
+                            </label>
+                            <div className="platform-actions admin-booking-edit-actions">
+                                <button className="btn primary" type="submit" disabled={actionBusyId === editForm.id}>
+                                    {actionBusyId === editForm.id ? 'Saving…' : 'Save changes'}
+                                </button>
+                                <button className="btn ghost" type="button" onClick={() => setEditForm(null)} disabled={actionBusyId === editForm.id}>
+                                    Cancel edit
+                                </button>
+                            </div>
+                        </form>
+                    </section>
+                </div>
+            ) : null}
+
+            {cancelBookingTarget ? (
+                <div className="platform-modal-overlay" role="presentation">
+                    <section
+                        className="platform-modal admin-booking-modal admin-booking-cancel-modal"
+                        role="alertdialog"
+                        aria-modal="true"
+                        aria-labelledby="cancel-booking-title"
+                        aria-describedby="cancel-booking-description"
+                    >
+                        <div className="platform-modal-header">
+                            <div>
+                                <p className="admin-booking-danger-eyebrow">Permanent action</p>
+                                <h2 id="cancel-booking-title" style={{ marginTop: 0 }}>
+                                    Cancel and refund booking?
+                                </h2>
+                            </div>
+                        </div>
+
+                        <div className="admin-booking-cancel-summary">
+                            <strong>{spaceBySlug[cancelBookingTarget.space_slug]?.title || cancelBookingTarget.space_slug}</strong>
+                            <span>
+                                {cancelBookingTarget.booking_date} · {String(cancelBookingTarget.start_time).slice(0, 5)}–
+                                {String(cancelBookingTarget.end_time).slice(0, 5)}
+                            </span>
+                            <span>{cancelBookingTarget.customer?.email || cancelBookingTarget.owner?.email || cancelBookingTarget.owner_id || 'Customer'}</span>
+                        </div>
+
+                        <div id="cancel-booking-description" className="admin-booking-danger-message">
+                            <strong>Are you sure? This cannot be undone.</strong>
+                            <span>{bookingRefundDescription(cancelBookingTarget)}</span>
+                        </div>
+
+                        {error ? <p className="platform-message error">{error}</p> : null}
+
+                        <div className="platform-actions admin-booking-cancel-actions">
+                            <button
+                                className="btn ghost"
+                                type="button"
+                                onClick={() => setCancelBookingTarget(null)}
+                                disabled={actionBusyId === cancelBookingTarget.id}
+                                autoFocus
+                            >
+                                Keep booking
+                            </button>
+                            <button
+                                className="btn danger"
+                                type="button"
+                                onClick={() => cancelBooking(cancelBookingTarget)}
+                                disabled={actionBusyId === cancelBookingTarget.id}
+                            >
+                                {actionBusyId === cancelBookingTarget.id ? 'Cancelling and refunding…' : 'Yes, cancel and refund'}
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            ) : null}
 
             <section className="platform-card" style={{ marginTop: '1.25rem' }}>
                 <h2 style={{ marginTop: 0 }}>Bookings</h2>
@@ -402,7 +699,9 @@ export default function AdminBookingsPage() {
                                     <th>Space</th>
                                     <th>Customer</th>
                                     <th>Source</th>
+                                    <th>Payment</th>
                                     <th>Status</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -423,14 +722,47 @@ export default function AdminBookingsPage() {
                                                     {b.source === 'public' ? 'website' : 'member'}
                                                 </span>
                                             </td>
+                                            <td>{bookingPaymentSummary(b)}</td>
                                             <td>
                                                 <span className={`badge ${bookingStatusBadge(b.status)}`}>{b.status}</span>
+                                            </td>
+                                            <td>
+                                                {bookingCanChange(b) || bookingCanCancel(b) ? (
+                                                    <div className="admin-booking-row-actions">
+                                                        {bookingCanChange(b) ? (
+                                                            <button
+                                                                className="admin-booking-icon-button"
+                                                                type="button"
+                                                                onClick={() => beginEdit(b)}
+                                                                disabled={Boolean(actionBusyId)}
+                                                                aria-label="Edit booking"
+                                                                title="Edit booking"
+                                                            >
+                                                                <EditIcon />
+                                                            </button>
+                                                        ) : null}
+                                                        {bookingCanCancel(b) ? (
+                                                            <button
+                                                                className="admin-booking-icon-button is-danger"
+                                                                type="button"
+                                                                onClick={() => requestBookingCancellation(b)}
+                                                                disabled={Boolean(actionBusyId)}
+                                                                aria-label={b.status === 'cancelled' ? 'Retry booking refund' : 'Cancel booking and issue refund'}
+                                                                title={b.status === 'cancelled' ? 'Retry refund' : 'Cancel and refund'}
+                                                            >
+                                                                <RefundIcon />
+                                                            </button>
+                                                        ) : null}
+                                                    </div>
+                                                ) : (
+                                                    <span className="platform-subtitle">—</span>
+                                                )}
                                             </td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={6} className="platform-subtitle">
+                                        <td colSpan={8} className="platform-subtitle">
                                             No bookings found.
                                         </td>
                                     </tr>
