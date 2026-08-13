@@ -299,6 +299,134 @@ async function confirmPublicRoomBookingFromSession({ admin, session }) {
     }
 }
 
+async function applyRoomBookingInvoicePaid({ admin, invoice }) {
+    const invoiceId = typeof invoice?.id === 'string' ? invoice.id : null;
+    const memberBookingId = invoice?.metadata?.booking_id || null;
+    const publicBookingId = invoice?.metadata?.public_room_booking_id || null;
+    if (!invoiceId || (!memberBookingId && !publicBookingId)) return;
+
+    const source = memberBookingId ? 'member' : 'public';
+    const bookingId = memberBookingId || publicBookingId;
+    const bookingTable = source === 'member' ? 'room_bookings' : 'public_room_bookings';
+    const paymentTable = source === 'member' ? 'room_booking_payments' : 'public_room_booking_payments';
+    const paymentBookingColumn = source === 'member' ? 'room_booking_id' : 'public_room_booking_id';
+    const paymentColumns =
+        source === 'member'
+            ? `id, ${paymentBookingColumn}, token_owner_id, amount_cents, currency, status, stripe_payment_intent_id, stripe_refund_id`
+            : `id, ${paymentBookingColumn}, amount_cents, currency, status, stripe_payment_intent_id, stripe_refund_id`;
+    const bookingColumns =
+        source === 'member'
+            ? 'id, status, booking_date, token_owner_id, space_slug'
+            : 'id, status, booking_date, start_time, end_time, space_slug, customer_email, customer_name';
+
+    const [{ data: booking, error: bookingError }, { data: payment, error: paymentError }] = await Promise.all([
+        admin.from(bookingTable).select(bookingColumns).eq('id', bookingId).maybeSingle(),
+        admin
+            .from(paymentTable)
+            .select(paymentColumns)
+            .eq('stripe_invoice_id', invoiceId)
+            .maybeSingle()
+    ]);
+
+    if (bookingError) throw databaseError(`Failed to load ${source} room booking for Stripe invoice`, bookingError);
+    if (!booking) throw new Error(`${source === 'member' ? 'Member' : 'Public'} room booking ${bookingId} was not found.`);
+    if (paymentError) throw databaseError(`Failed to load ${source} room booking payment for Stripe invoice`, paymentError);
+    if (!payment) throw new Error(`Room booking payment for Stripe invoice ${invoiceId} was not found.`);
+
+    const paymentIntentId =
+        typeof invoice?.payment_intent === 'string' ? invoice.payment_intent : invoice?.payment_intent?.id || payment.stripe_payment_intent_id || null;
+    const amountPaid = Math.max(0, toInt(invoice?.amount_paid ?? invoice?.total ?? payment.amount_cents, 0));
+    const currency = typeof invoice?.currency === 'string' ? invoice.currency.toUpperCase() : payment.currency || 'NZD';
+
+    if (booking.status === 'cancelled' || booking.status === 'expired') {
+        await refundCancelledBookingSession({
+            admin,
+            payment,
+            source,
+            session: {
+                payment_status: 'paid',
+                amount_total: amountPaid,
+                payment_intent: paymentIntentId,
+                metadata: invoice.metadata || {}
+            }
+        });
+        return;
+    }
+
+    if (payment.status !== 'paid') {
+        const { error: paymentUpdateError } = await admin
+            .from(paymentTable)
+            .update({
+                status: 'paid',
+                stripe_payment_intent_id: paymentIntentId,
+                amount_cents: amountPaid,
+                currency,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', payment.id);
+        if (paymentUpdateError) throw databaseError(`Failed to mark ${source} room booking invoice paid`, paymentUpdateError);
+    }
+
+    if (source === 'member') {
+        const tokenOwnerId = booking.token_owner_id || payment.token_owner_id || invoice?.metadata?.token_owner_id || null;
+        const { error: finalizeError } = await admin.rpc('finalize_paid_room_booking', {
+            p_booking_id: bookingId,
+            p_token_owner_id: tokenOwnerId
+        });
+        if (finalizeError) throw databaseError('Failed to finalize member room booking from Stripe invoice', finalizeError);
+
+        if (tokenOwnerId) {
+            const issuedOn = toIsoDate(typeof invoice?.created === 'number' ? invoice.created : NaN) || new Date().toISOString().slice(0, 10);
+            const dueOn = toIsoDate(typeof invoice?.due_date === 'number' ? invoice.due_date : NaN) || issuedOn;
+            const { error: invoiceError } = await admin.from('invoices').insert({
+                owner_id: tokenOwnerId,
+                membership_id: null,
+                invoice_number: `stripe:${invoiceId}`,
+                amount_cents: amountPaid,
+                currency,
+                status: 'paid',
+                issued_on: issuedOn,
+                due_on: dueOn,
+                paid_at: new Date().toISOString()
+            });
+            if (invoiceError && invoiceError.code !== '23505') {
+                throw databaseError('Failed to record paid member room booking invoice', invoiceError);
+            }
+        }
+        return;
+    }
+
+    const bookingTransitioned = booking.status !== 'confirmed';
+    if (bookingTransitioned) {
+        const { error: bookingUpdateError } = await admin
+            .from('public_room_bookings')
+            .update({ status: 'confirmed', updated_at: new Date().toISOString() })
+            .eq('id', bookingId);
+        if (bookingUpdateError) throw databaseError('Failed to confirm public room booking from Stripe invoice', bookingUpdateError);
+    }
+
+    if (!bookingTransitioned || !booking.customer_email) return;
+    let spaceTitle = booking.space_slug;
+    const { data: space, error: spaceError } = await admin.from('spaces').select('title').eq('slug', booking.space_slug).maybeSingle();
+    if (spaceError) throw databaseError('Failed to load room title for confirmation email', spaceError);
+    if (space?.title) spaceTitle = space.title;
+
+    try {
+        await sendPublicRoomBookingConfirmationEmail({
+            to: booking.customer_email,
+            customerName: booking.customer_name,
+            spaceTitle,
+            bookingDate: booking.booking_date,
+            startTime: String(booking.start_time).slice(0, 5),
+            endTime: String(booking.end_time).slice(0, 5),
+            invoiceUrl: invoice?.hosted_invoice_url || invoice?.invoice_pdf || null,
+            manageUrl: null
+        });
+    } catch {
+        // Confirmation email is best-effort; Stripe has already sent the invoice and receipt.
+    }
+}
+
 async function cancelBookingFromSession({ admin, session }) {
     const bookingId = session?.metadata?.booking_id;
     if (!bookingId) return;
@@ -546,6 +674,10 @@ export async function POST(request) {
 
         if (type === 'refund.updated') {
             await syncBookingRefund({ admin, refund: obj });
+        }
+
+        if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
+            await applyRoomBookingInvoicePaid({ admin, invoice: obj });
         }
 
         if (type === 'customer.subscription.deleted') {

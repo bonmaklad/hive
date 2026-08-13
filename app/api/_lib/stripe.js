@@ -127,6 +127,90 @@ export async function refundStripePayment({ paymentIntentId, idempotencyKey, met
     }
 }
 
+export async function createStripeInvoiceDraft({ customerId, amountCents, currency = 'NZD', description, metadata = {}, daysUntilDue = 7 }) {
+    const bookingKey = metadata?.booking_id || metadata?.public_room_booking_id || crypto.randomUUID();
+    const invoiceParams = {
+        customer: customerId,
+        collection_method: 'send_invoice',
+        days_until_due: String(Math.max(1, Number(daysUntilDue) || 7)),
+        auto_advance: 'false',
+        description
+    };
+    for (const [key, value] of Object.entries(metadata)) {
+        if (value === null || value === undefined || value === '') continue;
+        invoiceParams[`metadata[${key}]`] = String(value);
+    }
+
+    const invoice = await stripeRequest('POST', '/v1/invoices', invoiceParams, {
+        idempotencyKey: `room-booking-invoice-${bookingKey}`
+    });
+
+    const itemParams = {
+        customer: customerId,
+        invoice: invoice.id,
+        amount: String(Math.max(0, Math.floor(Number(amountCents) || 0))),
+        currency: String(currency || 'NZD').toLowerCase(),
+        description,
+        // Room prices are already GST-inclusive. Admin only supplies an email,
+        // so automatic tax cannot reliably determine a customer location here.
+        tax_behavior: 'inclusive'
+    };
+    for (const [key, value] of Object.entries(metadata)) {
+        if (value === null || value === undefined || value === '') continue;
+        itemParams[`metadata[${key}]`] = String(value);
+    }
+
+    try {
+        await stripeRequest('POST', '/v1/invoiceitems', itemParams, {
+            idempotencyKey: `room-booking-invoice-item-${bookingKey}`
+        });
+    } catch (error) {
+        try {
+            await stripeRequest('DELETE', `/v1/invoices/${encodeURIComponent(invoice.id)}`, {});
+        } catch {
+            // Surface the item error. A leftover draft can still be deleted in Stripe.
+        }
+        throw error;
+    }
+    return invoice;
+}
+
+export async function finalizeAndSendStripeInvoice(invoiceId, bookingKey) {
+    const id = typeof invoiceId === 'string' ? invoiceId.trim() : '';
+    if (!id) throw new Error('Missing Stripe invoice id.');
+    const key = bookingKey || id;
+
+    await stripeRequest(
+        'POST',
+        `/v1/invoices/${encodeURIComponent(id)}/finalize`,
+        { auto_advance: 'false' },
+        { idempotencyKey: `room-booking-invoice-finalize-${key}` }
+    );
+    return stripeRequest('POST', `/v1/invoices/${encodeURIComponent(id)}/send`, {}, { idempotencyKey: `room-booking-invoice-send-${key}` });
+}
+
+export async function voidStripeInvoice(invoiceId) {
+    const id = typeof invoiceId === 'string' ? invoiceId.trim() : '';
+    if (!id) return false;
+
+    try {
+        const invoice = await stripeRequest('GET', `/v1/invoices/${encodeURIComponent(id)}`);
+        if (invoice?.status === 'void' || invoice?.status === 'uncollectible') return false;
+        if (invoice?.status === 'draft') {
+            await stripeRequest('DELETE', `/v1/invoices/${encodeURIComponent(id)}`, {});
+            return true;
+        }
+        if (invoice?.status === 'open') {
+            await stripeRequest('POST', `/v1/invoices/${encodeURIComponent(id)}/void`, {});
+            return true;
+        }
+        return false;
+    } catch (err) {
+        if (err?.status === 404 || err?.code === 'resource_missing') return false;
+        throw err;
+    }
+}
+
 export async function ensureStripeCustomer({ tenant, tenantId, email }) {
     const existing = typeof tenant?.stripe_customer_id === 'string' ? tenant.stripe_customer_id.trim() : '';
     const cleanEmail = typeof email === 'string' ? email.trim() : '';

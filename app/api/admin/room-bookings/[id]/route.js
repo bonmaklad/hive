@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { expireStripeCheckoutSession, refundStripePayment, stripeRequest } from '../../../_lib/stripe';
+import { expireStripeCheckoutSession, refundStripePayment, stripeRequest, voidStripeInvoice } from '../../../_lib/stripe';
 import { requireAdmin } from '../../../_lib/adminGuard';
 
 export const runtime = 'nodejs';
@@ -73,7 +73,7 @@ async function loadLatestPayment({ admin, id, source }) {
     const { data, error } = await admin
         .from(config.paymentTable)
         .select(
-            `id, ${config.paymentBookingColumn}, amount_cents, currency, status, stripe_checkout_session_id, stripe_payment_intent_id, stripe_refund_id, refunded_at, created_at`
+            `id, ${config.paymentBookingColumn}, amount_cents, currency, status, stripe_checkout_session_id, stripe_invoice_id, stripe_payment_intent_id, stripe_refund_id, refunded_at, created_at`
         )
         .eq(config.paymentBookingColumn, id)
         .order('created_at', { ascending: false })
@@ -126,18 +126,24 @@ async function cancelPayment({ admin, booking, payment, source }) {
 
     const config = tableConfig(source);
     let session = null;
-    const shouldLoadSession =
-        payment.stripe_checkout_session_id &&
-        (payment.status === 'requires_payment' || (payment.status === 'paid' && !payment.stripe_payment_intent_id));
-    if (shouldLoadSession) {
+    let invoice = null;
+    if (payment.stripe_checkout_session_id) {
         session = await stripeRequest('GET', `/v1/checkout/sessions/${encodeURIComponent(payment.stripe_checkout_session_id)}`);
     }
+    if (payment.stripe_invoice_id) {
+        try {
+            invoice = await stripeRequest('GET', `/v1/invoices/${encodeURIComponent(payment.stripe_invoice_id)}?expand[]=payment_intent`);
+        } catch (error) {
+            if (error?.status !== 404 && error?.code !== 'resource_missing') throw error;
+        }
+    }
 
-    const paid = payment.status === 'paid' || isPaidSession(session);
-    const amountCents = Math.max(0, Number(session?.amount_total ?? payment.amount_cents ?? 0));
+    const paid = payment.status === 'paid' || isPaidSession(session) || invoice?.status === 'paid' || Number(invoice?.amount_paid || 0) > 0;
+    const amountCents = Math.max(0, Number(session?.amount_total ?? invoice?.amount_paid ?? invoice?.total ?? payment.amount_cents ?? 0));
     const paymentIntentId =
         payment.stripe_payment_intent_id ||
-        (typeof session?.payment_intent === 'string' ? session.payment_intent : session?.payment_intent?.id || null);
+        (typeof session?.payment_intent === 'string' ? session.payment_intent : session?.payment_intent?.id || null) ||
+        (typeof invoice?.payment_intent === 'string' ? invoice.payment_intent : invoice?.payment_intent?.id || null);
 
     if (paid && amountCents > 0) {
         const refund = await refundStripePayment({
@@ -189,6 +195,9 @@ async function cancelPayment({ admin, booking, payment, source }) {
 
     if (payment.stripe_checkout_session_id && !paid) {
         await expireStripeCheckoutSession(payment.stripe_checkout_session_id);
+    }
+    if (payment.stripe_invoice_id && !paid) {
+        await voidStripeInvoice(payment.stripe_invoice_id);
     }
     const { error: updateError } = await admin
         .from(config.paymentTable)

@@ -41,8 +41,13 @@ function bookingPaymentSummary(booking) {
     const paymentAmount = Math.max(0, Number(booking?.payment?.amount_cents || 0));
     if (tokens) parts.push(`${tokens} token${tokens === 1 ? '' : 's'}`);
     if (paymentAmount) parts.push(`Stripe ${formatNZD(paymentAmount)}`);
-    if (!parts.length && booking?.payment?.status === 'requires_payment') return 'Stripe pending';
+    if (!parts.length && booking?.payment?.status === 'requires_payment') {
+        return booking?.payment?.stripe_invoice_id ? 'Stripe invoice sent' : 'Stripe checkout pending';
+    }
     const summary = parts.length ? parts.join(' + ') : 'No charge';
+    if (booking?.payment?.status === 'requires_payment') {
+        return booking?.payment?.stripe_invoice_id ? `${summary} (invoice sent)` : `${summary} (checkout pending)`;
+    }
     if (booking?.payment?.status === 'refunded') return `${summary} (refunded)`;
     if (booking?.payment?.status === 'refund_pending') return `${summary} (refund pending)`;
     return summary;
@@ -51,7 +56,11 @@ function bookingPaymentSummary(booking) {
 function bookingRefundDescription(booking) {
     const paymentSummary = bookingPaymentSummary(booking);
     if (booking?.payment?.status === 'requires_payment') {
-        return 'The open Stripe checkout will be cancelled. No settled Stripe payment has been recorded.';
+        const tokens = Math.max(0, Number(booking?.tokens_used || 0));
+        const tokenMessage = tokens ? `${tokens} token${tokens === 1 ? '' : 's'} will be returned. ` : '';
+        return booking?.payment?.stripe_invoice_id
+            ? `${tokenMessage}The unpaid Stripe invoice will be voided. No settled Stripe payment has been recorded.`
+            : `${tokenMessage}The open Stripe checkout will be cancelled. No settled Stripe payment has been recorded.`;
     }
     if (paymentSummary === 'No charge') {
         return 'No payment was recorded, so no refund will be issued.';
@@ -137,7 +146,6 @@ export default function AdminBookingsPage() {
     const [ownerEmail, setOwnerEmail] = useState('');
     const [startTime, setStartTime] = useState('09:00');
     const [endTime, setEndTime] = useState('10:00');
-    const [status, setStatus] = useState('approved');
     const [editForm, setEditForm] = useState(null);
     const [cancelBookingTarget, setCancelBookingTarget] = useState(null);
     const [actionBusyId, setActionBusyId] = useState('');
@@ -246,14 +254,19 @@ export default function AdminBookingsPage() {
                     space_slug: createSpaceSlug,
                     booking_date: date,
                     start_time: startTime,
-                    end_time: endTime,
-                    status
+                    end_time: endTime
                 })
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json?.error || 'Failed to create booking.');
             setOwnerEmail('');
-            setNotice('Booking created.');
+            const billing = json?.billing || {};
+            const tokensUsed = Math.max(0, Number(billing.tokens_used || 0));
+            const invoiceAmount = Math.max(0, Number(billing.invoice_amount_cents || 0));
+            const resultParts = [];
+            if (tokensUsed) resultParts.push(`${tokensUsed} token${tokensUsed === 1 ? '' : 's'} used`);
+            if (billing.invoice_sent && invoiceAmount) resultParts.push(`${formatNZD(invoiceAmount)} Stripe invoice sent`);
+            setNotice(resultParts.length ? `Booking created: ${resultParts.join(' and ')}.` : 'Booking created with no charge.');
             await Promise.all([loadBookingsForDay(), loadBookingsForMonth()]);
         } catch (err) {
             setError(err?.message || 'Failed to create booking.');
@@ -384,7 +397,7 @@ export default function AdminBookingsPage() {
             <div className="platform-title-row">
                 <div>
                     <h1>Bookings</h1>
-                    <p className="platform-subtitle">View member and public website bookings, or create a booking on behalf of a member.</p>
+                    <p className="platform-subtitle">View all bookings, or create one for a member or an external customer.</p>
                 </div>
                 <Link className="btn ghost" href="/platform/admin">
                     Back to admin
@@ -510,7 +523,7 @@ export default function AdminBookingsPage() {
                             </select>
                         </label>
                         <label>
-                            Member email
+                            Customer email
                             <input type="email" value={ownerEmail} onChange={e => setOwnerEmail(e.target.value)} disabled={busy} required />
                         </label>
                         <label>
@@ -525,19 +538,16 @@ export default function AdminBookingsPage() {
                             End
                             <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} disabled={busy} />
                         </label>
-                        <label>
-                            Status
-                            <select value={status} onChange={e => setStatus(e.target.value)} disabled={busy}>
-                                <option value="approved">approved</option>
-                                <option value="requested">requested</option>
-                            </select>
-                        </label>
                         <div className="platform-actions">
                             <button className="btn primary" type="submit" disabled={busy || !ownerEmail.trim() || !createSpaceSlug}>
                                 {busy ? 'Working…' : 'Create booking'}
                             </button>
                         </div>
                     </form>
+                    <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
+                        Active members use their organisation’s available room tokens. Any remaining member balance, or the full non-member price,
+                        is emailed as a Stripe invoice.
+                    </p>
                     {createSpaceSlug && spaceBySlug[createSpaceSlug] ? (
                         <p className="platform-subtitle" style={{ marginTop: '0.75rem' }}>
                             Tokens/hr: {spaceBySlug[createSpaceSlug].tokens_per_hour} • Half day:{' '}
@@ -719,7 +729,11 @@ export default function AdminBookingsPage() {
                                             </td>
                                             <td>
                                                 <span className={`badge ${b.source === 'public' ? 'pending' : 'neutral'}`}>
-                                                    {b.source === 'public' ? 'website' : 'member'}
+                                                    {b.source === 'member'
+                                                        ? 'member'
+                                                        : b.payment?.stripe_invoice_id && !b.payment?.stripe_checkout_session_id
+                                                          ? 'external'
+                                                          : 'website'}
                                                 </span>
                                             </td>
                                             <td>{bookingPaymentSummary(b)}</td>
