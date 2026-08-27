@@ -21,8 +21,27 @@ function addMonths(date, delta) {
     return new Date(date.getFullYear(), date.getMonth() + delta, 1);
 }
 
-function isoDate(date) {
-    return date.toISOString().slice(0, 10);
+function calendarDateKey(date) {
+    const pad = value => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function eventDateKey(event) {
+    const date = new Date(event?.starts_at);
+    if (Number.isNaN(date.getTime())) return '';
+
+    try {
+        const parts = new Intl.DateTimeFormat('en-NZ', {
+            timeZone: event?.timezone || 'Pacific/Auckland',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).formatToParts(date);
+        const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+        return `${values.year}-${values.month}-${values.day}`;
+    } catch (_) {
+        return calendarDateKey(date);
+    }
 }
 
 function monthLabel(date) {
@@ -265,8 +284,8 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
         try {
             const params = new URLSearchParams({
                 audience,
-                start: isoDate(range.start),
-                end: isoDate(range.end)
+                start: range.start.toISOString(),
+                end: range.end.toISOString()
             });
             const res = await fetch(`/api/events?${params.toString()}`, {
                 headers: await authHeader(),
@@ -354,7 +373,8 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
     const eventsByDay = useMemo(() => {
         const map = new Map();
         for (const event of filteredEvents) {
-            const key = isoDate(new Date(event.starts_at));
+            const key = eventDateKey(event);
+            if (!key) continue;
             if (!map.has(key)) map.set(key, []);
             map.get(key).push(event);
         }
@@ -553,7 +573,7 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
                         <div className="event-weekday" key={day}>{day}</div>
                     ))}
                     {monthDays.map(day => {
-                        const key = isoDate(day);
+                        const key = calendarDateKey(day);
                         const dayEvents = eventsByDay.get(key) || [];
                         const muted = day.getMonth() !== monthDate.getMonth();
                         return (
