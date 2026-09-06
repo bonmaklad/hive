@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../_lib/adminGuard';
 import { cancelStripeSubscription } from '../../../_lib/stripe';
+import { releaseTenantWorkspaceAllocations } from '../../../_lib/workUnitAllocation';
 
 export const runtime = 'nodejs';
 
@@ -99,6 +100,11 @@ export async function POST(request, { params }) {
             })
             .eq('owner_id', reqRow.owner_id);
         if (cancelError) return NextResponse.json({ error: cancelError.message }, { status: 500 });
+
+        const releaseResult = await releaseTenantWorkspaceAllocations(guard.admin, reqRow.owner_id);
+        if (releaseResult?.error) {
+            return NextResponse.json({ error: releaseResult.error }, { status: 500 });
+        }
 
         const { error: approveError } = await finalizeRequest('approved');
         if (approveError) return NextResponse.json({ error: approveError.message }, { status: 500 });

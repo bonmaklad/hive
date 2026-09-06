@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '../../../../_lib/adminGuard';
 import { cancelStripeSubscription } from '../../../../_lib/stripe';
+import { releaseTenantWorkspaceAllocations } from '../../../../_lib/workUnitAllocation';
 
 export const runtime = 'nodejs';
 
@@ -181,6 +182,13 @@ export async function POST(request, { params }) {
     } else {
         const { error: insertError } = await guard.admin.from('memberships').insert(membershipPayload);
         if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
+
+    if (status !== 'live') {
+        const releaseResult = await releaseTenantWorkspaceAllocations(guard.admin, resolvedOwnerId);
+        if (releaseResult?.error) {
+            return NextResponse.json({ error: releaseResult.error }, { status: 500 });
+        }
     }
 
     return NextResponse.json({ ok: true, owner_id: resolvedOwnerId, monthly_amount_cents: monthlyAmountCents });

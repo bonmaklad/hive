@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient, getUserFromRequest } from '../../_lib/supabaseAuth';
 import { cancelStripeSubscription } from '../../_lib/stripe';
+import { releaseTenantWorkspaceAllocations } from '../../_lib/workUnitAllocation';
 
 export const runtime = 'nodejs';
 
@@ -63,6 +64,14 @@ export async function POST(request) {
         .single();
 
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+    if (cancelMembership) {
+        const releaseResult = await releaseTenantWorkspaceAllocations(admin, user.id);
+        if (releaseResult?.error) {
+            return NextResponse.json({ error: releaseResult.error }, { status: 500 });
+        }
+    }
+
     return NextResponse.json({
         ok: true,
         membership: updated,
