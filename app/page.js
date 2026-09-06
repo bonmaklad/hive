@@ -6,11 +6,11 @@ import Link from 'next/link';
 import ContactForm from './components/ContactForm';
 import HomeCommunitySignup from './components/HomeCommunitySignup';
 import HomeImpactStats from './components/HomeImpactStats';
+import HomeSpacesGallery from './components/HomeSpacesGallery';
+import HomeMembershipGrid from './components/HomeMembershipGrid';
 import EventWeekStrip from './components/EventWeekStrip';
-import ImageCarousel from './components/ImageCarousel';
 import SiteNav from './components/SiteNav';
 import HiveAvailabilitySection from './components/HiveAvailabilitySection';
-import MembershipTierCta from './components/MembershipTierCta';
 import { events as programs } from '../lib/events';
 
 const heroGoals = [
@@ -84,42 +84,6 @@ const programJourney = [
         programs: 'End-of-year Dragons Den and May Whanganui Innovation Awards',
         result: 'Investment readiness, recognition, and growth capital'
     }
-];
-
-const memberships = [
-    {
-        title: 'Private office',
-        price: 125,
-        image: '/office6.jpg',
-        perks: ['24/7 secure access', 'Lockable Privacy', 'Priority Space Booking', 'Additional Members'],
-        availableCta: 'Secure Office Space',
-        waitlistCta: 'Join the waitlist',
-        signupPlan: 'office'
-    },
-    {
-        title: 'Assigned desk',
-        price: 50,
-        image: '/desks.jpg',
-        perks: ['Dedicated desk', 'Allocated Secure Storeroom', 'Event + workshop invites', 'Guest pass access'],
-        availableCta: 'Reserve a private desk',
-        waitlistCta: 'Join the waitlist',
-        signupPlan: 'desk'
-    },
-    {
-        title: 'Hive membership',
-        price: 25,
-        image: '/lounge1.jpg',
-        perks: ['Drop-in lounge access', 'HIVE Event Access', 'Hot desk access', 'Coffee!'],
-        cta: 'Become a member',
-        signupPlan: 'member'
-    }
-];
-
-const gallery = [
-    { label: 'Stone & sand', src: 'https://images.unsplash.com/photo-1503602642458-232111445657?auto=format&fit=crop&w=600&q=80' },
-    { label: 'Plant life', src: 'https://images.unsplash.com/photo-1470246973918-29a93221c455?auto=format&fit=crop&w=600&q=80' },
-    { label: 'River energy', src: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=80' },
-    { label: 'Steel & timber', src: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=600&q=80' }
 ];
 
 export default function HomePage() {
@@ -198,24 +162,7 @@ export default function HomePage() {
                         </ul>
                     </div>
                     <div className="media-right">
-                        <ImageCarousel
-                            images={[
-                                '/lounge1.jpg',
-                                '/office9.jpg',
-                                '/lounge3.jpg',
-                                '/nikau5.jpg',
-                                '/meeting1.jpg',
-                                '/boardroom.jpg',
-                                '/manukau1.jpg',
-                                '/design1.jpg',
-                                '/desks.jpg',
-                                '/watering2.jpg',
-                                '/watering3.jpg',
-                                '/entrance1.jpg',
-                                '/entrance2.jpg'
-                            ]}
-                            alt="HIVE spaces and work areas"
-                        />
+                        <HomeSpacesGallery />
                     </div>
                 </section>
                 <section id="why" className="section manifesto">
@@ -454,67 +401,7 @@ export default function HomePage() {
 
                 <HiveAvailabilitySection />
 
-                <section id="memberships" className="section memberships">
-                    <div className="section-tag">Membership</div>
-                    <h2>Pick the landing pad that matches your build cycle.</h2>
-                    <div className="membership-grid">
-                        {memberships.map(tier => (
-                            <article key={tier.title}>
-                                <h3>{tier.title}</h3>
-                                <div className="membership-photo" aria-hidden="true">
-                                    <Image
-                                        src={tier.image}
-                                        alt=""
-                                        fill
-                                        sizes="(max-width: 960px) 100vw, 33vw"
-                                        style={{ objectFit: 'cover' }}
-                                    />
-                                </div>
-                                <p className="price">
-                                    ${tier.price}
-                                    <span>/week</span>
-                                </p>
-                                <ul>
-                                    {tier.perks.map(perk => (
-                                        <li key={perk}>{perk}</li>
-                                    ))}
-                                </ul>
-                                {tier.signupPlan ? (
-                                    <MembershipTierCta
-                                        plan={tier.signupPlan}
-                                        availableLabel={tier.availableCta || tier.cta}
-                                        waitlistLabel={tier.waitlistCta || 'Join the waitlist'}
-                                        memberLabel={tier.cta || 'Become a member'}
-                                    />
-                                ) : (
-                                    <a className="btn secondary" href="#contact">
-                                        {tier.cta}
-                                    </a>
-                                )}
-                            </article>
-                        ))}
-                        <article className="day-rate-card">
-                            <div className="day-rate-copy">
-                                <h3>Day rate</h3>
-                                <p className="price">
-                                    $25
-                                    <span>/day</span>
-                                </p>
-                                <p>
-                                    Need a single high-focus day at HIVE? Grab a day pass for lounge and hot desk access.
-                                </p>
-                            </div>
-                            <a
-                                className="btn primary"
-                                href="https://buy.stripe.com/fZu5kC7et0OPfS1cjCeME04"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                Buy a Day
-                            </a>
-                        </article>
-                    </div>
-                </section>
+                <HomeMembershipGrid />
 
                 {/* <section className="section gallery">
                     <div className="section-tag">Texture & tone</div>

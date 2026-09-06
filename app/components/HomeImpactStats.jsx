@@ -54,8 +54,10 @@ export default function HomeImpactStats() {
         }
 
         loadStats();
+        const interval = window.setInterval(loadStats, 60_000);
         return () => {
             cancelled = true;
+            window.clearInterval(interval);
         };
     }, []);
 

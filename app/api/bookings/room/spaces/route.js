@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '../../../_lib/supabaseAuth';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
     const admin = createSupabaseAdminClient();
@@ -12,7 +13,7 @@ export async function GET() {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    return NextResponse.json({
+    const res = NextResponse.json({
         ok: true,
         spaces: (data || []).map(s => ({
             slug: s.slug,
@@ -28,7 +29,10 @@ export async function GET() {
             pricing_half_day_cents: s.pricing_half_day_cents,
             pricing_full_day_cents: s.pricing_full_day_cents,
             pricing_per_event_cents: s.pricing_per_event_cents,
-            tokens_per_hour: s.tokens_per_hour ?? null
+                tokens_per_hour: s.tokens_per_hour ?? null
         }))
     });
+
+    res.headers.set('Cache-Control', 'no-store, max-age=0');
+    return res;
 }

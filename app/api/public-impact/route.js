@@ -39,7 +39,7 @@ export async function GET() {
         const externalRevenueCents = sumImpactRows(impactRows, 'external_revenue');
         const memberRevenueCents = sumImpactRows(impactRows, 'member_support');
 
-        return NextResponse.json({
+        const res = NextResponse.json({
             ok: true,
             stats: {
                 people_count: authUserCount,
@@ -48,6 +48,8 @@ export async function GET() {
             },
             warnings: impactResult.error ? ['impact_totals_unavailable'] : []
         });
+        res.headers.set('Cache-Control', 'no-store, max-age=0');
+        return res;
     } catch (error) {
         console.error('Public impact stats failed', error);
         return NextResponse.json({ ok: false, error: 'Could not load public impact statistics.' }, { status: 500 });

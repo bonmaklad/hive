@@ -8,18 +8,11 @@ const PLAN_UNIT_TYPES = {
     office: new Set(['private_office', 'small_office', 'premium_office'])
 };
 
-let availabilityPromise = null;
-
 async function loadAvailability() {
-    if (!availabilityPromise) {
-        availabilityPromise = fetch('/api/availability', { cache: 'no-store' })
-            .then(async res => {
-                const json = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(json?.error || 'Failed to load availability.');
-                return Array.isArray(json?.units) ? json.units : [];
-            });
-    }
-    return availabilityPromise;
+    const res = await fetch('/api/availability', { cache: 'no-store' });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.error || 'Failed to load availability.');
+    return Array.isArray(json?.units) ? json.units : [];
 }
 
 function hasPlanAvailability(units, plan) {
@@ -52,8 +45,10 @@ export default function MembershipTierCta({
         };
 
         run();
+        const interval = window.setInterval(run, 60_000);
         return () => {
             cancelled = true;
+            window.clearInterval(interval);
         };
     }, [isDynamicPlan, plan]);
 
@@ -78,4 +73,3 @@ export default function MembershipTierCta({
         />
     );
 }
-
