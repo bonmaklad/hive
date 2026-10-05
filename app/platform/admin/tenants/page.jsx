@@ -487,7 +487,7 @@ function TenantWizardModal({ open, monthStart, authHeader, onClose, onCreated, s
                             Calculated amount (plan + donation + fridge): <span className="platform-mono">{formatNZD(baseMonthlyCents)}</span>
                         </p>
                         <label className="platform-subtitle" style={{ marginTop: '0.5rem', display: 'block' }}>
-                            Monthly price override (NZD, optional)
+                            Monthly price override (NZD, including GST)
                         </label>
                         <input
                             value={membershipMonthlyOverrideNZD}
@@ -852,7 +852,7 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                         Current price: <span className="platform-mono">{formatNZDOptional(tenant?.membership?.monthly_amount_cents)}</span> / month
                     </p>
                     <label className="platform-subtitle" style={{ marginTop: '0.5rem', display: 'block' }}>
-                        Set price override (NZD)
+                        Monthly price override (NZD, including GST)
                     </label>
                     <input
                         value={monthlyOverrideNZD}
@@ -911,7 +911,7 @@ function TenantEditModal({ open, tenant, monthStart, authHeader, onClose, onSave
                         Calculated amount (plan + donation + fridge): <span className="platform-mono">{formatNZD(baseMonthlyCents)}</span>
                     </p>
                     <label className="platform-subtitle" style={{ marginTop: '0.5rem', display: 'block' }}>
-                        Monthly price override (NZD, optional)
+                        Monthly price override (NZD, including GST)
                     </label>
                     <input
                         value={monthlyOverrideNZD}
