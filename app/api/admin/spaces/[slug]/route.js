@@ -53,6 +53,7 @@ function serializeSpace(row) {
     return {
         slug: row?.slug || null,
         title: row?.title || null,
+        is_visible: row?.is_visible !== false,
         tokens_per_hour: row?.tokens_per_hour ?? null,
         pricing_half_day_cents: row?.pricing_half_day_cents ?? null,
         pricing_full_day_cents: row?.pricing_full_day_cents ?? null,
@@ -79,6 +80,12 @@ export async function PATCH(request, { params }) {
     const payload = await request.json().catch(() => ({}));
 
     const updates = {};
+    if (payload?.is_visible !== undefined) {
+        if (typeof payload.is_visible !== 'boolean') {
+            return NextResponse.json({ error: 'is_visible must be a boolean.' }, { status: 400 });
+        }
+        updates.is_visible = payload.is_visible;
+    }
     if (payload?.title !== undefined) {
         const title = safeText(payload?.title, 120);
         if (!title) return NextResponse.json({ error: 'title is required.' }, { status: 400 });
@@ -136,12 +143,14 @@ export async function PATCH(request, { params }) {
         .from('spaces')
         .update(updates)
         .eq('slug', slug)
+        .is('deleted_at', null)
         .select(
-            'slug, title, tokens_per_hour, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, image, copy, capacity, layouts, highlights, best_for, created_at, updated_at, space_images(id, url, sort_order, alt, bucket, path)'
+            'slug, title, is_visible, tokens_per_hour, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, image, copy, capacity, layouts, highlights, best_for, created_at, updated_at, space_images(id, url, sort_order, alt, bucket, path)'
         )
-        .single();
+        .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: 'Space not found.' }, { status: 404 });
     return NextResponse.json({ ok: true, space: serializeSpace(data) });
 }
 
@@ -152,8 +161,12 @@ export async function DELETE(request, { params }) {
     const slug = safeText(params?.slug, 80);
     if (!slug) return NextResponse.json({ error: 'Missing space slug.' }, { status: 400 });
 
-    const { error } = await guard.admin.from('spaces').delete().eq('slug', slug);
+    // Keep the referenced row so bookings, payments, and invoices retain their history.
+    const { error } = await guard.admin
+        .from('spaces')
+        .update({ deleted_at: new Date().toISOString(), is_visible: false })
+        .eq('slug', slug)
+        .is('deleted_at', null);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
 }
-

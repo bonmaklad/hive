@@ -17,6 +17,8 @@ export async function GET(request, { params }) {
         .from('spaces')
         .select('slug, title, copy, capacity, layouts, highlights, best_for, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, tokens_per_hour, image')
         .eq('slug', slug)
+        .eq('is_visible', true)
+        .is('deleted_at', null)
         .maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
@@ -31,4 +33,3 @@ export async function GET(request, { params }) {
 
     return NextResponse.json({ ok: true, space: data, images: images || [] });
 }
-

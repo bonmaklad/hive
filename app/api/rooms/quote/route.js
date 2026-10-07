@@ -71,6 +71,7 @@ export async function POST(request) {
         .from('spaces')
         .select('slug, title, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, tokens_per_hour')
         .eq('slug', spaceSlug)
+        .is('deleted_at', null)
         .maybeSingle();
 
     if (spaceError) return NextResponse.json({ error: spaceError.message }, { status: 500 });

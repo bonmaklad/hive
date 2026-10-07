@@ -7,6 +7,15 @@ Apply `supabase/migrations/20251216150000_platform.sql` in the Supabase SQL edit
 
 Row Level Security is enabled so authenticated users can only read/write their own sites and deployments.
 
+## Space visibility and deletion
+
+Apply `supabase/migrations/20261008090000_space_visibility_and_deletion.sql` before deploying the updated app.
+
+- `spaces.is_visible` controls public website listings, room pages, galleries, the sitemap, and public booking requests. Hidden spaces remain available to members and admins.
+- Deleting a space sets `deleted_at` and hides it. It disappears from space management and new booking choices; the underlying row, images, existing bookings, payments, and invoices remain intact.
+- Existing space slugs remain locked and reserved, including after deletion, so historical bookings keep their original room reference.
+- Database triggers reject new bookings for deleted spaces and new public bookings for hidden spaces. Existing bookings can still be managed and paid.
+
 ## Tenant users RLS fix
 
 If your `tenant_users` policies are throwing `42P17: infinite recursion detected in policy for relation "tenant_users"`,

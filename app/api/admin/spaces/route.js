@@ -62,6 +62,7 @@ function serializeSpace(row) {
     return {
         slug: row?.slug || null,
         title: row?.title || null,
+        is_visible: row?.is_visible !== false,
         tokens_per_hour: row?.tokens_per_hour ?? null,
         pricing_half_day_cents: row?.pricing_half_day_cents ?? null,
         pricing_full_day_cents: row?.pricing_full_day_cents ?? null,
@@ -85,8 +86,9 @@ export async function GET(request) {
     const { data, error } = await guard.admin
         .from('spaces')
         .select(
-            'slug, title, tokens_per_hour, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, image, copy, capacity, layouts, highlights, best_for, created_at, updated_at, space_images(id, url, sort_order, alt, bucket, path)'
+            'slug, title, is_visible, tokens_per_hour, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, image, copy, capacity, layouts, highlights, best_for, created_at, updated_at, space_images(id, url, sort_order, alt, bucket, path)'
         )
+        .is('deleted_at', null)
         .order('title', { ascending: true });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -103,6 +105,9 @@ export async function POST(request) {
 
     const title = safeText(payload?.title, 120);
     if (!title) return NextResponse.json({ error: 'title is required.' }, { status: 400 });
+    if (payload?.is_visible !== undefined && typeof payload.is_visible !== 'boolean') {
+        return NextResponse.json({ error: 'is_visible must be a boolean.' }, { status: 400 });
+    }
 
     const tokensPerHour = toIntOrNull(payload?.tokens_per_hour);
     if (tokensPerHour != null && tokensPerHour < 0) return NextResponse.json({ error: 'tokens_per_hour must be >= 0.' }, { status: 400 });
@@ -117,6 +122,7 @@ export async function POST(request) {
     const row = {
         slug: slugCheck.slug,
         title,
+        is_visible: payload?.is_visible ?? true,
         tokens_per_hour: tokensPerHour ?? 1,
         pricing_half_day_cents: half,
         pricing_full_day_cents: full,
@@ -134,7 +140,7 @@ export async function POST(request) {
             .from('spaces')
             .insert(row)
             .select(
-                'slug, title, tokens_per_hour, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, image, copy, capacity, layouts, highlights, best_for, created_at, updated_at, space_images(id, url, sort_order, alt, bucket, path)'
+                'slug, title, is_visible, tokens_per_hour, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, image, copy, capacity, layouts, highlights, best_for, created_at, updated_at, space_images(id, url, sort_order, alt, bucket, path)'
             )
             .single();
 

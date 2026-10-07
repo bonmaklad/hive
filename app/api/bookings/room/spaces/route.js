@@ -9,6 +9,8 @@ export async function GET() {
     const { data, error } = await admin
         .from('spaces')
         .select('slug, title, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, tokens_per_hour, image, space_images(url, sort_order, alt)')
+        .eq('is_visible', true)
+        .is('deleted_at', null)
         .order('title', { ascending: true });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -80,6 +80,7 @@ export default function AdminSpacesPage() {
     const [draft, setDraft] = useState({
         slug: '',
         title: '',
+        is_visible: true,
         tokens_per_hour: '1',
         pricing_half_day: '',
         pricing_full_day: '',
@@ -139,6 +140,7 @@ export default function AdminSpacesPage() {
         setDraft({
             slug: selectedSpace.slug || '',
             title: selectedSpace.title || '',
+            is_visible: selectedSpace.is_visible !== false,
             tokens_per_hour: String(selectedSpace.tokens_per_hour ?? 1),
             pricing_half_day: toDollars(selectedSpace.pricing_half_day_cents),
             pricing_full_day: toDollars(selectedSpace.pricing_full_day_cents),
@@ -161,6 +163,7 @@ export default function AdminSpacesPage() {
         setDraft({
             slug: '',
             title: '',
+            is_visible: true,
             tokens_per_hour: '1',
             pricing_half_day: '',
             pricing_full_day: '',
@@ -188,6 +191,7 @@ export default function AdminSpacesPage() {
             const payload = {
                 slug: draft.slug.trim(),
                 title: draft.title.trim(),
+                is_visible: draft.is_visible,
                 tokens_per_hour: Number(draft.tokens_per_hour || 0),
                 pricing_half_day_cents: toCentsFromDollars(draft.pricing_half_day),
                 pricing_full_day_cents: toCentsFromDollars(draft.pricing_full_day),
@@ -223,7 +227,7 @@ export default function AdminSpacesPage() {
     const deleteSpace = async () => {
         const slug = draft.slug.trim();
         if (!slug) return;
-        const ok = window.confirm(`Delete space "${slug}"? This cannot be undone.`);
+        const ok = window.confirm(`Delete space "${slug}"? It will be removed from the website and new bookings. Existing bookings will be kept. This cannot be undone.`);
         if (!ok) return;
         setBusy(true);
         setError('');
@@ -236,9 +240,33 @@ export default function AdminSpacesPage() {
             const json = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(json?.error || 'Failed to delete space.');
             await loadSpaces();
+            setDraft(d => ({ ...d, slug: '', title: '' }));
             setInfo('Deleted.');
         } catch (e) {
             setError(e?.message || 'Failed to delete space.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const toggleVisibility = async () => {
+        if (!selectedSpace) return;
+        setBusy(true);
+        setError('');
+        setInfo('');
+        try {
+            const visible = !selectedSpace.is_visible;
+            const res = await fetch(`/api/admin/spaces/${encodeURIComponent(selectedSpace.slug)}`, {
+                method: 'PATCH',
+                headers: { ...(await authHeader()), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_visible: visible })
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error || 'Failed to update website visibility.');
+            setSpaces(current => current.map(space => space.slug === selectedSpace.slug ? json.space : space));
+            setInfo(visible ? 'Shown on the website.' : 'Hidden from the website.');
+        } catch (e) {
+            setError(e?.message || 'Failed to update website visibility.');
         } finally {
             setBusy(false);
         }
@@ -414,7 +442,7 @@ export default function AdminSpacesPage() {
             <div className="platform-title-row">
                 <div>
                     <h1>Spaces</h1>
-                    <p className="platform-subtitle">Edit room names, pricing, tokens/hour, and images (Supabase Storage bucket: HIVE).</p>
+                    <p className="platform-subtitle">Manage room details, website visibility, and images.</p>
                 </div>
                 <div className="platform-title-actions">
                     <button className="btn ghost" type="button" onClick={() => loadSpaces({ keepSelection: true })} disabled={busy || loading}>
@@ -450,10 +478,20 @@ export default function AdminSpacesPage() {
                         </option>
                         {spaces.map(s => (
                             <option key={s.slug} value={s.slug}>
-                                {s.title} ({s.slug})
+                                {s.title} ({s.slug}){s.is_visible ? '' : ' — Hidden from website'}
                             </option>
                         ))}
                     </select>
+
+                    {selectedSpace ? (
+                        <div style={{ marginTop: '1rem' }}>
+                            <p className="platform-subtitle">{selectedSpace.is_visible ? 'Shown on website' : 'Hidden from website'}</p>
+                            <button className="btn secondary" type="button" onClick={toggleVisibility} disabled={busy || loading}>
+                                {selectedSpace.is_visible ? 'Hide from website' : 'Show on website'}
+                            </button>
+                            <p className="platform-subtitle">Hidden spaces remain available for member bookings.</p>
+                        </div>
+                    ) : null}
 
                     {selectedSpace?.image ? (
                         <div style={{ marginTop: '1rem' }}>
@@ -469,6 +507,7 @@ export default function AdminSpacesPage() {
                 <section className="platform-card span-8">
                     <h2 style={{ marginTop: 0 }}>{isNew ? 'New space' : 'Edit space'}</h2>
 
+                    {!isNew && !selectedSpace ? <p className="platform-subtitle">Select a space or create a new one.</p> : (
                     <form className="contact-form" onSubmit={saveSpace}>
                         <label>
                             Slug {isNew ? '' : '(locked)'}
@@ -482,6 +521,15 @@ export default function AdminSpacesPage() {
                         <label>
                             Title
                             <input value={draft.title} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} disabled={busy} />
+                        </label>
+                        <label>
+                            <input
+                                type="checkbox"
+                                checked={draft.is_visible}
+                                onChange={e => setDraft(d => ({ ...d, is_visible: e.target.checked }))}
+                                disabled={busy}
+                            />
+                            Show on website
                         </label>
                         <label>
                             Tokens per hour
@@ -563,6 +611,7 @@ export default function AdminSpacesPage() {
                             ) : null}
                         </div>
                     </form>
+                    )}
 
                     {!isNew && selectedSpace ? (
                         <div style={{ marginTop: '1.5rem' }}>

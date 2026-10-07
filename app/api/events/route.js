@@ -140,6 +140,15 @@ async function maybeCreateRoomBooking({ admin, ctx, form }) {
     const hours = computeHours(startTime, endTime);
     if (!hours) throw new Error('Room booking time is invalid.');
 
+    const { data: space, error: spaceError } = await admin
+        .from('spaces')
+        .select('slug')
+        .eq('slug', spaceSlug)
+        .is('deleted_at', null)
+        .maybeSingle();
+    if (spaceError) throw new Error(spaceError.message);
+    if (!space) throw new Error('Room not found.');
+
     const [{ data: memberBookings, error: memberError }, { data: publicBookings, error: publicError }] = await Promise.all([
         admin
             .from('room_bookings')

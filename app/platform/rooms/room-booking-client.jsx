@@ -227,6 +227,7 @@ export default function RoomBookingClient() {
             const { data, error } = await supabase
                 .from('spaces')
                 .select('slug, title, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents, tokens_per_hour, image, space_images(url, sort_order)')
+                .is('deleted_at', null)
                 .order('title', { ascending: true });
 
             if (cancelled) return;

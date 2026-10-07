@@ -260,6 +260,7 @@ export async function POST(request) {
         .from('spaces')
         .select('slug, title, tokens_per_hour, pricing_half_day_cents, pricing_full_day_cents, pricing_per_event_cents')
         .eq('slug', spaceSlug)
+        .is('deleted_at', null)
         .maybeSingle();
     if (spaceError) return NextResponse.json({ error: spaceError.message }, { status: 500 });
     if (!space) return NextResponse.json({ error: 'Room not found.' }, { status: 404 });

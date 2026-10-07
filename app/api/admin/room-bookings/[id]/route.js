@@ -248,7 +248,9 @@ export async function PATCH(request, { params }) {
             return NextResponse.json({ error: 'End time must be after start time.' }, { status: 400 });
         }
 
-        const { data: space, error: spaceError } = await guard.admin.from('spaces').select('slug').eq('slug', spaceSlug).maybeSingle();
+        let spaceQuery = guard.admin.from('spaces').select('slug').eq('slug', spaceSlug);
+        if (spaceSlug !== booking.space_slug) spaceQuery = spaceQuery.is('deleted_at', null);
+        const { data: space, error: spaceError } = await spaceQuery.maybeSingle();
         if (spaceError) throw spaceError;
         if (!space) return NextResponse.json({ error: 'Room not found.' }, { status: 404 });
 
