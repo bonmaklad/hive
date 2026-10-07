@@ -508,109 +508,109 @@ export default function AdminSpacesPage() {
                     <h2 style={{ marginTop: 0 }}>{isNew ? 'New space' : 'Edit space'}</h2>
 
                     {!isNew && !selectedSpace ? <p className="platform-subtitle">Select a space or create a new one.</p> : (
-                    <form className="contact-form" onSubmit={saveSpace}>
-                        <label>
-                            Slug {isNew ? '' : '(locked)'}
-                            <input
-                                value={draft.slug}
-                                onChange={e => setDraft(d => ({ ...d, slug: e.target.value }))}
-                                disabled={busy || !isNew}
-                                placeholder="e.g. nikau-room"
-                            />
-                        </label>
-                        <label>
-                            Title
-                            <input value={draft.title} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} disabled={busy} />
-                        </label>
-                        <label>
-                            <input
-                                type="checkbox"
-                                checked={draft.is_visible}
-                                onChange={e => setDraft(d => ({ ...d, is_visible: e.target.checked }))}
-                                disabled={busy}
-                            />
-                            Show on website
-                        </label>
-                        <label>
-                            Tokens per hour
-                            <input
-                                type="number"
-                                min="0"
-                                step="1"
-                                value={draft.tokens_per_hour}
-                                onChange={e => setDraft(d => ({ ...d, tokens_per_hour: e.target.value }))}
-                                disabled={busy}
-                            />
-                        </label>
-
-                        <div className="platform-grid" style={{ gap: '0.75rem' }}>
-                            <label className="span-4">
-                                Half day ($)
+                        <form className="contact-form" onSubmit={saveSpace}>
+                            <label>
+                                Slug {isNew ? '' : '(locked)'}
                                 <input
-                                    value={draft.pricing_half_day}
-                                    onChange={e => setDraft(d => ({ ...d, pricing_half_day: e.target.value }))}
-                                    disabled={busy}
-                                    placeholder="e.g. 120"
+                                    value={draft.slug}
+                                    onChange={e => setDraft(d => ({ ...d, slug: e.target.value }))}
+                                    disabled={busy || !isNew}
+                                    placeholder="e.g. nikau-room"
                                 />
                             </label>
-                            <label className="span-4">
-                                Full day ($)
+                            <label>
+                                Title
+                                <input value={draft.title} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} disabled={busy} />
+                            </label>
+                            <label className="checkbox-row">
+                                Show on website
                                 <input
-                                    value={draft.pricing_full_day}
-                                    onChange={e => setDraft(d => ({ ...d, pricing_full_day: e.target.value }))}
+                                    type="checkbox"
+                                    checked={draft.is_visible}
+                                    onChange={e => setDraft(d => ({ ...d, is_visible: e.target.checked }))}
                                     disabled={busy}
-                                    placeholder="e.g. 200"
                                 />
                             </label>
-                            <label className="span-4">
-                                Per event ($)
+                            <label>
+                                Tokens per hour
                                 <input
-                                    value={draft.pricing_per_event}
-                                    onChange={e => setDraft(d => ({ ...d, pricing_per_event: e.target.value }))}
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={draft.tokens_per_hour}
+                                    onChange={e => setDraft(d => ({ ...d, tokens_per_hour: e.target.value }))}
                                     disabled={busy}
-                                    placeholder="e.g. 500"
                                 />
                             </label>
-                        </div>
 
-                        <label>
-                            Cover image URL (optional; defaults to first image)
-                            <input value={draft.image} onChange={e => setDraft(d => ({ ...d, image: e.target.value }))} disabled={busy} />
-                        </label>
+                            <div className="platform-grid" style={{ gap: '0.75rem' }}>
+                                <label className="span-4">
+                                    Half day ($)
+                                    <input
+                                        value={draft.pricing_half_day}
+                                        onChange={e => setDraft(d => ({ ...d, pricing_half_day: e.target.value }))}
+                                        disabled={busy}
+                                        placeholder="e.g. 120"
+                                    />
+                                </label>
+                                <label className="span-4">
+                                    Full day ($)
+                                    <input
+                                        value={draft.pricing_full_day}
+                                        onChange={e => setDraft(d => ({ ...d, pricing_full_day: e.target.value }))}
+                                        disabled={busy}
+                                        placeholder="e.g. 200"
+                                    />
+                                </label>
+                                <label className="span-4">
+                                    Per event ($)
+                                    <input
+                                        value={draft.pricing_per_event}
+                                        onChange={e => setDraft(d => ({ ...d, pricing_per_event: e.target.value }))}
+                                        disabled={busy}
+                                        placeholder="e.g. 500"
+                                    />
+                                </label>
+                            </div>
 
-                        <label>
-                            Copy (website)
-                            <textarea value={draft.copy} onChange={e => setDraft(d => ({ ...d, copy: e.target.value }))} disabled={busy} rows={3} />
-                        </label>
-                        <label>
-                            Capacity (website)
-                            <input value={draft.capacity} onChange={e => setDraft(d => ({ ...d, capacity: e.target.value }))} disabled={busy} />
-                        </label>
+                            <label>
+                                Cover image URL (optional; defaults to first image)
+                                <input value={draft.image} onChange={e => setDraft(d => ({ ...d, image: e.target.value }))} disabled={busy} />
+                            </label>
 
-                        <label>
-                            Highlights (one per line)
-                            <textarea value={draft.highlights} onChange={e => setDraft(d => ({ ...d, highlights: e.target.value }))} disabled={busy} rows={4} />
-                        </label>
-                        <label>
-                            Best for (one per line)
-                            <textarea value={draft.best_for} onChange={e => setDraft(d => ({ ...d, best_for: e.target.value }))} disabled={busy} rows={4} />
-                        </label>
-                        <label>
-                            Layouts (one per line: Label | Capacity)
-                            <textarea value={draft.layouts} onChange={e => setDraft(d => ({ ...d, layouts: e.target.value }))} disabled={busy} rows={4} />
-                        </label>
+                            <label>
+                                Copy (website)
+                                <textarea value={draft.copy} onChange={e => setDraft(d => ({ ...d, copy: e.target.value }))} disabled={busy} rows={3} />
+                            </label>
+                            <label>
+                                Capacity (website)
+                                <input value={draft.capacity} onChange={e => setDraft(d => ({ ...d, capacity: e.target.value }))} disabled={busy} />
+                            </label>
 
-                        <div className="platform-actions">
-                            <button className="btn primary" type="submit" disabled={busy || !draft.slug.trim() || !draft.title.trim()}>
-                                {busy ? 'Working…' : 'Save'}
-                            </button>
-                            {!isNew ? (
-                                <button className="btn danger" type="button" onClick={deleteSpace} disabled={busy || !draft.slug.trim()}>
-                                    Delete space
+                            <label>
+                                Highlights (one per line)
+                                <textarea value={draft.highlights} onChange={e => setDraft(d => ({ ...d, highlights: e.target.value }))} disabled={busy} rows={4} />
+                            </label>
+                            <label>
+                                Best for (one per line)
+                                <textarea value={draft.best_for} onChange={e => setDraft(d => ({ ...d, best_for: e.target.value }))} disabled={busy} rows={4} />
+                            </label>
+                            <label>
+                                Layouts (one per line: Label | Capacity)
+                                <textarea value={draft.layouts} onChange={e => setDraft(d => ({ ...d, layouts: e.target.value }))} disabled={busy} rows={4} />
+                            </label>
+
+                            <div className="platform-actions">
+                                <button className="btn primary" type="submit" disabled={busy || !draft.slug.trim() || !draft.title.trim()}>
+                                    {busy ? 'Working…' : 'Save'}
                                 </button>
-                            ) : null}
-                        </div>
-                    </form>
+                                {!isNew ? (
+                                    <button className="btn danger" type="button" onClick={deleteSpace} disabled={busy || !draft.slug.trim()}>
+                                        Delete space
+                                    </button>
+                                ) : null}
+                            </div>
+                        </form>
                     )}
 
                     {!isNew && selectedSpace ? (

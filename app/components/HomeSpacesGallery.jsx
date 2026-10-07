@@ -1,24 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import ImageCarousel from './ImageCarousel';
-
-const FALLBACK_IMAGES = [
-    '/hero/hive-hero-800.jpg',
-    '/lounge1.jpg',
-    '/office9.jpg',
-    '/lounge3.jpg',
-    '/nikau5.jpg',
-    '/meeting1.jpg',
-    '/boardroom.jpg',
-    '/manukau1.jpg',
-    '/design1.jpg',
-    '/desks.jpg',
-    '/watering2.jpg',
-    '/watering3.jpg',
-    '/entrance1.jpg',
-    '/entrance2.jpg'
-];
 
 function normalizeImageUrl(value) {
     const url = typeof value === 'string' ? value.trim() : '';
@@ -37,7 +20,7 @@ function uniqueValues(values) {
 }
 
 export default function HomeSpacesGallery() {
-    const [images, setImages] = useState(FALLBACK_IMAGES);
+    const [images, setImages] = useState([]);
 
     useEffect(() => {
         let cancelled = false;
@@ -58,7 +41,7 @@ export default function HomeSpacesGallery() {
                         .filter(Boolean)
                 );
 
-                if (!cancelled && next.length > 0) {
+                if (!cancelled) {
                     setImages(next);
                 }
             } catch {
@@ -75,11 +58,11 @@ export default function HomeSpacesGallery() {
         };
     }, []);
 
-    const resolvedImages = useMemo(() => (images.length ? images : FALLBACK_IMAGES), [images]);
+    if (!images.length) return null;
 
     return (
         <ImageCarousel
-            images={resolvedImages}
+            images={images}
             alt="HIVE spaces and work areas"
             sizes="(max-width: 900px) 92vw, 50vw"
             quality={60}
