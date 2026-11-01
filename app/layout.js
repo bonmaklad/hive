@@ -2,6 +2,7 @@
 import Script from 'next/script';
 import localFont from 'next/font/local';
 import AuthSessionSync from './AuthSessionSync';
+import WebsiteAgent from './components/WebsiteAgent';
 
 const spaceGrotesk = localFont({
     src: './fonts/SpaceGrotesk-Variable.ttf',
@@ -62,11 +63,7 @@ gtag('config', 'G-Y3TBH9LDL0');`}
                 </Script>
                 <AuthSessionSync />
                 {children}
-                <script
-                    src="https://agent.hivehq.nz/embed.js"
-                    data-agent="5121833d5fc5429d81d740af99432d0d"
-                    defer
-                />
+                <WebsiteAgent />
             </body>
         </html>
     );
