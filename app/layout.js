@@ -62,6 +62,11 @@ gtag('config', 'G-Y3TBH9LDL0');`}
                 </Script>
                 <AuthSessionSync />
                 {children}
+                <script
+                    src="https://agent.hivehq.nz/embed.js"
+                    data-agent="5121833d5fc5429d81d740af99432d0d"
+                    defer
+                />
             </body>
         </html>
     );
