@@ -25,17 +25,24 @@ function getEnv() {
     return { url, anonKey, serviceRoleKey };
 }
 
+function fetchWithoutCache(input, init) {
+    // Supabase requests use Next's server fetch and must bypass its persistent data cache.
+    return fetch(input, { ...init, cache: 'no-store' });
+}
+
 export function createSupabaseAnonClient() {
     const { url, anonKey } = getEnv();
     return createClient(url, anonKey, {
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+        global: { fetch: fetchWithoutCache }
     });
 }
 
 export function createSupabaseAdminClient() {
     const { url, serviceRoleKey } = getEnv();
     return createClient(url, serviceRoleKey, {
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+        global: { fetch: fetchWithoutCache }
     });
 }
 

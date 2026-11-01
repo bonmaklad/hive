@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import SiteNav from '../components/SiteNav';
 import DirectoryClient from './DirectoryClient';
-import { getTenantDirectory, getTenantDirectoryStats } from '@/lib/tenants';
+import { getTenantDirectory } from '@/lib/tenants';
 
 export const metadata = {
     title: 'HIVE Directory | HIVE Whanganui',
@@ -20,8 +20,7 @@ export default async function DirectoryPage() {
         error = err?.message || 'Failed to load the HIVE directory.';
     }
 
-    const stats = await getTenantDirectoryStats().catch(() => ({ totalTenants: tenants.length }));
-    const totalTenants = Number.isFinite(stats?.totalTenants) ? stats.totalTenants : tenants.length;
+    const totalTenants = tenants.length;
     const contactCount = tenants.filter(tenant => tenant?.email || tenant?.phone).length;
     const visibleTenants = tenants;
 

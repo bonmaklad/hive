@@ -96,12 +96,23 @@ export async function GET() {
         }
 
         const units = [];
+        const mapUnits = [];
         for (const u of unitsRaw || []) {
             const isActive = u?.active ?? u?.is_active ?? true;
             if (isActive === false) continue;
             const capacity = toPositiveInt(u?.capacity, 1);
             const occupiedCount = occupantsByUnitId[u.id] || 0;
             const slotsRemaining = Math.max(0, capacity - occupiedCount);
+            // The map needs occupied rooms too; keep the availability list vacant-only.
+            // Publish occupancy counts without tenant or billing details.
+            mapUnits.push({
+                id: u?.id,
+                building: u?.building ?? null,
+                unit_number: u?.unit_number ?? null,
+                capacity,
+                occupied_count: occupiedCount,
+                slots_remaining: slotsRemaining
+            });
             const isVacant = slotsRemaining > 0;
             if (!isVacant) continue;
 
@@ -131,7 +142,7 @@ export async function GET() {
             units.push(unit);
         }
 
-        const res = NextResponse.json({ units });
+        const res = NextResponse.json({ units, map_units: mapUnits });
         res.headers.set('Cache-Control', 'no-store, max-age=0');
         return res;
     } catch (err) {

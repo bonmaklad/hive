@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import HiveMapOverlay from './HiveMapOverlay';
 
 const FILTERS = [
     { id: 'desk', label: 'Desk', unitTypes: ['desk', 'desk_pod'] },
@@ -34,7 +35,7 @@ function formatNZDFromCents(cents) {
     return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 }).format(n / 100);
 }
 
-function HiveMapViewer() {
+function HiveMapViewer({ units }) {
     const containerRef = useRef(null);
     const pointerRef = useRef({ id: null, x: 0, y: 0 });
     const [hasInteracted, setHasInteracted] = useState(false);
@@ -180,7 +181,7 @@ function HiveMapViewer() {
                 onPointerUp={onPointerUp}
                 onPointerCancel={onPointerUp}
                 role="img"
-                aria-label="Interactive HIVE map"
+                aria-label="Interactive HIVE map with work-unit availability overlays"
             >
                 <div
                     className="hive-map-content"
@@ -188,8 +189,10 @@ function HiveMapViewer() {
                         transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`
                     }}
                     aria-hidden="true"
-                    dangerouslySetInnerHTML={svgMarkup ? { __html: svgMarkup } : undefined}
-                />
+                >
+                    <div className="hive-map-svg" dangerouslySetInnerHTML={svgMarkup ? { __html: svgMarkup } : undefined} />
+                    <HiveMapOverlay units={units} />
+                </div>
                 {!hasInteracted ? (
                     <div className="hive-map-hint">
                         Click and drag to pan. Scroll to zoom.
@@ -211,7 +214,7 @@ function HiveMapViewer() {
     );
 }
 
-function HiveMapModal({ open, onClose }) {
+function HiveMapModal({ open, onClose, units }) {
     useEffect(() => {
         if (!open) return undefined;
         const onKey = event => {
@@ -245,7 +248,7 @@ function HiveMapModal({ open, onClose }) {
                         Close
                     </button>
                 </div>
-                <HiveMapViewer />
+                <HiveMapViewer units={units} />
             </div>
         </div>
     );
@@ -350,6 +353,7 @@ function AvailabilityModal({ unit, onClose }) {
 
 export default function HiveAvailabilitySection() {
     const [units, setUnits] = useState([]);
+    const [mapUnits, setMapUnits] = useState([]);
     const [activeFilter, setActiveFilter] = useState(FILTERS[0].id);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -369,9 +373,11 @@ export default function HiveAvailabilitySection() {
                 if (!res.ok) throw new Error(json?.error || 'Failed to load availability.');
                 if (cancelled) return;
                 setUnits(Array.isArray(json?.units) ? json.units : []);
+                setMapUnits(Array.isArray(json?.map_units) ? json.map_units : []);
             } catch (err) {
                 if (cancelled) return;
                 setUnits([]);
+                setMapUnits([]);
                 setError(err?.message || 'Failed to load availability.');
             } finally {
                 if (!cancelled) setLoading(false);
@@ -420,7 +426,7 @@ export default function HiveAvailabilitySection() {
                     </Link>
                 </div>
 
-                <button className="hive-map-preview" type="button" onClick={() => setMapOpen(true)}>
+                <button className="hive-map-preview" type="button" onClick={() => setMapOpen(true)} aria-label="Explore HIVE map with workspace availability">
                     <Image
                         className="hive-map-preview-img"
                         src="/HIVE.svg"
@@ -430,10 +436,16 @@ export default function HiveAvailabilitySection() {
                         sizes="(max-width: 900px) 92vw, 1200px"
                         priority={false}
                     />
+                    <HiveMapOverlay units={mapUnits} />
                     <div className="hive-map-preview-overlay" aria-hidden="true">
                         <span className="btn secondary">Explore HIVE</span>
                     </div>
                 </button>
+                <div className="hive-map-legend" aria-label="Map status legend">
+                    <span><i className="available" aria-hidden="true" /> Available</span>
+                    <span><i className="partial" aria-hidden="true" /> Partially available</span>
+                    <span><i className="taken" aria-hidden="true" /> Taken</span>
+                </div>
 
                 <div className="availability-panel">
                     <h3>Check Availability</h3>
@@ -494,7 +506,7 @@ export default function HiveAvailabilitySection() {
                 </div>
             </section>
 
-            <HiveMapModal open={mapOpen} onClose={closeMap} />
+            <HiveMapModal open={mapOpen} onClose={closeMap} units={mapUnits} />
             <AvailabilityModal unit={activeUnit} onClose={closeModal} />
         </>
     );
