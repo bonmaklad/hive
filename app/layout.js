@@ -1,11 +1,11 @@
 ﻿import './globals.css';
 import Script from 'next/script';
-import { Space_Grotesk } from 'next/font/google';
+import localFont from 'next/font/local';
 import AuthSessionSync from './AuthSessionSync';
 
-const spaceGrotesk = Space_Grotesk({
-    subsets: ['latin'],
-    weight: ['400', '500', '600', '700'],
+const spaceGrotesk = localFont({
+    src: './fonts/SpaceGrotesk-Variable.ttf',
+    weight: '400 700',
     display: 'swap'
 });
 
