@@ -154,8 +154,8 @@ export default function HomePage() {
                         <ul className="feature-list">
                             <li>9 Premium Offices</li>
                             <li>12 Private Offices</li>
-                            <li>11 Dedicated Desks</li>
-                            <li>Hot Desking Capabilities</li>
+                            <li>9 Dedicated Desks</li>
+                            <li>13 Hot Desking Spots</li>
                             <li>Boardroom + Training Room + Meeting Rooms</li>
                             <li>Event & Function Rooms</li>
                             <li>Membership cap of 25 founders</li>
