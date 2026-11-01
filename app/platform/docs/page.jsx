@@ -243,6 +243,14 @@ export default function PlatformDocsPage() {
                             </a>.
                         </p>
                         <p className="platform-subtitle">
+                            Members also get one free agent for their website. Go to{' '}
+                            <a className="platform-link" href="https://agent.hivehq.nz" target="_blank" rel="noreferrer">
+                                agent.hivehq.nz
+                            </a>{' '}
+                            and sign in with your HIVE login. Your agent sets up automatically, scans your website to learn about your business,
+                            and learns nightly from customer interactions.
+                        </p>
+                        <p className="platform-subtitle">
                             For printing, send files to <a className="platform-link" href="mailto:info@wphoto.nz">info@wphoto.nz</a> or call{' '}
                             <a className="platform-link" href="tel:+6463456144">06 345 6144</a>. Full details are in <Link href="/platform/benefits">Benefits</Link>.
                         </p>

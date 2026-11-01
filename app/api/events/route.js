@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient, getUserFromRequest } from '../_lib/supabaseAuth';
 import { requireTenantContext } from '../rooms/_lib/tenantBilling';
+import { eventDescriptionHtml, validateEventDescription } from '@/lib/eventDescription';
 import {
     computeHours,
     EVENT_SELECT,
@@ -200,7 +201,8 @@ export async function POST(request) {
 
         const form = await request.formData();
         const title = safeText(form.get('title'), 160);
-        const description = safeText(form.get('description'), 3000);
+        const rawDescription = form.get('description');
+        const description = eventDescriptionHtml(rawDescription);
         const startsAt = toIsoDate(form.get('starts_at'));
         const endsAt = toIsoDate(form.get('ends_at'));
         const eventType = normalizeEventType(form.get('event_type'));
@@ -215,7 +217,8 @@ export async function POST(request) {
         const locationMode = safeText(form.get('location_mode'), 20) === 'custom' ? 'custom' : 'hive';
 
         if (!title) return jsonError('Title is required.');
-        if (!description) return jsonError('Description is required.');
+        const descriptionError = validateEventDescription(rawDescription);
+        if (descriptionError) return jsonError(descriptionError);
         if (!startsAt || !endsAt) return jsonError('Start and end time are required.');
         if (new Date(endsAt) <= new Date(startsAt)) return jsonError('End time must be after start time.');
 

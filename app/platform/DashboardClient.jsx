@@ -201,7 +201,7 @@ export default function DashboardClient() {
                 <div className="platform-kpi-row">
                     <h2 style={{ margin: 0 }}>Membership benefits</h2>
                 </div>
-                <p className="platform-subtitle">Weekly parking and printing partner details for members.</p>
+                <p className="platform-subtitle">One free website agent, weekly parking and printing partner details for members.</p>
                 <div className="platform-card-actions">
                     <Link className="btn ghost" href="/platform/benefits">
                         View benefits

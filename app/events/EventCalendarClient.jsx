@@ -2,9 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { EVENT_TOPICS, EVENT_TYPES, EVENT_VISIBILITIES, HIVE_LOCATION, eventTypeLabel, mapsEmbedUrl } from '@/lib/eventOptions';
+import { escapeCalendarText, eventDescriptionText, validateEventDescription } from '@/lib/eventDescription';
+import EventDescription from '@/app/components/EventDescription';
+
+const EventDescriptionEditor = dynamic(() => import('@/app/components/EventDescriptionEditor'), { ssr: false });
 
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, index) => {
     const total = index * 15;
@@ -177,9 +182,9 @@ function downloadIcs(event) {
         `DTSTAMP:${stamp(new Date())}`,
         `DTSTART:${stamp(start)}`,
         `DTEND:${stamp(end)}`,
-        `SUMMARY:${event.title}`,
-        `DESCRIPTION:${String(event.description || '').replace(/\n/g, '\\n')}`,
-        `LOCATION:${event.location_address || HIVE_LOCATION.address}`,
+        `SUMMARY:${escapeCalendarText(event.title)}`,
+        `DESCRIPTION:${escapeCalendarText(eventDescriptionText(event.description))}`,
+        `LOCATION:${escapeCalendarText(event.location_address || HIVE_LOCATION.address)}`,
         'END:VEVENT',
         'END:VCALENDAR'
     ].join('\r\n');
@@ -468,6 +473,11 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
 
     const submitEvent = async event => {
         event.preventDefault();
+        const descriptionError = validateEventDescription(eventForm.description);
+        if (descriptionError) {
+            setSaveMessage(descriptionError);
+            return;
+        }
         setSavingEvent(true);
         setSaveMessage('');
         try {
@@ -611,7 +621,7 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
                         ) : null}
                         <span className={`event-type-pill type-${selected.event_type}`}>{eventTypeLabel(selected.event_type)}</span>
                         <h2>{selected.title}</h2>
-                        <p>{selected.description}</p>
+                        <EventDescription value={selected.description} />
                         <dl className="event-detail-list">
                             <div><dt>When</dt><dd>{formatDay(selected.starts_at)}, {formatTime(selected.starts_at)} - {formatTime(selected.ends_at)}</dd></div>
                             <div><dt>Where</dt><dd>{selected.location_name}<br />{selected.location_address}</dd></div>
@@ -683,7 +693,7 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
                             <button className="btn ghost" type="button" onClick={closeEventForm}>Close</button>
                         </div>
                         <label>Title<input value={eventForm.title} onChange={event => updateForm('title', event.target.value)} autoComplete="off" required /></label>
-                        <label>Description<textarea value={eventForm.description} onChange={event => updateForm('description', event.target.value)} autoComplete="off" required /></label>
+                        <EventDescriptionEditor value={eventForm.description} onChange={value => updateForm('description', value)} />
                         <div className="event-datetime-picker">
                             <div className="event-datetime-row">
                                 <span>Start</span>

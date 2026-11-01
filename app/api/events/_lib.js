@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { HIVE_LOCATION, EVENT_TOPICS, mapsSearchUrl } from '@/lib/eventOptions';
+import { eventDescriptionHtml } from '@/lib/eventDescription';
 
 export const EVENT_IMAGE_BUCKET = process.env.SUPABASE_EVENT_IMAGES_BUCKET || 'event-images';
 export const HIVE_LOCATION_ID = '00000000-0000-0000-0000-000000000120';
@@ -189,7 +190,7 @@ export function serializeEvent(row, extras = {}) {
     return {
         id: row?.id,
         title: row?.title || '',
-        description: row?.description || '',
+        description: eventDescriptionHtml(row?.description),
         starts_at: row?.starts_at || null,
         ends_at: row?.ends_at || null,
         timezone: row?.timezone || 'Pacific/Auckland',

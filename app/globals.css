@@ -2148,6 +2148,83 @@ main {
     margin: 1rem 0;
 }
 
+.event-rich-text {
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+    overflow-x: auto;
+}
+
+.event-rich-text :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote, pre, table) {
+    margin: 0 0 0.85rem;
+}
+
+.event-rich-text p {
+    color: inherit;
+    line-height: inherit;
+}
+
+.event-rich-text :is(h1, h2, h3, h4, h5, h6) {
+    color: inherit;
+    line-height: 1.25;
+}
+
+.event-rich-text h1 { font-size: 2rem; }
+.event-rich-text h2 { font-size: 1.65rem; }
+.event-rich-text h3 { font-size: 1.35rem; }
+.event-rich-text :is(h4, h5, h6) { font-size: 1.1rem; }
+.event-rich-text :is(ul, ol) { padding-left: 1.5rem; }
+.event-rich-text li > p { margin-bottom: 0.25rem; }
+.event-rich-text a { color: var(--mint); text-decoration: underline; }
+.event-rich-text img { max-width: 100%; height: auto; border-radius: 8px; }
+.event-rich-text blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--mint); }
+.event-rich-text pre { padding: 0.75rem; white-space: pre-wrap; background: var(--ink); border-radius: 8px; }
+.event-rich-text table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.event-rich-text :is(td, th) { min-width: 1.5rem; padding: 0.5rem; border: 1px solid var(--steel); vertical-align: top; }
+.event-rich-text th { background: var(--deep-blue); text-align: left; }
+.event-rich-text hr { border: 0; border-top: 1px solid var(--steel); margin: 1rem 0; }
+.event-rich-text > :last-child { margin-bottom: 0; }
+
+.event-description-field { display: grid; gap: 0.35rem; min-width: 0; }
+.event-description-editor { overflow: hidden; border: 1px solid var(--steel); border-radius: 14px; background: var(--ink); }
+.event-description-modes { display: flex; gap: 0.25rem; padding: 0.5rem; border-bottom: 1px solid var(--steel); }
+.event-description-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; padding: 0.5rem; border-bottom: 1px solid var(--steel); }
+
+.event-description-modes button,
+.event-description-toolbar button,
+.event-description-toolbar select {
+    width: auto;
+    min-height: 34px;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--steel);
+    border-radius: 6px;
+    background: var(--night);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.event-description-toolbar select { padding-right: 2rem; max-width: 100%; }
+.event-description-modes [aria-pressed='true'],
+.event-description-toolbar [aria-pressed='true'] { border-color: var(--mint); color: var(--mint); background: var(--deep-blue); }
+.event-description-toolbar button:disabled { opacity: 0.4; cursor: default; }
+.event-description-editor :is(button, select, input, textarea):focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+.event-description-canvas { min-height: 230px; padding: 0.85rem; outline: none; }
+.event-description-canvas:focus { box-shadow: inset 0 0 0 2px var(--mint); }
+.event-description-canvas .ProseMirror-selectednode { outline: 2px solid var(--mint); }
+.event-description-canvas .selectedCell { background: var(--steel); }
+.event-description-preview { min-height: 230px; padding: 0.85rem; }
+.event-create-drawer .event-description-source { display: block; min-height: 280px; border: 0; border-radius: 0; font-family: monospace; font-size: 0.85rem; }
+.event-create-drawer .event-description-color { display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; }
+.event-create-drawer .event-description-color input { width: 28px; height: 30px; padding: 2px; border-radius: 5px; cursor: pointer; }
+.event-description-insert { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem; padding: 0.75rem; border-bottom: 1px solid var(--steel); }
+.event-description-insert label { flex: 1 1 180px; }
+.event-description-insert p { flex-basis: 100%; margin: 0; color: var(--text); font-size: 0.8rem; }
+.event-description-help { margin: 0; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
+
 .event-detail-list div {
     display: grid;
     gap: 0.2rem;
