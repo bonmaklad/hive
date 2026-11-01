@@ -148,8 +148,9 @@ main {
     position: relative;
 }
 
-/* Hide the mobile-only bookings item on desktop */
-.nav-links .nav-bookings { display: none; }
+/* Keep the mobile menu actions inside the desktop button group. */
+.nav-links .nav-bookings,
+.nav-links .nav-platform { display: none; }
 
 .nav-links a::after {
     content: '';
@@ -7107,8 +7108,9 @@ main {
         display: none;
     }
 
-    /* Show bookings item inside dropdown on mobile */
-    .nav-links .nav-bookings { display: list-item; }
+    /* Show the desktop button destinations inside the mobile menu. */
+    .nav-links .nav-bookings,
+    .nav-links .nav-platform { display: list-item; }
 }
 
 @media (max-width: 600px) {

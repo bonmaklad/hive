@@ -66,6 +66,11 @@ export default function SiteNav({
                         </Link>
                     </li>
                 )}
+                <li className="nav-platform">
+                    <Link href="/platform" onClick={() => setNavOpen(false)}>
+                        {isLoggedIn ? 'Platform' : 'Login'}
+                    </Link>
+                </li>
             </ul>
             <div className="nav-ctas">
                 {showBookings && (
