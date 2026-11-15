@@ -44,6 +44,29 @@
     mix-blend-mode: screen;
 }
 
+.publicRoomSign {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3cqw;
+    padding: 0.6cqw;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 0.6cqw;
+    box-shadow: 0 0.25cqw 0.8cqw rgba(0, 0, 0, 0.3);
+    color: var(--ink);
+    line-height: 1.15;
+    text-align: center;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.publicRoomName {
+    font-size: 1.25cqw;
+    font-weight: 700;
+}
+
 .youAreHere {
     position: absolute;
     /* Landing beside the left stairwell, at (225, 590) on the original floor plan. */

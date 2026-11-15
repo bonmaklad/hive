@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import DirectoryClient from '../directory/DirectoryClient';
 import { getTenantDirectory } from '@/lib/tenants';
+import { PUBLIC_ROOMS } from './public-rooms';
 import styles from './touchscreen.module.css';
 
 export const metadata = {
@@ -36,6 +37,22 @@ export default async function TouchscreenPage() {
                                 priority
                                 unoptimized
                             />
+                            {PUBLIC_ROOMS.map(room => (
+                                <div
+                                    className={styles.publicRoomSign}
+                                    key={room.code}
+                                    role="img"
+                                    aria-label={`${room.name}, room ${room.code}`}
+                                    style={{
+                                        left: `${room.x / 2115.21 * 100}%`,
+                                        top: `${room.y / 1432 * 100}%`,
+                                        width: room.width,
+                                        backgroundColor: room.color
+                                    }}
+                                >
+                                    <span className={styles.publicRoomName} aria-hidden="true">{room.name}</span>
+                                </div>
+                            ))}
                             <div className={styles.youAreHere} role="img" aria-label="You are here, beside the left stairwell">
                                 <span className={styles.locationDot} aria-hidden="true" />
                                 <span className={styles.locationLabel} aria-hidden="true">You are here</span>
