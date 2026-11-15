@@ -35,15 +35,23 @@ export default async function TouchscreenPage() {
                             priority
                         />
                     </div>
-                    <Image
-                        className={styles.floorPlan}
-                        src="/HIVE.svg"
-                        alt="HIVE HQ floor plan showing rooms and offices at 116 and 122 Victoria Avenue"
-                        width={2115}
-                        height={1432}
-                        priority
-                        unoptimized
-                    />
+                    <div className={styles.floorPlanWrap}>
+                        <div className={styles.floorPlanViewport}>
+                            <Image
+                                className={styles.floorPlan}
+                                src="/HIVE.svg"
+                                alt="HIVE HQ floor plan showing rooms and offices at 116 and 122 Victoria Avenue"
+                                width={2115}
+                                height={1432}
+                                priority
+                                unoptimized
+                            />
+                            <div className={styles.youAreHere} role="img" aria-label="You are here, beside the left stairwell">
+                                <span className={styles.locationDot} aria-hidden="true" />
+                                <span className={styles.locationLabel} aria-hidden="true">You are here</span>
+                            </div>
+                        </div>
+                    </div>
                 </section>
 
                 <section className={styles.directory} aria-labelledby="touchscreen-directory-title">

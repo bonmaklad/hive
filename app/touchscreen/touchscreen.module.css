@@ -19,7 +19,7 @@
 
 .map {
     flex: 0 0 auto;
-    background: #fff;
+    /* background: #000; */
 }
 
 .masthead {
@@ -35,10 +35,51 @@
     object-fit: contain;
 }
 
+.floorPlanWrap {
+    padding: 2cqw 3cqw;
+}
+
+.floorPlanViewport {
+    position: relative;
+}
+
 .floorPlan {
     width: 100%;
     height: auto;
-    padding: 2cqw 3cqw;
+    filter: invert(1) hue-rotate(180deg);
+}
+
+.youAreHere {
+    position: absolute;
+    /* Landing beside the left stairwell, at (225, 590) on the original floor plan. */
+    left: 10.64%;
+    top: 41.2%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.9cqw;
+    transform: translate(-50%, -0.75cqw);
+    pointer-events: none;
+}
+
+.locationDot {
+    width: 1.5cqw;
+    height: 1.5cqw;
+    border: 0.25cqw solid #fff;
+    border-radius: 50%;
+    background: var(--mint);
+    box-shadow: 0 0 0 0.45cqw rgba(111, 255, 182, 0.25);
+}
+
+.locationLabel {
+    padding: 0.55cqw 0.85cqw;
+    border-radius: 0.6cqw;
+    background: var(--mint);
+    color: var(--ink);
+    font-size: 1.35cqw;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
 }
 
 .directory {
