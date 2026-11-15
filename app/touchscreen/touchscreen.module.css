@@ -19,20 +19,14 @@
 
 .map {
     flex: 0 0 auto;
-    /* background: #000; */
-}
-
-.masthead {
-    display: flex;
-    align-items: center;
-    padding: 2cqw 3cqw;
-    background: #000;
+    background: transparent;
 }
 
 .logo {
     width: 8cqw;
     height: 8cqw;
     object-fit: contain;
+    flex-shrink: 0;
 }
 
 .floorPlanWrap {
@@ -47,6 +41,7 @@
     width: 100%;
     height: auto;
     filter: invert(1) hue-rotate(180deg);
+    mix-blend-mode: screen;
 }
 
 .youAreHere {
@@ -97,6 +92,13 @@
     align-items: flex-end;
     gap: 2cqw;
     padding: 0 3cqw 2.5cqw;
+}
+
+.directoryIdentity {
+    display: flex;
+    align-items: center;
+    gap: 2cqw;
+    min-width: 0;
 }
 
 .eyebrow {

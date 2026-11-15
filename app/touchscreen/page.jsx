@@ -25,16 +25,6 @@ export default async function TouchscreenPage() {
         <main className={styles.screen}>
             <div className={styles.frame}>
                 <section className={styles.map} aria-label="HIVE HQ floor plan">
-                    <div className={styles.masthead}>
-                        <Image
-                            className={styles.logo}
-                            src="/logo-square.png"
-                            alt="HIVE Whanganui logo"
-                            width={108}
-                            height={108}
-                            priority
-                        />
-                    </div>
                     <div className={styles.floorPlanWrap}>
                         <div className={styles.floorPlanViewport}>
                             <Image
@@ -56,9 +46,19 @@ export default async function TouchscreenPage() {
 
                 <section className={styles.directory} aria-labelledby="touchscreen-directory-title">
                     <header className={styles.directoryHeader}>
-                        <div>
-                            <p className={styles.eyebrow}>The HIVE community</p>
-                            <h1 id="touchscreen-directory-title">Find your people.</h1>
+                        <div className={styles.directoryIdentity}>
+                            <Image
+                                className={styles.logo}
+                                src="/logo-square.png"
+                                alt="HIVE Whanganui logo"
+                                width={108}
+                                height={108}
+                                priority
+                            />
+                            <div>
+                                <p className={styles.eyebrow}>The HIVE community</p>
+                                <h1 id="touchscreen-directory-title">Find your people.</h1>
+                            </div>
                         </div>
                         <p className={styles.scrollHint}>
                             Swipe to explore <span aria-hidden="true">↓</span>
