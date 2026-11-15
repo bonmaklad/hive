@@ -29,7 +29,7 @@ export default async function TouchscreenPage() {
                         <div className={styles.floorPlanViewport}>
                             <Image
                                 className={styles.floorPlan}
-                                src="/HIVE.svg"
+                                src="/HIVE-touchscreen.svg"
                                 alt="HIVE HQ floor plan showing rooms and offices at 116 and 122 Victoria Avenue"
                                 width={2115}
                                 height={1432}
