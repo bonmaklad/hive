@@ -2,6 +2,7 @@ import Image from 'next/image';
 import DirectoryClient from '../directory/DirectoryClient';
 import { getTenantDirectory } from '@/lib/tenants';
 import { PUBLIC_ROOMS } from './public-rooms';
+import OfficeBadges from './OfficeBadges';
 import styles from './touchscreen.module.css';
 
 export const metadata = {
@@ -17,7 +18,7 @@ export default async function TouchscreenPage() {
     let error = '';
 
     try {
-        tenants = await getTenantDirectory({ includeBuildings: true });
+        tenants = await getTenantDirectory({ includeBuildings: true, includeOffices: true });
     } catch {
         error = 'The directory is temporarily unavailable. Please try again shortly.';
     }
@@ -37,6 +38,7 @@ export default async function TouchscreenPage() {
                                 priority
                                 unoptimized
                             />
+                            <OfficeBadges tenants={tenants.map(({ name, profileName, logoUrl, officeCodes }) => ({ name, profileName, logoUrl, officeCodes }))} />
                             {PUBLIC_ROOMS.map(room => (
                                 <div
                                     className={styles.publicRoomSign}

@@ -180,3 +180,57 @@ test('allocation lookup failures do not produce guessed touchscreen directions',
     errors.work_unit_allocations = 'Allocation lookup failed';
     await expect(getTenantDirectory({ includeBuildings: true })).rejects.toThrow('Allocation lookup failed');
 });
+
+function allocateOffice(tenantId, number, options = {}) {
+    const { start_date, end_date, ...unit } = options;
+    tables.work_unit_allocations.push({
+        tenant_id: tenantId,
+        start_date: start_date || new Date().toISOString().slice(0, 10),
+        end_date,
+        work_unit: { building: '116', unit_number: number, unit_type: 'private_office', is_active: true, ...unit }
+    });
+}
+
+test('office badges include each exclusive office once and exclude desks and inactive units', async () => {
+    addTenant('team');
+    allocateOffice('team', '5');
+    allocateOffice('team', '5');
+    allocateOffice('team', '6', { unit_type: 'small_office' });
+    allocateOffice('team', '10', { building: '122', unit_type: 'premium_office' });
+    allocateOffice('team', '23', { unit_type: 'desk_pod' });
+    allocateOffice('team', '1', { unit_type: 'desk' });
+    allocateOffice('team', '9', { is_active: false });
+
+    const [tenant] = await getTenantDirectory({ includeBuildings: true, includeOffices: true });
+    expect(tenant.officeCodes).toEqual(['116.5', '116.6', '122.10']);
+    expect(tenant.buildings).toEqual(['122', '116']);
+});
+
+test('a second occupant prevents an exclusive badge even when their profile is hidden or membership expired', async () => {
+    addTenant('listed');
+    addTenant('hidden', 'live', { directory_enabled: false });
+    addTenant('expired', 'expired');
+    allocateOffice('listed', '5');
+    allocateOffice('hidden', '5');
+    allocateOffice('listed', '6');
+    allocateOffice('expired', '6');
+
+    const directory = await getTenantDirectory({ includeOffices: true });
+    expect(directory.map(({ id, officeCodes }) => ({ id, officeCodes }))).toEqual([{ id: 'listed', officeCodes: [] }]);
+    const [request, options] = fetchSpy.mock.calls.find(([input]) => new URL(input).pathname.endsWith('/work_unit_allocations'));
+    expect(new URL(request).searchParams.has('tenant_id')).toBe(false);
+    expect(options.cache).toBe('no-store');
+});
+
+test('only current allocations determine office exclusivity, and changes appear on the next request', async () => {
+    addTenant('listed');
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    allocateOffice('listed', '5');
+    allocateOffice('past-tenant', '5', { end_date: today });
+    allocateOffice('future-tenant', '5', { start_date: tomorrow });
+    expect((await getTenantDirectory({ includeOffices: true }))[0].officeCodes).toEqual(['116.5']);
+
+    allocateOffice('second-tenant', '5');
+    expect((await getTenantDirectory({ includeOffices: true }))[0].officeCodes).toEqual([]);
+});
