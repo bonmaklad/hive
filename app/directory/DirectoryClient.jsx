@@ -35,7 +35,41 @@ function getInitials(name) {
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
-export default function DirectoryClient({ tenants = [], error = '', totalCount }) {
+function ContactLabel({ type, compact }) {
+    if (!compact) return <span className="directory-meta-label">{type}</span>;
+
+    return (
+        <span className="directory-meta-icon">
+            <span className="sr-only">{type}</span>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                {type === 'Email' ? (
+                    <>
+                        <rect x="3" y="5" width="18" height="14" rx="2" />
+                        <path d="m3 6 9 7 9-7" />
+                    </>
+                ) : type === 'Website' ? (
+                    <>
+                        <circle cx="12" cy="12" r="9" />
+                        <ellipse cx="12" cy="12" rx="4" ry="9" />
+                        <path d="M3 12h18" />
+                    </>
+                ) : (
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.69 2.79a2 2 0 0 1-.45 2.11L8.09 9.89a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.89.33 1.83.56 2.79.69A2 2 0 0 1 22 16.92Z" />
+                )}
+            </svg>
+        </span>
+    );
+}
+
+export default function DirectoryClient({
+    tenants = [],
+    error = '',
+    totalCount,
+    showDescriptions = true,
+    showDirections = false,
+    showKeyContact = true,
+    compactContacts = false
+}) {
     const [query, setQuery] = useState('');
 
     const normalizedQuery = normalizeText(query);
@@ -73,7 +107,7 @@ export default function DirectoryClient({ tenants = [], error = '', totalCount }
                         type="search"
                         value={query}
                         onChange={event => setQuery(event.target.value)}
-                        placeholder="Search by name, contact, or location"
+                        placeholder="Search by name"
                         aria-label="Search directory"
                     />
                 </label>
@@ -103,27 +137,48 @@ export default function DirectoryClient({ tenants = [], error = '', totalCount }
                         const hasWebsite = Boolean(websiteHref);
                         const hasContact = hasEmail || hasPhone || hasWebsite;
                         const hasLocation = Boolean(tenant?.officeLocation);
-                        const hasAbout = Boolean(tenant?.about);
+                        const hasAbout = showDescriptions && Boolean(tenant?.about);
+                        const directionBuildings = showDirections
+                            ? (tenant?.buildings?.length ? tenant.buildings : ['122'])
+                            : [];
                         return (
                             <article className="directory-card" style={{ '--i': index }} key={tenant?.id || `${tenant?.name}-${index}`}>
                                 <div className="directory-card-top">
-                                    <div className="directory-logo" aria-hidden="true">
-                                        {tenant?.logoUrl ? (
-                                            <Image
-                                                src={tenant.logoUrl}
-                                                alt=""
-                                                width={72}
-                                                height={72}
-                                                sizes="72px"
-                                                quality={60}
-                                            />
-                                        ) : (
-                                            <span>{initials}</span>
-                                        )}
+                                    <div className="directory-logo-row">
+                                        <div className="directory-logo" aria-hidden="true">
+                                            {tenant?.logoUrl ? (
+                                                <Image
+                                                    src={tenant.logoUrl}
+                                                    alt=""
+                                                    width={72}
+                                                    height={72}
+                                                    sizes="72px"
+                                                    quality={60}
+                                                />
+                                            ) : (
+                                                <span>{initials}</span>
+                                            )}
+                                        </div>
+                                        {showDirections ? (
+                                            <div className="directory-directions">
+                                                {directionBuildings.map(building => (
+                                                    <span
+                                                        className="directory-direction"
+                                                        role="img"
+                                                        aria-label={building === '116' ? 'Turn right for 116' : 'Turn left for 122 and members'}
+                                                        key={building}
+                                                    >
+                                                        <svg viewBox="0 0 32 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                                                            <path d={building === '116' ? 'M4 12h24m-9-9 9 9-9 9' : 'M28 12H4m9-9-9 9 9 9'} />
+                                                        </svg>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : null}
                                     </div>
                                     <div>
                                         <h3>{displayName || 'Tenant'}</h3>
-                                        {tenant?.keyContactName ? (
+                                        {showKeyContact && tenant?.keyContactName ? (
                                             <p className="directory-contact">Key contact: {tenant.keyContactName}</p>
                                         ) : null}
                                         {hasLocation ? (
@@ -140,13 +195,13 @@ export default function DirectoryClient({ tenants = [], error = '', totalCount }
                                     <div className="directory-meta">
                                         {hasEmail ? (
                                             <div>
-                                                <span className="directory-meta-label">Email</span>
+                                                <ContactLabel type="Email" compact={compactContacts} />
                                                 <a href={emailHref}>{tenant.email}</a>
                                             </div>
                                         ) : null}
                                         {hasWebsite ? (
                                             <div>
-                                                <span className="directory-meta-label">Website</span>
+                                                <ContactLabel type="Website" compact={compactContacts} />
                                                 <a href={websiteHref} target="_blank" rel="noreferrer">
                                                     {websiteLabel || tenant?.websiteUrl}
                                                 </a>
@@ -154,7 +209,7 @@ export default function DirectoryClient({ tenants = [], error = '', totalCount }
                                         ) : null}
                                         {hasPhone ? (
                                             <div>
-                                                <span className="directory-meta-label">Phone</span>
+                                                <ContactLabel type="Phone" compact={compactContacts} />
                                                 <a href={phoneHref}>{tenant.phone}</a>
                                             </div>
                                         ) : null}

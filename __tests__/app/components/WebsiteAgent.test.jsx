@@ -17,7 +17,7 @@ function addWidgetRoot() {
     return root;
 }
 
-test.each(['/platform', '/platform/', '/platform/benefits', '/platform/admin/spaces', null])(
+test.each(['/platform', '/platform/', '/platform/benefits', '/platform/admin/spaces', '/touchscreen', '/touchscreen/', null])(
     'does not load the widget on %s', pathname => {
         usePathname.mockReturnValue(pathname);
         render(<WebsiteAgent />);

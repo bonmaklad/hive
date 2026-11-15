@@ -19,7 +19,7 @@ beforeEach(() => {
         SUPABASE_URL: 'https://supabase.example.test',
         SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key'
     };
-    tables = { tenants: [], tenant_users: [], memberships: [] };
+    tables = { tenants: [], tenant_users: [], memberships: [], work_unit_allocations: [] };
     errors = {};
     const cache = new Map();
     fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(async (input, init = {}) => {
@@ -35,7 +35,12 @@ beforeEach(() => {
                 const values = filter.slice(4, -1).split(',');
                 rows = rows.filter(row => values.includes(row[column]));
             }
+            if (filter.startsWith('lte.')) {
+                rows = rows.filter(row => row[column] <= filter.slice(4));
+            }
         }
+        const endDate = url.searchParams.get('or')?.match(/^\(end_date\.is\.null,end_date\.gt\.([\d-]+)\)$/)?.[1];
+        if (endDate) rows = rows.filter(row => row.end_date == null || row.end_date > endDate);
         const order = url.searchParams.get('order');
         if (order) {
             const [column, direction] = order.split('.');
@@ -133,4 +138,45 @@ test('requires a server credential to check private membership status', async ()
     delete process.env.SERVICE_ROLE_KEY;
     await expect(getTenantDirectory()).rejects.toThrow('Missing SUPABASE_SERVICE_ROLE_KEY');
     expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+test('touchscreen buildings come from current tenant allocations and ignore profile text, expired and future allocations', async () => {
+    addTenant('left', 'live', { office_location: '116.1' });
+    addTenant('right', 'live', { office_location: '122.1' });
+    addTenant('member');
+    addTenant('expired', 'expired');
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    tables.work_unit_allocations = [
+        { tenant_id: 'left', work_unit: { building: '122' }, start_date: today },
+        { tenant_id: 'left', work_unit: { building: '122' }, start_date: today },
+        { tenant_id: 'right', work_unit: [{ building: 116 }], start_date: today, end_date: tomorrow },
+        { tenant_id: 'right', work_unit: { building: '122' }, start_date: today, end_date: today },
+        { tenant_id: 'member', work_unit: { building: '116' }, start_date: tomorrow },
+        { tenant_id: 'member', work_unit: null, start_date: today },
+        { tenant_id: 'expired', work_unit: { building: '116' }, start_date: today }
+    ];
+
+    const directory = await getTenantDirectory({ includeBuildings: true });
+    expect(directory.map(({ id, buildings }) => ({ id, buildings }))).toEqual([
+        { id: 'left', buildings: ['122'] },
+        { id: 'member', buildings: [] },
+        { id: 'right', buildings: ['116'] }
+    ]);
+    const [allocationRequest, allocationOptions] = fetchSpy.mock.calls.find(([input]) => new URL(input).pathname.endsWith('/work_unit_allocations'));
+    expect(new URL(allocationRequest).searchParams.get('select')).toBe('tenant_id,work_unit:work_units(building)');
+    expect(allocationOptions.cache).toBe('no-store');
+});
+
+test('the regular directory does not request building allocations', async () => {
+    addTenant('live');
+    const directory = await getTenantDirectory();
+    expect(directory[0]).not.toHaveProperty('buildings');
+    expect(fetchSpy.mock.calls.some(([input]) => new URL(input).pathname.endsWith('/work_unit_allocations'))).toBe(false);
+});
+
+test('allocation lookup failures do not produce guessed touchscreen directions', async () => {
+    addTenant('live');
+    errors.work_unit_allocations = 'Allocation lookup failed';
+    await expect(getTenantDirectory({ includeBuildings: true })).rejects.toThrow('Allocation lookup failed');
 });

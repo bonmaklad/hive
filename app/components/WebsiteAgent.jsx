@@ -7,7 +7,11 @@ const agentId = '5121833d5fc5429d81d740af99432d0d';
 
 export default function WebsiteAgent() {
     const pathname = usePathname();
-    const enabled = Boolean(pathname) && pathname !== '/platform' && !pathname.startsWith('/platform/');
+    const enabled = Boolean(pathname)
+        && pathname !== '/platform'
+        && !pathname.startsWith('/platform/')
+        && pathname !== '/touchscreen'
+        && !pathname.startsWith('/touchscreen/');
     const enabledRef = useRef(false);
 
     useEffect(() => {

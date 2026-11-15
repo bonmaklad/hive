@@ -1,0 +1,259 @@
+.screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+    background: var(--ink);
+}
+
+.frame {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    width: min(100%, calc(100dvh * 0.5625));
+    height: 100%;
+    overflow: hidden;
+    background: var(--night);
+}
+
+.map {
+    flex: 0 0 auto;
+    background: #fff;
+}
+
+.masthead {
+    display: flex;
+    align-items: center;
+    padding: 2cqw 3cqw;
+    background: #000;
+}
+
+.logo {
+    width: 8cqw;
+    height: 8cqw;
+    object-fit: contain;
+}
+
+.floorPlan {
+    width: 100%;
+    height: auto;
+    padding: 2cqw 3cqw;
+}
+
+.directory {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    padding-top: 3.5cqw;
+}
+
+.directoryHeader {
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 2cqw;
+    padding: 0 3cqw 2.5cqw;
+}
+
+.eyebrow {
+    margin: 0 0 0.8cqw;
+    font-size: 1.4cqw;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--mint);
+}
+
+.directoryHeader h1 {
+    margin: 0;
+    font-size: 4.4cqw;
+    line-height: 1.1;
+    letter-spacing: -0.04em;
+}
+
+.scrollHint {
+    display: flex;
+    align-items: center;
+    gap: 1cqw;
+    margin: 0 0 0.3cqw;
+    font-size: 1.6cqw;
+    color: var(--muted);
+}
+
+.scrollHint span {
+    font-size: 2.8cqw;
+    color: var(--mint);
+}
+
+.directoryScroll {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-color: var(--steel) var(--night);
+    scrollbar-width: thin;
+    padding: 0 3cqw max(3cqw, env(safe-area-inset-bottom));
+}
+
+.directoryScroll:focus-visible {
+    outline: 2px solid var(--mint);
+    outline-offset: -2px;
+}
+
+.frame :global(.directory-panel) {
+    margin: 0;
+    gap: 2cqw;
+}
+
+.frame :global(.directory-controls) {
+    gap: 1.2cqw;
+}
+
+.frame :global(.directory-search) {
+    min-height: 6cqw;
+    padding: 1.3cqw 1.8cqw;
+    border-radius: 1.5cqw;
+}
+
+.frame :global(.directory-search):focus-within {
+    outline: 2px solid var(--mint);
+    outline-offset: 2px;
+}
+
+.frame :global(.directory-search input) {
+    width: 100%;
+    min-width: 0;
+    font: inherit;
+    font-size: max(16px, 1.9cqw);
+}
+
+.frame :global(.directory-results) {
+    font-size: 1.5cqw;
+}
+
+.frame :global(.directory-grid) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5cqw;
+    align-items: start;
+}
+
+.frame :global(.directory-card) {
+    min-width: 0;
+    height: 100%;
+    align-content: start;
+    gap: 1.8cqw;
+    padding: 2cqw;
+    border-radius: 2cqw;
+    box-shadow: none;
+    animation: none;
+    overflow-wrap: anywhere;
+}
+
+.frame :global(.directory-card-top) {
+    grid-template-columns: 1fr;
+    align-content: start;
+    gap: 1.5cqw;
+}
+
+.frame :global(.directory-logo) {
+    width: 8cqw;
+    height: 8cqw;
+    border-radius: 1.6cqw;
+    font-size: 2.3cqw;
+    background: #fff;
+    color: var(--ink);
+    flex-shrink: 0;
+}
+
+.frame :global(.directory-logo-row) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2cqw;
+}
+
+.frame :global(.directory-directions) {
+    display: flex;
+    gap: 1cqw;
+    color: var(--mint);
+}
+
+.frame :global(.directory-direction) {
+    display: block;
+    width: 5cqw;
+}
+
+.frame :global(.directory-direction svg) {
+    display: block;
+    width: 100%;
+    height: auto;
+    stroke-width: 6;
+}
+
+.frame :global(.directory-logo img) {
+    object-fit: contain;
+}
+
+.frame :global(.directory-card h3) {
+    margin: 0 0 1cqw;
+    font-size: 2.2cqw;
+    line-height: 1.25;
+}
+
+.frame :global(.directory-location) {
+    font-size: 1.65cqw;
+    line-height: 1.5;
+}
+
+.frame :global(.directory-location) {
+    color: var(--mint);
+}
+
+.frame :global(.directory-meta) {
+    gap: 0.2cqw;
+    font-size: 1.55cqw;
+    line-height: 1.25;
+}
+
+.frame :global(.directory-meta div) {
+    grid-template-columns: 1.9cqw minmax(0, 1fr);
+    align-items: center;
+    gap: 0.8cqw;
+}
+
+.frame :global(.directory-meta-icon) {
+    display: flex;
+    align-items: center;
+    color: var(--mint);
+}
+
+.frame :global(.directory-meta-icon svg) {
+    display: block;
+    width: 1.9cqw;
+    height: 1.9cqw;
+}
+
+.frame :global(.directory-meta a) {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    min-height: 3.5cqw;
+    padding-block: 0.5cqw;
+    border-radius: 0.4cqw;
+}
+
+.frame :global(.directory-meta a):focus-visible {
+    outline: 2px solid var(--mint);
+    outline-offset: 2px;
+}
+
+.frame :global(.directory-empty) {
+    padding: 4cqw;
+    border-radius: 2cqw;
+    font-size: 1.8cqw;
+}
+
+.frame :global(.platform-message) {
+    font-size: 1.8cqw;
+}
