@@ -150,6 +150,10 @@ function defaultEventForm() {
     };
 }
 
+function linkedRoomOption(event) {
+    return event?.room_booking_id ? event.room_booking_space_slug || '__current_room__' : '';
+}
+
 function eventFormFromEvent(event) {
     const isHiveLocation = (event?.location_address || '') === HIVE_LOCATION.address;
     return {
@@ -164,8 +168,7 @@ function eventFormFromEvent(event) {
         location_mode: isHiveLocation ? 'hive' : 'custom',
         location_name: isHiveLocation ? '' : event?.location_name || '',
         location_address: isHiveLocation ? '' : event?.location_address || '',
-        book_room: false,
-        space_slug: ''
+        space_slug: linkedRoomOption(event)
     };
 }
 
@@ -249,6 +252,7 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
     const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
     const [events, setEvents] = useState([]);
     const [spaces, setSpaces] = useState([]);
+    const [spacesError, setSpacesError] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [selected, setSelected] = useState(null);
@@ -363,11 +367,19 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
 
     useEffect(() => {
         if (!canCreate) return;
-        fetch('/api/bookings/room/spaces')
-            .then(res => res.json())
-            .then(json => setSpaces(Array.isArray(json?.spaces) ? json.spaces : []))
-            .catch(() => setSpaces([]));
-    }, [canCreate]);
+        const loadSpaces = async () => {
+            try {
+                const res = await fetch('/api/events/rooms', { headers: await authHeader(), cache: 'no-store' });
+                if (!res.ok) throw new Error('Could not load room choices.');
+                const json = await res.json();
+                setSpaces(Array.isArray(json?.spaces) ? json.spaces : []);
+                setSpacesError('');
+            } catch {
+                setSpacesError('Could not load room choices.');
+            }
+        };
+        loadSpaces();
+    }, [authHeader, canCreate]);
 
     const filteredEvents = useMemo(() => events.filter(event => {
         if (typeFilter !== 'all' && event.event_type !== typeFilter) return false;
@@ -424,6 +436,10 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
             const nextValue = combineDateTimeLocal(nextDate, nextTime);
             const next = { ...current, [field]: nextValue };
 
+            if (field === 'starts_at' && part === 'date' && nextValue) {
+                const end = splitDateTimeLocal(current.ends_at);
+                if (end.date === existing.date) next.ends_at = combineDateTimeLocal(nextDate, end.time);
+            }
             if (field === 'starts_at' && nextValue && (!next.ends_at || new Date(next.ends_at) <= new Date(nextValue))) {
                 next.ends_at = addMinutesLocal(nextValue, 60);
             }
@@ -483,18 +499,24 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
         try {
             const form = new FormData();
             for (const [key, value] of Object.entries(eventForm)) {
-                if (key === 'topics') continue;
+                if (key === 'topics' || (editingEvent && key === 'space_slug')) continue;
                 if (key === 'book_room') form.set(key, value ? 'true' : 'false');
                 else form.set(key, value);
             }
             for (const topic of eventForm.topics) form.append('topics', topic);
             if (imageFile) form.set('image', imageFile);
 
-            const startParts = localParts(eventForm.starts_at);
-            const endParts = localParts(eventForm.ends_at);
-            form.set('booking_date', startParts.booking_date);
-            form.set('start_time', startParts.start_time);
-            form.set('end_time', endParts.start_time);
+            if (editingEvent && eventForm.space_slug !== linkedRoomOption(editingEvent)) {
+                if (eventForm.space_slug) form.set('space_slug', eventForm.space_slug);
+                else form.set('unlink_room_booking', 'true');
+            }
+            if (eventForm.book_room) {
+                const startParts = localParts(eventForm.starts_at);
+                const endParts = localParts(eventForm.ends_at);
+                form.set('booking_date', startParts.booking_date);
+                form.set('start_time', startParts.start_time);
+                form.set('end_time', endParts.start_time);
+            }
             form.set('starts_at', new Date(eventForm.starts_at).toISOString());
             form.set('ends_at', new Date(eventForm.ends_at).toISOString());
 
@@ -537,6 +559,7 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
     const selectedGuests = Number(selectedSummary.rsvp_guests_count) || 0;
     const selectedRemaining = selectedCapacity ? Math.max(selectedCapacity - selectedGuests, 0) : null;
     const selectedSoldOut = Boolean(selectedCapacity && selectedGuests >= selectedCapacity);
+    const currentRoom = linkedRoomOption(editingEvent);
     const selectedCapacityLabel = selectedCapacity
         ? `${selectedGuests}/${selectedCapacity} spots${selectedRemaining === 0 ? ' filled' : `, ${selectedRemaining} left`}`
         : `${selectedGuests} guests, no cap`;
@@ -755,7 +778,20 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
                         ) : (
                             <p className="platform-subtitle">{HIVE_LOCATION.address}</p>
                         )}
-                        {!editingEvent ? (
+                        {editingEvent ? (
+                            <>
+                                <label>Room<select value={eventForm.space_slug} onChange={event => updateForm('space_slug', event.target.value)}>
+                                    <option value="">No room</option>
+                                    {currentRoom && !spaces.some(space => space.slug === currentRoom) ? (
+                                        <option value={currentRoom}>{editingEvent.room_booking_title || 'Current room'}</option>
+                                    ) : null}
+                                    {spaces.map(space => <option key={space.slug} value={space.slug}>{space.title}</option>)}
+                                </select></label>
+                                {currentRoom && !eventForm.space_slug ? (
+                                    <p className="platform-subtitle">The current room booking will become separate from this event.</p>
+                                ) : null}
+                            </>
+                        ) : (
                             <>
                                 <label className="event-checkbox">
                                     <input type="checkbox" checked={eventForm.book_room} onChange={event => updateForm('book_room', event.target.checked)} />
@@ -768,7 +804,8 @@ export default function EventCalendarClient({ audience = 'public', canCreate = f
                                     </select></label>
                                 ) : null}
                             </>
-                        ) : null}
+                        )}
+                        {spacesError && (editingEvent || eventForm.book_room) ? <p className="platform-subtitle">{spacesError}</p> : null}
                         <button className="btn primary" type="submit" disabled={savingEvent}>{savingEvent ? 'Saving...' : editingEvent ? 'Update event' : 'Save event'}</button>
                         {saveMessage ? <p className="platform-subtitle">{saveMessage}</p> : null}
                     </form>

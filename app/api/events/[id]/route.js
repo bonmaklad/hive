@@ -2,20 +2,21 @@ import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient, getUserFromRequest } from '../../_lib/supabaseAuth';
 import { eventDescriptionHtml, validateEventDescription } from '@/lib/eventDescription';
 import {
+    ACTIVE_MEMBER_ROOM_STATUSES,
+    canSelectEventRoom,
     computeHours,
     EVENT_SELECT,
+    isEventAdmin,
+    loadEventRooms,
     loadRsvpSummaries,
     normalizeEventType,
     normalizeTopics,
     normalizeVisibility,
-    overlaps,
     parseCapacity,
     resolveLocationFields,
     safeText,
     serializeEvent,
     toIsoDate,
-    toLocalDate,
-    toTime,
     uploadEventImage
 } from '../_lib';
 
@@ -24,11 +25,6 @@ export const dynamic = 'force-dynamic';
 
 function jsonError(message, status = 400) {
     return NextResponse.json({ error: message }, { status });
-}
-
-async function isAdmin({ admin, userId }) {
-    const { data } = await admin.from('profiles').select('is_admin').eq('id', userId).maybeSingle();
-    return Boolean(data?.is_admin);
 }
 
 async function loadOrganizerProfiles(admin, events) {
@@ -57,67 +53,59 @@ async function maybeCreateLocation({ admin, eventRow, userId, location }) {
     return data?.id || null;
 }
 
-async function maybeUpdateRoomBooking({ admin, eventRow, form }) {
-    if (!eventRow?.room_booking_id) return;
+const roomTimeFormat = new Intl.DateTimeFormat('en-NZ', {
+    timeZone: 'Pacific/Auckland',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+});
 
-    const bookingDate = toLocalDate(form.get('booking_date'));
-    const startTime = toTime(form.get('start_time'));
-    const endTime = toTime(form.get('end_time'));
-    if (!bookingDate || !startTime || !endTime) return;
+function roomTime(isoDate) {
+    const parts = Object.fromEntries(roomTimeFormat.formatToParts(new Date(isoDate)).map(part => [part.type, part.value]));
+    return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
 
-    const { data: booking, error: bookingError } = await admin
-        .from('room_bookings')
-        .select('id, space_slug, status')
-        .eq('id', eventRow.room_booking_id)
-        .maybeSingle();
+async function prepareRoomChange({ admin, existing, selectedSlug, startsAt, endsAt, isAdmin }) {
+    const scheduleChanged = startsAt !== toIsoDate(existing.starts_at) || endsAt !== toIsoDate(existing.ends_at);
+    if (!selectedSlug && (!existing.room_booking_id || !scheduleChanged)) return {};
 
-    if (bookingError) throw new Error(bookingError.message);
-    if (!booking?.space_slug) return;
-
-    const hours = computeHours(startTime, endTime);
-    if (!hours) throw new Error('Room booking time is invalid.');
-
-    const [{ data: memberBookings, error: memberError }, { data: publicBookings, error: publicError }] = await Promise.all([
-        admin
-            .from('room_bookings')
-            .select('id, start_time, end_time, status')
-            .eq('space_slug', booking.space_slug)
-            .eq('booking_date', bookingDate)
-            .in('status', ['requested', 'approved']),
-        admin
-            .from('public_room_bookings')
-            .select('start_time, end_time, status')
-            .eq('space_slug', booking.space_slug)
-            .eq('booking_date', bookingDate)
-            .in('status', ['pending_payment', 'confirmed'])
-    ]);
-
-    if (memberError) throw new Error(memberError.message);
-    if (publicError && publicError.code !== '42P01') throw new Error(publicError.message);
-
-    for (const existing of memberBookings || []) {
-        if (existing.id !== booking.id && overlaps({ aStart: startTime, aEnd: endTime, bStart: existing.start_time, bEnd: existing.end_time })) {
-            throw new Error('That room is already booked at this time.');
-        }
+    let currentSlug;
+    if (existing.room_booking_id) {
+        const { data, error } = await admin.from('room_bookings')
+            .select('space_slug, status').eq('id', existing.room_booking_id).maybeSingle();
+        if (error) throw new Error(error.message);
+        if (ACTIVE_MEMBER_ROOM_STATUSES.includes(data?.status)) currentSlug = data.space_slug;
     }
 
-    for (const existing of publicBookings || []) {
-        if (overlaps({ aStart: startTime, aEnd: endTime, bStart: existing.start_time, bEnd: existing.end_time })) {
-            throw new Error('That room is already booked at this time.');
+    const targetSlug = selectedSlug || currentSlug;
+    if (!targetSlug || (targetSlug === currentSlug && !scheduleChanged)) return {};
+
+    let roomTitle;
+    if (targetSlug !== currentSlug) {
+        const { data: space, error } = await admin.from('spaces').select('slug, title, is_visible')
+            .eq('slug', targetSlug).is('deleted_at', null).maybeSingle();
+        if (error) throw new Error(error.message);
+        if (!space) return { error: 'Room not found.', status: 404 };
+        if (!canSelectEventRoom(space, isAdmin)) {
+            return { error: 'This room is unavailable for event booking.', status: 403 };
         }
+        roomTitle = space.title;
     }
 
-    const { error: updateError } = await admin
-        .from('room_bookings')
-        .update({
-            booking_date: bookingDate,
-            start_time: startTime,
-            end_time: endTime,
-            hours
-        })
-        .eq('id', booking.id);
+    const start = roomTime(startsAt);
+    const end = roomTime(endsAt);
+    const hours = computeHours(start.time, end.time);
+    if (start.date !== end.date || !hours) {
+        return { error: 'Choose start and end times on the same HIVE booking day.', status: 400 };
+    }
 
-    if (updateError) throw new Error(updateError.message);
+    return {
+        slot: { space_slug: targetSlug, booking_date: start.date, start_time: start.time, end_time: end.time, hours },
+        roomTitle
+    };
 }
 
 export async function PATCH(request, { params }) {
@@ -139,7 +127,7 @@ export async function PATCH(request, { params }) {
         if (loadError) return jsonError(loadError.message, 500);
         if (!existing) return jsonError('Event not found.', 404);
 
-        const viewerIsAdmin = await isAdmin({ admin, userId: user.id });
+        const viewerIsAdmin = await isEventAdmin(admin, user.id);
         if (existing.organizer_id !== user.id && !viewerIsAdmin) {
             return jsonError('You can only edit your own events.', 403);
         }
@@ -166,6 +154,12 @@ export async function PATCH(request, { params }) {
         if (descriptionError) return jsonError(descriptionError);
         if (!startsAt || !endsAt) return jsonError('Start and end time are required.');
         if (new Date(endsAt) <= new Date(startsAt)) return jsonError('End time must be after start time.');
+        const unlinkRoomBooking = form.get('unlink_room_booking') === 'true';
+        const selectedSlug = safeText(form.get('space_slug'), 80);
+        const roomChange = unlinkRoomBooking ? {} : await prepareRoomChange({
+            admin, existing, selectedSlug, startsAt, endsAt, isAdmin: viewerIsAdmin
+        });
+        if (roomChange.error) return jsonError(roomChange.error, roomChange.status);
 
         const location = resolveLocationFields({
             mode: locationMode,
@@ -175,34 +169,55 @@ export async function PATCH(request, { params }) {
         const locationId = await maybeCreateLocation({ admin, eventRow: existing, userId: user.id, location });
         const imageFields = await uploadEventImage({ admin, tenantId: existing.tenant_id, file: form.get('image') });
 
-        await maybeUpdateRoomBooking({ admin, eventRow: existing, form });
+        const eventFields = {
+            title,
+            description,
+            starts_at: startsAt,
+            ends_at: endsAt,
+            event_type: eventType,
+            topics,
+            capacity,
+            visibility,
+            location_id: locationId,
+            location_name: location.location_name,
+            location_address: location.location_address,
+            google_maps_url: location.google_maps_url,
+            ...(unlinkRoomBooking ? { room_booking_id: null } : {}),
+            ...imageFields
+        };
 
-        const { data, error: updateError } = await admin
-            .from('hive_events')
-            .update({
-                title,
-                description,
-                starts_at: startsAt,
-                ends_at: endsAt,
-                event_type: eventType,
-                topics,
-                capacity,
-                visibility,
-                location_id: locationId,
-                location_name: location.location_name,
-                location_address: location.location_address,
-                google_maps_url: location.google_maps_url,
-                ...imageFields
-            })
-            .eq('id', eventId)
-            .select(EVENT_SELECT)
-            .single();
-
+        const result = roomChange.slot
+            ? await admin.rpc('update_hive_event_room', {
+                p_event_id: eventId,
+                p_expected_updated_at: existing.updated_at,
+                p_event: eventFields,
+                p_slot: roomChange.slot,
+                p_new_booking_owner: selectedSlug ? existing.organizer_id || user.id : null,
+                p_editor_is_admin: viewerIsAdmin
+            }).single()
+            : await admin.from('hive_events').update(eventFields)
+                .eq('id', eventId).eq('updated_at', existing.updated_at).select(EVENT_SELECT).maybeSingle();
+        const { data, error: updateError } = result;
+        if (updateError?.code === '23P01') {
+            return jsonError(`${roomChange.roomTitle || 'The selected room'} is already booked at this time. Choose another room or time.`, 409);
+        }
+        if (updateError?.code === '40001') return jsonError(updateError.message, 409);
+        if (updateError?.code === '42501') return jsonError(updateError.message, 403);
         if (updateError) return jsonError(updateError.message, 500);
+        if (!data) return jsonError('The event changed. Refresh and try again.', 409);
 
-        const profilesById = await loadOrganizerProfiles(admin, [data]);
-        const rsvpSummaries = await loadRsvpSummaries(admin, [data]);
-        return NextResponse.json({ ok: true, event: serializeEvent(data, { profilesById, rsvpSummary: rsvpSummaries[data.id], viewerId: user.id, isAdmin: viewerIsAdmin }) });
+        const viewer = { viewerId: user.id, isAdmin: viewerIsAdmin };
+        const [profilesById, rsvpSummaries, rooms] = await Promise.all([
+            loadOrganizerProfiles(admin, [data]),
+            loadRsvpSummaries(admin, [data]),
+            loadEventRooms(admin, [data], viewer)
+        ]);
+        return NextResponse.json({ ok: true, event: serializeEvent(data, {
+            ...viewer,
+            profilesById,
+            rsvpSummary: rsvpSummaries[data.id],
+            room: rooms[data.room_booking_id]
+        }) });
     } catch (error) {
         return jsonError(error?.message || 'Could not update event.', 500);
     }

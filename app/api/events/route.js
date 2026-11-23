@@ -3,8 +3,12 @@ import { createSupabaseAdminClient, getUserFromRequest } from '../_lib/supabaseA
 import { requireTenantContext } from '../rooms/_lib/tenantBilling';
 import { eventDescriptionHtml, validateEventDescription } from '@/lib/eventDescription';
 import {
+    ACTIVE_MEMBER_ROOM_STATUSES,
+    canSelectEventRoom,
     computeHours,
     EVENT_SELECT,
+    isEventAdmin,
+    loadEventRooms,
     loadRsvpSummaries,
     normalizeEventType,
     normalizeTopics,
@@ -92,14 +96,18 @@ export async function GET(request) {
         rows = rows.filter(event => event.visibility === 'public' || tenantSet.has(event.tenant_id) || event.organizer_id === viewer.user.id);
     }
 
-    const profilesById = await loadOrganizerProfiles(admin, rows);
-    const rsvpSummaries = await loadRsvpSummaries(admin, rows);
+    const [profilesById, rsvpSummaries, rooms] = await Promise.all([
+        loadOrganizerProfiles(admin, rows),
+        loadRsvpSummaries(admin, rows),
+        loadEventRooms(admin, rows, { viewerId: viewer.user?.id, isAdmin: viewer.isAdmin })
+    ]);
 
     return NextResponse.json({
         ok: true,
         events: rows.map(row => serializeEvent(row, {
             profilesById,
             rsvpSummary: rsvpSummaries[row.id],
+            room: rooms[row.room_booking_id],
             viewerId: viewer.user?.id || null,
             isAdmin: viewer.isAdmin
         }))
@@ -143,12 +151,15 @@ async function maybeCreateRoomBooking({ admin, ctx, form }) {
 
     const { data: space, error: spaceError } = await admin
         .from('spaces')
-        .select('slug')
+        .select('slug, title, is_visible')
         .eq('slug', spaceSlug)
         .is('deleted_at', null)
         .maybeSingle();
     if (spaceError) throw new Error(spaceError.message);
-    if (!space) throw new Error('Room not found.');
+    if (!space) return { error: 'Room not found.', status: 404 };
+    if (!canSelectEventRoom(space, await isEventAdmin(admin, ctx.user.id))) {
+        return { error: 'This room is unavailable for event booking.', status: 403 };
+    }
 
     const [{ data: memberBookings, error: memberError }, { data: publicBookings, error: publicError }] = await Promise.all([
         admin
@@ -156,7 +167,7 @@ async function maybeCreateRoomBooking({ admin, ctx, form }) {
             .select('start_time, end_time, status')
             .eq('space_slug', spaceSlug)
             .eq('booking_date', bookingDate)
-            .in('status', ['requested', 'approved']),
+            .in('status', ACTIVE_MEMBER_ROOM_STATUSES),
         admin
             .from('public_room_bookings')
             .select('start_time, end_time, status')
@@ -191,7 +202,7 @@ async function maybeCreateRoomBooking({ admin, ctx, form }) {
         .single();
 
     if (error) throw new Error(error.message);
-    return data?.id || null;
+    return { id: data?.id || null, room: { slug: space.slug, title: space.title } };
 }
 
 export async function POST(request) {
@@ -229,7 +240,8 @@ export async function POST(request) {
         });
         const locationId = await maybeCreateLocation({ admin: ctx.admin, ctx, location });
         const imageFields = await uploadEventImage({ admin: ctx.admin, tenantId: ctx.tenantId, file: form.get('image') });
-        const roomBookingId = await maybeCreateRoomBooking({ admin: ctx.admin, ctx, form });
+        const roomBooking = await maybeCreateRoomBooking({ admin: ctx.admin, ctx, form });
+        if (roomBooking?.error) return jsonError(roomBooking.error, roomBooking.status);
 
         const { data, error } = await ctx.admin
             .from('hive_events')
@@ -249,7 +261,7 @@ export async function POST(request) {
                 location_name: location.location_name,
                 location_address: location.location_address,
                 google_maps_url: location.google_maps_url,
-                room_booking_id: roomBookingId,
+                room_booking_id: roomBooking?.id || null,
                 ...imageFields
             })
             .select(EVENT_SELECT)
@@ -258,7 +270,12 @@ export async function POST(request) {
         if (error) throw new Error(error.message);
 
         const profilesById = await loadOrganizerProfiles(ctx.admin, [data]);
-        return NextResponse.json({ ok: true, event: serializeEvent(data, { profilesById, viewerId: ctx.user.id, rsvpSummary: { going_rsvps: 0, going_guests: 0 } }) });
+        return NextResponse.json({ ok: true, event: serializeEvent(data, {
+            profilesById,
+            viewerId: ctx.user.id,
+            room: roomBooking?.room,
+            rsvpSummary: { going_rsvps: 0, going_guests: 0 }
+        }) });
     } catch (error) {
         return jsonError(error?.message || 'Could not create event.', 500);
     }

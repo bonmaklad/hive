@@ -4,7 +4,17 @@ import { eventDescriptionHtml } from '@/lib/eventDescription';
 
 export const EVENT_IMAGE_BUCKET = process.env.SUPABASE_EVENT_IMAGES_BUCKET || 'event-images';
 export const HIVE_LOCATION_ID = '00000000-0000-0000-0000-000000000120';
-export const EVENT_SELECT = 'id, tenant_id, organizer_id, title, description, starts_at, ends_at, timezone, event_type, topics, visibility, status, image_url, location_name, location_address, google_maps_url, room_booking_id, capacity, created_at';
+export const EVENT_SELECT = 'id, tenant_id, organizer_id, title, description, starts_at, ends_at, timezone, event_type, topics, visibility, status, image_url, location_name, location_address, google_maps_url, room_booking_id, capacity, created_at, updated_at';
+export const ACTIVE_MEMBER_ROOM_STATUSES = ['requested', 'approved'];
+
+export async function isEventAdmin(admin, userId) {
+    const { data } = await admin.from('profiles').select('is_admin').eq('id', userId).maybeSingle();
+    return Boolean(data?.is_admin);
+}
+
+export function canSelectEventRoom(space, isAdmin) {
+    return space.slug === 'hive-lounge' ? isAdmin : space.is_visible;
+}
 
 export function safeText(value, limit = 500) {
     const v = typeof value === 'string' ? value.trim() : '';
@@ -179,6 +189,25 @@ export async function loadRsvpSummaries(admin, events) {
     return empty;
 }
 
+export async function loadEventRooms(admin, events, { viewerId, isAdmin } = {}) {
+    if (!viewerId) return {};
+    const bookingIds = [...new Set(events
+        .filter(event => event.room_booking_id && (isAdmin || event.organizer_id === viewerId))
+        .map(event => event.room_booking_id))];
+    if (!bookingIds.length) return {};
+
+    const { data: bookings } = await admin.from('room_bookings').select('id, space_slug').in('id', bookingIds);
+    if (!bookings?.length) return {};
+
+    const slugs = [...new Set(bookings.map(booking => booking.space_slug))];
+    const { data: spaces } = await admin.from('spaces').select('slug, title').in('slug', slugs);
+    const titlesBySlug = new Map((spaces || []).map(space => [space.slug, space.title]));
+    return Object.fromEntries(bookings.map(booking => [booking.id, {
+        slug: booking.space_slug,
+        title: titlesBySlug.get(booking.space_slug)
+    }]));
+}
+
 export function serializeEvent(row, extras = {}) {
     const organizer = extras.profilesById?.[row?.organizer_id] || null;
     const summary = extras.rsvpSummary || {};
@@ -203,6 +232,7 @@ export function serializeEvent(row, extras = {}) {
         location_address: row?.location_address || HIVE_LOCATION.address,
         google_maps_url: row?.google_maps_url || mapsSearchUrl(row?.location_address || HIVE_LOCATION.address),
         room_booking_id: row?.room_booking_id || null,
+        ...(extras.room ? { room_booking_space_slug: extras.room.slug, room_booking_title: extras.room.title } : {}),
         ...availability,
         organizer: organizer
             ? {
