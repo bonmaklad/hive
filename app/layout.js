@@ -50,6 +50,15 @@ export const viewport = {
 export default function RootLayout({ children }) {
     return (
         <html lang="en">
+            <head>
+                {process.env.NODE_ENV === 'development' && (
+                    <script
+                        async
+                        src="http://localhost:3100/api/public/tracking/f19216be-d356-4256-8936-dfe0acf35726/v1.js"
+                        data-hive-auto-page="true"
+                    />
+                )}
+            </head>
             <body className={spaceGrotesk.className}>
                 <Script
                     src="https://www.googletagmanager.com/gtag/js?id=G-Y3TBH9LDL0"
